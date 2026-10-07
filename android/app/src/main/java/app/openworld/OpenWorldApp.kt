@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package app.openworld
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,13 +26,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+private object ProductCopy {
+    const val possible = "Possible candidate. Not an identification."
+    const val incomplete = "Incomplete."
+    const val clearance = "No candidate is not a clearance."
+    const val leaving = "You are leaving OpenWorld."
+}
+
 private val disclosure = listOf(
     "Nothing is uploaded.",
     "Nobody is enrolled.",
     "OpenWorld does not train on this file.",
     "OpenWorld does not contact an agency.",
     "A candidate is not an identification.",
-    "No candidate is not a clearance.",
+    ProductCopy.clearance,
     "This file is not authenticated.",
     "On-device does not mean the file is real.",
 )
@@ -103,12 +116,37 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Button(onClick = model::analyze, enabled = model.canAnalyze) { Text("Analyze") }
                     }
                     Step.Results -> {
-                        Text(model.summary, style = MaterialTheme.typography.headlineMedium)
-                        Text(model.detail)
-                        if (model.summary != "Possible candidate. Not an identification." && model.summary != "Incomplete.") {
-                            Text("No candidate is not a clearance.")
+                        Text(
+                            model.summary.ifBlank {
+                                if (model.fbiUrl != null) ProductCopy.possible else ProductCopy.incomplete
+                            },
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                        if (model.strip.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                model.strip.forEach { (label, path) ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        val bitmap = BitmapFactory.decodeFile(path)
+                                        if (bitmap != null) {
+                                            Image(
+                                                bitmap = bitmap.asImageBitmap(),
+                                                contentDescription = label,
+                                                modifier = Modifier.size(112.dp),
+                                            )
+                                        }
+                                        Text(label, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
                         }
-                        Button(onClick = { model.leavingUrl = model.leavingUrl }) { Text("Open FBI page") }
+                        Text(model.detail)
+                        val page = model.fbiUrl
+                        if (!page.isNullOrBlank()) {
+                            Button(onClick = { model.leavingUrl = page }) { Text("Open FBI page") }
+                        }
                     }
                 }
             }
@@ -117,7 +155,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
         if (model.step == Step.Results && url != null && url.startsWith("https://www.fbi.gov")) {
             AlertDialog(
                 onDismissRequest = { model.leavingUrl = null },
-                title = { Text("You are leaving OpenWorld.") },
+                title = { Text(ProductCopy.leaving) },
                 text = { Text(url) },
                 confirmButton = {
                     TextButton(onClick = {

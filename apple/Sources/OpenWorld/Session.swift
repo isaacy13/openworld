@@ -3,8 +3,44 @@ import Foundation
 
 /// Talks to the Rust library when it is linked, and otherwise to the `openworld` program. This file does not detect or compare.
 struct CoreClient {
-    var binary: String = "openworld"
-    var bundles: String = "bundles"
+    var binary: String = CoreClient.findBinary()
+    var bundles: String = CoreClient.findBundles()
+
+    /// The built `openworld` program, or the name on PATH when this is a packaged app.
+    static func findBinary() -> String {
+        if let env = ProcessInfo.processInfo.environment["OPENWORLD_BIN"], !env.isEmpty {
+            return env
+        }
+        var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        for _ in 0..<8 {
+            for name in ["debug", "release"] {
+                let candidate = url.appendingPathComponent("core/target/\(name)/openworld")
+                if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                    return candidate.path
+                }
+            }
+            if url.path == "/" { break }
+            url.deleteLastPathComponent()
+        }
+        return "openworld"
+    }
+
+    /// Walk up from the working directory, the same way the CLI finds `bundles/`.
+    static func findBundles() -> String {
+        if let env = ProcessInfo.processInfo.environment["OPENWORLD_BUNDLES"], !env.isEmpty {
+            return env
+        }
+        var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        for _ in 0..<8 {
+            let manifest = url.appendingPathComponent("bundles/fast/manifest.toml")
+            if FileManager.default.fileExists(atPath: manifest.path) {
+                return url.appendingPathComponent("bundles").path
+            }
+            if url.path == "/" { break }
+            url.deleteLastPathComponent()
+        }
+        return "bundles"
+    }
 
     func bundlesJSON() throws -> [BundleRow] {
         let data = try run(["--json", "--bundles", bundles, "bundles"])
@@ -97,6 +133,7 @@ struct ScanReport: Decodable {
     var bundleName: String?
     var disclosure: [String]
     var coverageBanner: String?
+    var perceptionNote: String?
     var warnings: [String]
     var inventory: [InventoryItem]
     var candidates: [Candidate]
@@ -104,6 +141,7 @@ struct ScanReport: Decodable {
         case status, summary, disclosure, warnings, inventory, candidates
         case bundleName = "bundle_name"
         case coverageBanner = "coverage_banner"
+        case perceptionNote = "perception_note"
     }
 }
 

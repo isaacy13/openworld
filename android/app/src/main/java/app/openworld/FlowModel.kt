@@ -23,6 +23,8 @@ class FlowModel {
     var summary by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
+    var fbiUrl by mutableStateOf<String?>(null)
+    var strip by mutableStateOf(listOf<Pair<String, String>>())
     var canAnalyze by mutableStateOf(true)
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
     private var localCopy: File? = null
@@ -45,7 +47,7 @@ class FlowModel {
 
     fun continueFromDevice() {
         try {
-            val json = Core.json(listOf("--json", "bundles"))
+            val json = Core.json(listOf("--json", "--bundles", Core.bundlesDir(), "bundles"))
             val rows = json.optJSONArray("bundles")
             val parsed = mutableListOf<Triple<String, String, String>>()
             if (rows != null) {
@@ -76,7 +78,7 @@ class FlowModel {
             val facts = PlatformDecode.facts(file)
             val json = Core.json(
                 listOf(
-                    "--json", "estimate",
+                    "--json", "--bundles", Core.bundlesDir(), "estimate",
                     "--input", file.absolutePath,
                     "--bundle", bundleId,
                     "--long-side", longSide,
@@ -110,6 +112,9 @@ class FlowModel {
     fun analyze() {
         val file = localCopy ?: return
         if (!canAnalyze) return
+        strip = emptyList()
+        fbiUrl = null
+        leavingUrl = null
         try {
             val parent = File.createTempFile("openworld-out", null).parentFile ?: return
             val root = File(parent, "openworld-" + System.nanoTime())
@@ -121,7 +126,7 @@ class FlowModel {
             val reel = PlatformDecode.writeFrames(file, frames)
             val json = Core.json(
                 listOf(
-                    "--json", "scan",
+                    "--json", "--bundles", Core.bundlesDir(), "scan",
                     "--input", file.absolutePath,
                     "--bundle", bundleId,
                     "--long-side", longSide,
@@ -136,6 +141,7 @@ class FlowModel {
             val lines = mutableListOf<String>()
             json.optString("coverage_banner").takeIf { it.isNotBlank() }?.let(lines::add)
             json.optString("bundle_name").takeIf { it.isNotBlank() }?.let { lines.add("Bundle: $it") }
+            json.optString("perception_note").takeIf { it.isNotBlank() }?.let(lines::add)
             val disclosure = json.optJSONArray("disclosure")
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))
@@ -147,9 +153,22 @@ class FlowModel {
                     lines.add(item.optString("wording"))
                     lines.add(item.optString("uncertainty"))
                     lines.add(item.optString("poster_title"))
-                    leavingUrl = item.optString("fbi_url").ifBlank { leavingUrl }
+                    val page = item.optString("fbi_url")
+                    if (page.isNotBlank()) fbiUrl = page
                 }
             }
+            val pictures = mutableListOf<Pair<String, String>>()
+            val inventory = json.optJSONArray("inventory")
+            if (inventory != null) {
+                for (i in 0 until inventory.length()) {
+                    val item = inventory.getJSONObject(i)
+                    val crop = item.optString("crop")
+                    if (crop.isNotBlank()) {
+                        pictures.add(item.optString("label") to File(out, crop).absolutePath)
+                    }
+                }
+            }
+            strip = pictures
             detail = lines.joinToString("\n")
         } catch (err: IOException) {
             val message = err.message ?: "Incomplete."

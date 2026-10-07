@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 enum Step {
     case choose, device, bundle, size, estimate, results
@@ -15,6 +20,7 @@ final class FlowModel: ObservableObject {
     @Published var coverage = "complete"
     @Published var estimate: Estimate?
     @Published var report: ScanReport?
+    @Published var resultDirectory: URL?
     @Published var leavingURL: URL?
     @Published var oldFile = false
     @Published var error: String?
@@ -67,6 +73,7 @@ final class FlowModel: ObservableObject {
             // The fixture pack is written by the CLI before a real curve allows FBI photos.
             try CoreClient().runPublic(posters: posters)
             let reel = try PlatformDecoder.writeFrames(url: file, directory: frames)
+            let result = root.appendingPathComponent("result")
             report = try core.scan(
                 input: file,
                 bundle: bundleID,
@@ -75,12 +82,14 @@ final class FlowModel: ObservableObject {
                 posters: posters,
                 frames: reel.directory ?? frames,
                 facts: reel,
-                out: root.appendingPathComponent("result"),
+                out: result,
                 phone: phone
             )
+            resultDirectory = result
             error = nil
         } catch {
             report = nil
+            resultDirectory = nil
             self.error = error.localizedDescription
         }
         step = .results
@@ -223,6 +232,24 @@ struct FlowView: View {
                 if let name = model.report?.bundleName {
                     Text("Bundle: \(name)")
                 }
+                if let note = model.report?.perceptionNote {
+                    Text(note)
+                }
+                if let items = model.report?.inventory, !items.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(items) { item in
+                                VStack(spacing: 4) {
+                                    cropImage(item.crop)
+                                    Text(item.label)
+                                        .font(.caption)
+                                        .multilineTextAlignment(.center)
+                                        .frame(width: 140)
+                                }
+                            }
+                        }
+                    }
+                }
                 if model.report?.candidates.isEmpty == false {
                     ForEach(model.report?.candidates ?? []) { candidate in
                         VStack(alignment: .leading, spacing: 6) {
@@ -256,6 +283,26 @@ struct FlowView: View {
         }
     }
 
+
+    @ViewBuilder
+    private func cropImage(_ relative: String?) -> some View {
+        let path = relative.flatMap { model.resultDirectory?.appendingPathComponent($0).path }
+        #if os(macOS)
+        if let path, let image = NSImage(contentsOfFile: path) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 112, height: 112)
+        }
+        #else
+        if let path, let image = UIImage(contentsOfFile: path) {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 112, height: 112)
+        }
+        #endif
+    }
 
     @ViewBuilder private var sizePicker: some View {
         let picker = Picker("Detection size", selection: $model.longSide) {
