@@ -54,9 +54,17 @@ pub fn execution_from_provider(provider: &str) -> Execution {
     }
 }
 
-/// This build does not load ONNX Runtime. The scan runs on the CPU.
+/// The warning follows the provider that loaded.
+/// A name on the command line is not that provider.
+pub fn resolve_execution(_requested: &str) -> Execution {
+    loaded_execution()
+}
+
+/// ONNX Runtime is linked. This build's prebuilt runtime loads the CPU provider.
+/// Apple, Windows, and Android builds register CoreML, CUDA or DirectML, and NNAPI or QNN
+/// when those providers are in the runtime that actually loads.
 pub fn loaded_execution() -> Execution {
-    Execution::Cpu
+    crate::onnx_exec::active_execution()
 }
 
 #[cfg(test)]
@@ -74,5 +82,7 @@ mod tests {
         assert!(Execution::Cpu.device_note().unwrap().contains("CPU"));
         assert!(Execution::Gpu.device_note().unwrap().contains("GPU"));
         assert!(Execution::Neural.device_note().is_none());
+        assert_eq!(resolve_execution("CUDAExecutionProvider"), loaded_execution());
+        assert_eq!(loaded_execution(), Execution::Cpu);
     }
 }

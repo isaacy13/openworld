@@ -543,3 +543,187 @@ fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     assert!(est.heat_note.is_some());
     assert!(est.battery_note.is_some());
 }
+
+#[test]
+fn a_pinned_onnx_bundle_that_does_not_load_refuses_instead_of_clearing() {
+    let dir = tempfile::tempdir().unwrap();
+    let bundle_dir = dir.path().join("bundles/custom");
+    std::fs::create_dir_all(bundle_dir.join("weights")).unwrap();
+    let bytes = b"this is not an onnx model";
+    let sha = sha256_hex(bytes);
+    for name in ["det.onnx", "embed.onnx", "plate.onnx"] {
+        std::fs::write(bundle_dir.join("weights").join(name), bytes).unwrap();
+    }
+    let manifest = format!(
+        r#"
+schema = "openworld.bundle.v1"
+id = "custom"
+name = "Custom"
+version = "0.0.0"
+official = true
+best_for = "A computer, when the weights are real."
+threshold = 0.55
+estimate_factor = 1.0
+
+[models]
+detector = "SCRFD-0.5GF"
+detector_version = "pinned-test"
+embedder = "ArcFace-MBF"
+embedder_version = "pinned-test"
+plate = "RTMDet-nano"
+plate_version = "pinned-test"
+plate_license = "Apache-2.0"
+
+[[files]]
+role = "detector"
+name = "SCRFD-0.5GF"
+version = "pinned-test"
+sha256 = "{sha}"
+license = "Apache-2.0"
+path = "weights/det.onnx"
+
+[[files]]
+role = "embedder"
+name = "ArcFace-MBF"
+version = "pinned-test"
+sha256 = "{sha}"
+license = "Apache-2.0"
+path = "weights/embed.onnx"
+
+[[files]]
+role = "plate"
+name = "RTMDet-nano"
+version = "pinned-test"
+sha256 = "{sha}"
+license = "Apache-2.0"
+path = "weights/plate.onnx"
+"#
+    );
+    std::fs::write(bundle_dir.join("manifest.toml"), manifest).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(pack.join("snapshot.json")).unwrap()).unwrap();
+    value["perception"] = serde_json::Value::String("onnx".into());
+    let pretty = serde_json::to_vec_pretty(&value).unwrap();
+    fs::write(pack.join("snapshot.json"), &pretty).unwrap();
+    fs::write(pack.join("snapshot.sha256"), format!("{}\n", sha256_hex(&pretty))).unwrap();
+    let image = paint_face(7, 16, 16, 16, 320, 240);
+    image.save(dir.path().join("in.png")).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: dir.path().join("in.png"),
+            bundles_dir: dir.path().join("bundles"),
+            bundle_id: "custom".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "refused", "{}", report.message);
+    assert_ne!(report.summary, NO_CLEARANCE);
+    assert!(report.message.contains("Refusing"));
+}
+
+
+#[test]
+fn a_pinned_onnx_session_that_runs_can_finish_clear() {
+    // Constant zeros. Apache graphs so the session path can run. These are not SCRFD or ArcFace weights.
+    let dir = tempfile::tempdir().unwrap();
+    let bundle_dir = dir.path().join("bundles/custom");
+    std::fs::create_dir_all(bundle_dir.join("weights")).unwrap();
+    let models = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/models");
+    let mut pins = Vec::new();
+    for (file, role, model_name) in [
+        ("detector.onnx", "detector", "SCRFD-0.5GF"),
+        ("embedder.onnx", "embedder", "ArcFace-MBF"),
+        ("plate.onnx", "plate", "RTMDet-nano"),
+    ] {
+        let bytes = fs::read(models.join(file)).unwrap();
+        let sha = sha256_hex(&bytes);
+        fs::write(bundle_dir.join("weights").join(file), &bytes).unwrap();
+        pins.push((role, model_name, sha, file));
+    }
+    let mut manifest = r#"
+schema = "openworld.bundle.v1"
+id = "custom"
+name = "Custom"
+version = "0.0.0"
+official = true
+best_for = "A computer, when the weights are real."
+threshold = 0.55
+estimate_factor = 1.0
+
+[models]
+detector = "SCRFD-0.5GF"
+detector_version = "pinned-test"
+embedder = "ArcFace-MBF"
+embedder_version = "pinned-test"
+plate = "RTMDet-nano"
+plate_version = "pinned-test"
+plate_license = "Apache-2.0"
+"#
+    .to_string();
+    for (role, model_name, sha, file) in &pins {
+        manifest.push_str(&format!(
+            r#"
+[[files]]
+role = "{role}"
+name = "{model_name}"
+version = "pinned-test"
+sha256 = "{sha}"
+license = "Apache-2.0"
+path = "weights/{file}"
+"#
+        ));
+    }
+    fs::write(bundle_dir.join("manifest.toml"), manifest).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(pack.join("snapshot.json")).unwrap()).unwrap();
+    value["perception"] = serde_json::Value::String("onnx".into());
+    let pretty = serde_json::to_vec_pretty(&value).unwrap();
+    fs::write(pack.join("snapshot.json"), &pretty).unwrap();
+    fs::write(pack.join("snapshot.sha256"), format!("{}\n", sha256_hex(&pretty))).unwrap();
+    let image = paint_face(7, 16, 16, 16, 320, 240);
+    image.save(dir.path().join("in.png")).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: dir.path().join("in.png"),
+            bundles_dir: dir.path().join("bundles"),
+            bundle_id: "custom".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Gpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, NO_CLEARANCE);
+    assert_eq!(report.perception, "onnx");
+    assert_eq!(report.perception_note, "Weights from Custom ran.");
+    assert_eq!(report.faces_embedded, 0);
+    assert!(report.inventory.is_empty());
+    assert!(report.candidates.is_empty());
+    // The request said GPU. The session loaded CPU, so the note follows the session.
+    assert_eq!(report.execution, "cpu");
+    assert!(report.device_note.unwrap().contains("CPU"));
+}

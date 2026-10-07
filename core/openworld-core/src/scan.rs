@@ -9,6 +9,7 @@ use crate::decode::{self, MediaError};
 use crate::embed::fixture_probe;
 use crate::estimate::{Coverage, DetectionSize, FormFactor};
 use crate::fiducial::{self, Marker, PERCEPTION_FIDUCIAL, PERCEPTION_ONNX};
+use crate::onnx_exec::FaceModels;
 use crate::geom::{self, FrameMap, Rect, FACE_COMPARE_PX, FACE_SEEN_PX, PLATE_MIN_HEIGHT, PLATE_MIN_WIDTH};
 use crate::hardware::Execution;
 use crate::posters::{normalize_plate, PackError, Poster, PosterPack};
@@ -172,6 +173,20 @@ pub fn media_warnings(mtime: Option<SystemTime>, container: Option<SystemTime>, 
     warnings
 }
 
+
+fn open_models(bundle: &Bundle, pack: &PosterPack) -> Result<Option<FaceModels>, ScanReport> {
+    if pack.perception != PERCEPTION_ONNX {
+        return Ok(None);
+    }
+    if !bundle.weights_ready {
+        return Err(refused(
+            "missing_weights",
+            "The bundle weights are not installed, or their SHA-256 is not pinned. Refusing.",
+        ));
+    }
+    crate::onnx_exec::load(bundle).map(Some).map_err(|message| refused("missing_weights", &message))
+}
+
 pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanReport {
     let bundle = match crate::bundle::load_bundles(&req.bundles_dir)
         .ok()
@@ -225,7 +240,11 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
         warnings,
         out_dir: Some(req.out_dir.clone()),
     };
-    let mut engine = Engine::new(&bundle, &pack, &opts);
+        let models = match open_models(&bundle, &pack) {
+        Ok(models) => models,
+        Err(report) => return report,
+    };
+    let mut engine = Engine::new(&bundle, &pack, &opts, models);
     let decoded = decode::for_each_frame(&req.input, |index, frame| {
         let keep = engine.push(index, frame, progress);
         keep
@@ -299,7 +318,11 @@ fn scan_decoded_dir(
         warnings,
         out_dir: Some(req.out_dir.clone()),
     };
-    let mut engine = Engine::new(bundle, pack, &opts);
+        let models = match open_models(bundle, pack) {
+        Ok(models) => models,
+        Err(report) => return report,
+    };
+    let mut engine = Engine::new(bundle, pack, &opts, models);
     for (index, frame) in frames.iter().enumerate() {
         if !engine.push(index as u64, frame, progress) {
             break;
@@ -333,7 +356,11 @@ pub fn scan_images(
             return report;
         }
     }
-    let mut engine = Engine::new(bundle, pack, opts);
+        let models = match open_models(bundle, pack) {
+        Ok(models) => models,
+        Err(report) => return report,
+    };
+    let mut engine = Engine::new(bundle, pack, opts, models);
     for (ordinal, frame) in frames.iter().enumerate() {
         if !engine.push(ordinal as u64, frame, progress) {
             break;
@@ -352,6 +379,8 @@ struct Engine<'a> {
     pack: &'a PosterPack,
     opts: &'a ScanOpts,
     tracker: ByteTrack,
+    models: Option<FaceModels>,
+    runtime_failure: Option<String>,
     next_sample: f64,
     inventory: Vec<InventoryItem>,
     candidates: Vec<Candidate>,
@@ -366,12 +395,14 @@ struct Engine<'a> {
 }
 
 impl<'a> Engine<'a> {
-    fn new(bundle: &'a Bundle, pack: &'a PosterPack, opts: &'a ScanOpts) -> Self {
+    fn new(bundle: &'a Bundle, pack: &'a PosterPack, opts: &'a ScanOpts, models: Option<FaceModels>) -> Self {
         Self {
             bundle,
             pack,
             opts,
             tracker: ByteTrack::new(),
+            models,
+            runtime_failure: None,
             next_sample: 0.0,
             inventory: Vec::new(),
             candidates: Vec::new(),
@@ -401,10 +432,21 @@ impl<'a> Engine<'a> {
             return true;
         }
         let (det_img, map) = detection_image(frame, self.opts.detection);
-        let hits = if self.pack.perception == PERCEPTION_FIDUCIAL {
+        let hits = if self.models.is_some() {
+            match self.models.as_mut().unwrap().detect(&det_img) {
+                Ok(hits) => hits,
+                Err(message) => {
+                    self.runtime_failure = Some(message);
+                    self.stopped = true;
+                    return false;
+                }
+            }
+        } else if self.pack.perception == PERCEPTION_FIDUCIAL {
             fiducial::detect(&det_img)
         } else {
-            Vec::new()
+            self.runtime_failure = Some("The detector did not load. Refusing.".into());
+            self.stopped = true;
+            return false;
         };
         let mut track_dets = Vec::new();
         for hit in &hits {
@@ -467,7 +509,10 @@ impl<'a> Engine<'a> {
             return;
         };
         match hit.marker {
-            Marker::Face { .. } => self.ingest_face(index, frame, hit.rect, orig, track_id, progress),
+            Marker::Face { .. } => {
+                let local = hit.landmarks.map(|points| landmarks_in_crop(map, points, orig));
+                self.ingest_face(index, frame, hit.rect, orig, track_id, local, progress);
+            }
             Marker::Vehicle => {
                 let crop = self.write_crop(index, frame, orig, "vehicle");
                 let item = InventoryItem {
@@ -495,6 +540,7 @@ impl<'a> Engine<'a> {
         det_rect: Rect,
         orig: Rect,
         track_id: u64,
+        landmarks: Option<[(f32, f32); 5]>,
         progress: &mut dyn FnMut(Progress),
     ) {
         let crop_img = geom::crop(frame, orig);
@@ -519,6 +565,20 @@ impl<'a> Engine<'a> {
         let Some(crop_img) = crop_img else {
             return;
         };
+        if self.models.is_some() {
+            let embedded = self.models.as_mut().unwrap().embed(&crop_img, landmarks);
+            let embedding = match embedded {
+                Ok(embedding) => embedding,
+                Err(message) => {
+                    self.runtime_failure = Some(message);
+                    self.stopped = true;
+                    return;
+                }
+            };
+            self.faces_embedded += 1;
+            self.score_face(index, frame, det_rect, orig, track_id, &embedding, 0, crop_path, progress);
+            return;
+        }
         let Some(id) = fiducial::decode_face(&crop_img) else {
             let item = InventoryItem {
                 kind: "face".into(),
@@ -601,6 +661,84 @@ impl<'a> Engine<'a> {
         self.inventory.push(item);
         let _ = best;
     }
+
+    fn score_face(
+        &mut self,
+        index: u64,
+        frame: &RgbImage,
+        det_rect: Rect,
+        orig: Rect,
+        track_id: u64,
+        probe: &[f32],
+        id: u16,
+        crop_path: Option<String>,
+        progress: &mut dyn FnMut(Progress),
+    ) {
+        let enabled = self.pack.posters.iter().filter(|p| class_on(p, self.opts)).collect::<Vec<_>>();
+        let mut best: Option<(&Poster, f32)> = None;
+        for poster in &enabled {
+            let Some(embedding) = poster.embedding.as_ref() else {
+                continue;
+            };
+            let score = crate::embed::cosine(&probe, embedding);
+            let passed = score >= self.bundle.threshold;
+            self.comparisons.push(Comparison {
+                frame_index: index,
+                poster_id: poster.id.clone(),
+                cosine: score,
+                passed,
+                fiducial_id: id,
+                poster_fiducial_id: poster.fiducial_id,
+            });
+            if best.map(|(_, s)| score > s).unwrap_or(true) {
+                best = Some((poster, score));
+            }
+            if passed {
+                let frame_path = self.write_frame(index, frame);
+                self.candidates.push(Candidate {
+                    wording: POSSIBLE_CANDIDATE.into(),
+                    kind: "face".into(),
+                    frame_index: index,
+                    track_id,
+                    cosine: Some(score),
+                    threshold: self.bundle.threshold,
+                    uncertainty: format!(
+                        "Cosine {score:.2} is above the locked cutoff {:.2} for {}. {POSSIBLE_CANDIDATE}",
+                        self.bundle.threshold, self.bundle.name
+                    ),
+                    poster_id: poster.id.clone(),
+                    poster_class: poster.class.as_str().into(),
+                    poster_title: poster.title.clone(),
+                    fbi_url: poster.fbi_url.clone(),
+                    plate: None,
+                    crop: crop_path.clone(),
+                    frame: frame_path,
+                    leaving: crate::copy::LEAVING.into(),
+                });
+            }
+        }
+        let label = if self.candidates.iter().any(|c| c.frame_index == index && c.kind == "face" && c.track_id == track_id)
+        {
+            POSSIBLE_CANDIDATE
+        } else {
+            BELOW_CUTOFF
+        };
+        let item = InventoryItem {
+            kind: "face".into(),
+            frame_index: index,
+            track_id,
+            det_short_px: det_rect.short(),
+            orig_short_px: orig.short(),
+            label: label.into(),
+            compared: true,
+            crop: crop_path.clone(),
+            fiducial_id: Some(id),
+        };
+        progress(Progress { frame_index: index, label: label.into(), kind: "face".into(), crop: crop_path });
+        self.inventory.push(item);
+        let _ = best;
+    }
+
 
     fn ingest_plate(
         &mut self,
@@ -697,6 +835,9 @@ impl<'a> Engine<'a> {
     }
 
     fn finish(self) -> ScanReport {
+        if let Some(message) = self.runtime_failure {
+            return refused("missing_weights", &message);
+        }
         let incomplete = self.stopped || self.incomplete_reason.is_some();
         let (status, summary, message) = if incomplete {
             (
@@ -709,6 +850,7 @@ impl<'a> Engine<'a> {
         } else {
             ("complete", POSSIBLE_CANDIDATE, POSSIBLE_CANDIDATE.to_string())
         };
+        let execution = self.models.as_ref().map(|models| models.execution).unwrap_or(self.opts.execution);
         let perception_note = if self.pack.perception == PERCEPTION_FIDUCIAL {
             format!(
                 "Fixture markers were read. {} weights are not what ran, so this is not a {} scan.",
@@ -733,8 +875,8 @@ impl<'a> Engine<'a> {
             coverage: self.opts.coverage.as_str().into(),
             coverage_banner: (self.opts.coverage == Coverage::Measured).then(|| BRIEF_FACE.into()),
             detection: self.opts.detection.as_str(),
-            execution: self.opts.execution.as_str().into(),
-            device_note: self.opts.execution.device_note().map(str::to_string),
+            execution: execution.as_str().into(),
+            device_note: execution.device_note().map(str::to_string),
             warnings: self.opts.warnings.clone(),
             disclosure: DISCLOSURE.iter().map(|s| (*s).to_string()).collect(),
             frames_decoded: self.frames_decoded,
@@ -747,6 +889,17 @@ impl<'a> Engine<'a> {
             comparisons: self.comparisons,
         }
     }
+}
+
+
+fn landmarks_in_crop(map: FrameMap, points: [(f32, f32); 5], orig: Rect) -> [(f32, f32); 5] {
+    let scale = map.det_to_orig;
+    let mut local = points;
+    for point in &mut local {
+        point.0 = point.0 * scale - orig.x as f32;
+        point.1 = point.1 * scale - orig.y as f32;
+    }
+    local
 }
 
 fn class_on(poster: &Poster, opts: &ScanOpts) -> bool {

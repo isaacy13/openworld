@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// Talks to the Rust `openworld` binary. This file does not detect or compare.
+/// Talks to the Rust library when it is linked, and otherwise to the `openworld` program. This file does not detect or compare.
 struct CoreClient {
     var binary: String = "openworld"
     var bundles: String = "bundles"
@@ -46,6 +46,9 @@ struct CoreClient {
     }
 
     func run(_ args: [String]) throws -> Data {
+        if let linked = LinkedCore.invoke(args) {
+            return linked
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = args

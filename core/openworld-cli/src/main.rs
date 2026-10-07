@@ -3,8 +3,7 @@
 use clap::{Args, Parser, Subcommand};
 use openworld_core::copy::product_copy;
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
-use openworld_core::hardware::execution_from_provider;
-use openworld_core::hardware::loaded_execution;
+use openworld_core::hardware::resolve_execution;
 use openworld_core::posters::write_fixture_pack;
 use openworld_core::scan::{delete_output, estimate_for, leave_prompt, scan_path, MediaFacts, Progress, ScanRequest};
 use openworld_core::scene::demo_scene;
@@ -564,7 +563,7 @@ fn request(
         detection,
         coverage,
         form_factor,
-        execution: if provider == "cpu" { loaded_execution() } else { execution_from_provider(provider) },
+        execution: resolve_execution(provider),
         missing,
         wanted,
         abort_after_frames,

@@ -31,7 +31,7 @@ python3 desktop/openworld_gtk.py
 
 Drop a photo or video, or use Choose File. Fast is selected. 640 px on the long side is selected. The estimate is shown before Analyze. The scan runs on the CPU in this build and says so.
 
-`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both pass those frames to the same `openworld` program. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
+`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both call `ow_command` in the Rust library when that library is linked into the process (`include/openworld.h`). Until a store build links it, they start the `openworld` program with the same arguments. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
 
 ```sh
 python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles --out eval/curves/fast.json --check eval/curves/fast.json
@@ -41,7 +41,7 @@ python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles
 
 `core/` is the Rust library and the `openworld` CLI. A bundle is a folder under `bundles/`. Add or remove a model by adding or removing a folder.
 
-- **Fast** is selected by default. It is declared as SCRFD-0.5GF plus a small ArcFace, best for phones and long video. InsightFace pretrained weights are non-commercial research only, so they are not in the tree and their SHA-256 is not invented here. Until those weights are pinned, a fixture pack is read with synthetic markers. The result says so.
+- **Fast** is selected by default. It is declared as SCRFD-0.5GF plus a small ArcFace, best for phones and long video. InsightFace pretrained weights are non-commercial research only, so they are not in the tree and their SHA-256 is not invented here. Until those weights are pinned, a fixture pack is read with synthetic markers. The result says so. ONNX Runtime is linked. A weight file whose license is non-commercial research only is refused even if the hash matches, so the InsightFace zoo files are not an official bundle. A file that is pinned and allowed to ship is loaded as SCRFD, ArcFace, and the plate model. If that session does not load, the scan refuses. It does not say there was no candidate. A session that loads and finds nothing is a completed scan, and it can say "No candidate is not a clearance."
 - **Accurate** is declared as a larger SCRFD plus a ResNet-100-class ArcFace, for a computer when you want fewer misses. Selectable. The row says "Not measured yet." until its own curve exists.
 
 A face enters the inventory at 64 px on the short side of the detection image. It is compared only when the crop from the original frame is at least 112 px on the short side. Below that the label is "Not compared." It is not a candidate and it is not a clearance.
@@ -61,6 +61,17 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 `eval/curves/fast.json` is the fixture measurement on this program's preprocess: false match rate, false non-match rate, counts, a 95% Wilson interval, detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second under both coverage modes. A shorter probe is included so the measured-mode warning has a number behind it.
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
+
+## A public release
+
+These are still open. A fixture scan does not close them.
+
+- Pin redistributable Fast weights (SCRFD-0.5GF, the small ArcFace, RTMDet-nano, and plate text) with name, version, SHA-256, and a license that allows shipping. InsightFace pretrained files stay out.
+- Publish a photo FMR and FNMR curve for Fast on this preprocess. `real_posters_allowed` stays false until that curve says otherwise. `openworld posters update` keeps refusing, and it does not call api.fbi.gov.
+- Link `libopenworld_core` into the iPhone and Android store binaries. The C entry is in the tree. The current phone projects still start the program when the library is absent.
+- Measure phone heat and battery. The estimate remains a planning model.
+- Legal review, store signing, and an independent audit.
+- Pin `keys/openworld-release.pub` and publish the release file's SHA-256 on the GitHub release. This repository does not invent either value.
 
 ## Checking a release
 

@@ -26,6 +26,8 @@ pub struct Hit {
     pub rect: Rect,
     pub marker: Marker,
     pub score: f32,
+    /// Five points on the detection image, when the detector produced them.
+    pub landmarks: Option<[(f32, f32); 5]>,
 }
 
 pub fn render_face(id: u16) -> RgbImage {
@@ -319,6 +321,7 @@ fn try_at(img: &RgbImage, x: u32, y: u32) -> Option<Hit> {
                 rect: Rect { x, y, w: width, h: height },
                 marker: Marker::Plate,
                 score: 0.99,
+                landmarks: None,
             });
         }
     }
@@ -341,7 +344,7 @@ fn classify_square(img: &RgbImage, x: u32, y: u32, side: u32) -> Option<Hit> {
             packed |= bit << (13 - i);
         }
         let id = unpack_face(packed)?;
-        return Some(Hit { rect, marker: Marker::Face { id }, score: 0.99 });
+        return Some(Hit { rect, marker: Marker::Face { id }, score: 0.99, landmarks: None });
     }
     if !bits[0] && bits[15] {
         let mut packed = 0u16;
@@ -350,7 +353,7 @@ fn classify_square(img: &RgbImage, x: u32, y: u32, side: u32) -> Option<Hit> {
             packed |= bit << (13 - i);
         }
         if packed == 0b1100_1010_0101_11 {
-            return Some(Hit { rect, marker: Marker::Vehicle, score: 0.99 });
+            return Some(Hit { rect, marker: Marker::Vehicle, score: 0.99, landmarks: None });
         }
     }
     None

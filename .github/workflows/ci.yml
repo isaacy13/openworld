@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg g++
       - run: cargo test --manifest-path core/Cargo.toml
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
       - run: python3 eval/measure_fast.py --bin core/target/release/openworld --bundles bundles --out /tmp/fast-curve.json --check eval/curves/fast.json

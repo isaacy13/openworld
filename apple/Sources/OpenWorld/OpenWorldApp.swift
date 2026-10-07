@@ -28,6 +28,7 @@ struct PhoneRoot: View {
             FlowView(model: model, importControl: AnyView(importButton))
                 .navigationTitle("OpenWorld")
                 .navigationBarTitleDisplayMode(.large)
+                .onOpenURL { url in importShared(url, model: model) }
         }
     }
 
@@ -61,6 +62,7 @@ struct MacRoot: View {
             .navigationTitle("OpenWorld")
         } detail: {
             FlowView(model: model, importControl: AnyView(importButton))
+                .onOpenURL { url in importShared(url, model: model) }
                 .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                     guard let provider = providers.first else { return false }
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -89,3 +91,15 @@ struct MacRoot: View {
     }
 }
 #endif
+
+private func importShared(_ url: URL, model: FlowModel) {
+    guard url.scheme == "openworld" else { return }
+    let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        .queryItems?
+        .first { $0.name == "name" }?
+        .value
+    guard let name,
+          let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.openworld")
+    else { return }
+    model.choose(container.appendingPathComponent(name))
+}

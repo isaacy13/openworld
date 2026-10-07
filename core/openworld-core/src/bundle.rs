@@ -26,6 +26,8 @@ pub enum BundleError {
     UnpinnedWeight(String),
     #[error("bundle {0} weight hash does not match")]
     BadWeightHash(String),
+    #[error("bundle {0} weight license does not allow shipping it")]
+    ResearchOnly(String),
 }
 
 #[derive(Clone, Debug)]
@@ -145,6 +147,9 @@ pub fn load_bundle(dir: &Path) -> Result<Bundle, BundleError> {
         let path = dir.join(&file.path);
         let present = path.is_file();
         if present {
+            if license_forbids_shipping(&file.license) {
+                return Err(BundleError::ResearchOnly(manifest.id.clone()));
+            }
             if file.sha256.trim().is_empty() {
                 return Err(BundleError::UnpinnedWeight(manifest.id.clone()));
             }
@@ -233,4 +238,73 @@ pub fn row_json(bundle: &Bundle) -> serde_json::Value {
         "embedder": bundle.embedder,
         "plate": bundle.plate,
     })
+}
+
+/// InsightFace zoo files say non-commercial research only. Those bytes are not an official bundle.
+pub fn license_forbids_shipping(license: &str) -> bool {
+    let text = license.to_ascii_lowercase();
+    text.contains("non-commercial")
+        || text.contains("noncommercial")
+        || text.contains("research only")
+        || text.contains("research-only")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::posters::sha256_hex;
+
+    #[test]
+    fn a_research_only_file_that_is_present_is_not_a_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("fast");
+        std::fs::create_dir_all(bundle.join("weights")).unwrap();
+        let bytes = b"not-a-weight";
+        std::fs::write(bundle.join("weights/det.onnx"), bytes).unwrap();
+        let sha = sha256_hex(bytes);
+        let manifest = format!(
+            r#"
+schema = "openworld.bundle.v1"
+id = "fast"
+name = "Fast"
+version = "0.0.0"
+official = true
+best_for = "test"
+threshold = 0.5
+estimate_factor = 1.0
+
+[models]
+detector = "SCRFD-0.5GF"
+detector_version = "x"
+embedder = "ArcFace-MBF"
+embedder_version = "x"
+plate = "RTMDet-nano"
+plate_version = "x"
+plate_license = "Apache-2.0"
+
+[[files]]
+role = "detector"
+name = "SCRFD-0.5GF"
+version = "x"
+sha256 = "{sha}"
+license = "InsightFace pretrained models are non-commercial research only."
+path = "weights/det.onnx"
+"#
+        );
+        std::fs::write(bundle.join("manifest.toml"), manifest).unwrap();
+        let err = load_bundle(&bundle).unwrap_err();
+        assert!(matches!(err, BundleError::ResearchOnly(_)));
+    }
+
+    #[test]
+    fn the_published_fast_manifest_loads_without_weights() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bundles");
+        let fast = load_bundle(&root.join("fast")).unwrap();
+        assert!(!fast.weights_ready);
+        assert!(fast
+            .weights
+            .iter()
+            .any(|weight| weight.role == "detector" && license_forbids_shipping(&weight.license)));
+        assert!(fast.weights.iter().any(|weight| weight.role == "plate" && !license_forbids_shipping(&weight.license)));
+    }
 }
