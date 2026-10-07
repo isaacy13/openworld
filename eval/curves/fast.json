@@ -1,0 +1,190 @@
+{
+  "below_64_kept": 0,
+  "bundle_id": "fast",
+  "detection_recall_64": {
+    "ci95": [
+      0.7574992425007574,
+      0.9999999999999998
+    ],
+    "count": 12,
+    "rate": 1.0,
+    "trials": 12
+  },
+  "detector_declared": "SCRFD-0.5GF",
+  "embedder_declared": "ArcFace-MBF",
+  "faces_seen_not_compared": 4,
+  "fmr": {
+    "ci95": [
+      0.0,
+      0.0458197362645751
+    ],
+    "count": 0,
+    "rate": 0.0,
+    "trials": 80
+  },
+  "fnmr": {
+    "ci95": [
+      0.18074670915695296,
+      0.454303106543204
+    ],
+    "count": 12,
+    "rate": 0.3,
+    "trials": 40
+  },
+  "hardware": "cpu",
+  "miss_1s": {
+    "complete": {
+      "ci95": [
+        0.0,
+        0.3244156195108769
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 8
+    },
+    "measured": {
+      "ci95": [
+        0.0,
+        0.3244156195108769
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 8
+    }
+  },
+  "miss_brief": {
+    "complete": {
+      "ci95": [
+        0.0,
+        0.3244156195108769
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 8
+    },
+    "measured": {
+      "ci95": [
+        0.2152125268244419,
+        0.7847874731755581
+      ],
+      "count": 4,
+      "rate": 0.5,
+      "trials": 8
+    },
+    "note": "A face visible for about a tenth of a second. The required figure is the one-second rate. This probe shows why measured mode warns that a brief face can be missed."
+  },
+  "note": "This curve is the fixture-marker pipeline on this build's preprocess and CPU. It is not SCRFD, not ArcFace on photographs, not LFW, and not NIST. It does not turn real FBI photos on.",
+  "perception": "fiducial-v1",
+  "picker_line": "Fixture curve measured. Real FBI photos stay off.",
+  "preprocess": "integer-nearest-long-side",
+  "real_posters_allowed": false,
+  "schema": "openworld.curve.v1",
+  "sweep": [
+    {
+      "fmr": 0.9375,
+      "fnmr": 0.0,
+      "threshold": 0.0
+    },
+    {
+      "fmr": 0.2375,
+      "fnmr": 0.0,
+      "threshold": 0.05
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.0,
+      "threshold": 0.1
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.0,
+      "threshold": 0.15
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.025,
+      "threshold": 0.2
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.05,
+      "threshold": 0.25
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.125,
+      "threshold": 0.3
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.15,
+      "threshold": 0.35
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.15,
+      "threshold": 0.4
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.2,
+      "threshold": 0.45
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.25,
+      "threshold": 0.5
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.3,
+      "threshold": 0.55
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.3,
+      "threshold": 0.6
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.35,
+      "threshold": 0.65
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.35,
+      "threshold": 0.7
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.4,
+      "threshold": 0.75
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.425,
+      "threshold": 0.8
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.45,
+      "threshold": 0.85
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.45,
+      "threshold": 0.9
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 0.525,
+      "threshold": 0.95
+    },
+    {
+      "fmr": 0.0,
+      "fnmr": 1.0,
+      "threshold": 1.0
+    }
+  ],
+  "threshold": 0.550000011920929
+}

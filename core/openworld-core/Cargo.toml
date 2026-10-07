@@ -1,0 +1,18 @@
+[package]
+name = "openworld-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "On-device photo and video scan for OpenWorld"
+publish = false
+
+[dependencies]
+image = { version = "0.25.5", default-features = false, features = ["png", "jpeg"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.134"
+sha2 = "0.10.8"
+thiserror = "1.0.69"
+toml = "0.8.23"
+
+[dev-dependencies]
+tempfile = "3.14.0"

@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: Apache-2.0
+import Foundation
+
+/// Talks to the Rust `openworld` binary. This file does not detect or compare.
+struct CoreClient {
+    var binary: String = "openworld"
+    var bundles: String = "bundles"
+
+    func bundlesJSON() throws -> [BundleRow] {
+        let data = try run(["--json", "--bundles", bundles, "bundles"])
+        let decoded = try JSONDecoder().decode(BundleList.self, from: data)
+        return decoded.bundles
+    }
+
+    func estimate(input: URL, bundle: String, longSide: String, coverage: String, phone: Bool) throws -> Estimate {
+        let data = try run([
+            "--json", "--bundles", bundles, "estimate",
+            "--input", input.path,
+            "--bundle", bundle,
+            "--long-side", longSide,
+            "--coverage", coverage,
+            "--form-factor", phone ? "phone" : "computer",
+            "--provider", "cpu",
+        ])
+        return try JSONDecoder().decode(Estimate.self, from: data)
+    }
+
+    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, out: URL, phone: Bool) throws -> ScanReport {
+        let data = try run([
+            "--json", "--bundles", bundles, "scan",
+            "--input", input.path,
+            "--bundle", bundle,
+            "--long-side", longSide,
+            "--coverage", coverage,
+            "--posters", posters.path,
+            "--out", out.path,
+            "--form-factor", phone ? "phone" : "computer",
+            "--provider", "cpu",
+        ])
+        return try JSONDecoder().decode(ScanReport.self, from: data)
+    }
+
+    func run(_ args: [String]) throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        return pipe.fileHandleForReading.readDataToEndOfFile()
+    }
+}
+
+struct BundleList: Decodable { var bundles: [BundleRow] }
+
+struct BundleRow: Decodable, Identifiable {
+    var id: String
+    var name: String
+    var bestFor: String
+    var curveLine: String
+    var preselected: Bool
+    enum CodingKeys: String, CodingKey {
+        case id, name, preselected
+        case bestFor = "best_for"
+        case curveLine = "curve_line"
+    }
+}
+
+struct Estimate: Decodable {
+    var human: String
+    var caveat: String
+    var deviceNote: String?
+    var heatNote: String?
+    var batteryNote: String?
+    var suggestComputerText: String?
+    enum CodingKeys: String, CodingKey {
+        case human, caveat
+        case deviceNote = "device_note"
+        case heatNote = "heat_note"
+        case batteryNote = "battery_note"
+        case suggestComputerText = "suggest_computer_text"
+    }
+}
+
+struct ScanReport: Decodable {
+    var status: String
+    var summary: String
+    var bundleName: String?
+    var disclosure: [String]
+    var coverageBanner: String?
+    var warnings: [String]
+    var inventory: [InventoryItem]
+    var candidates: [Candidate]
+    enum CodingKeys: String, CodingKey {
+        case status, summary, disclosure, warnings, inventory, candidates
+        case bundleName = "bundle_name"
+        case coverageBanner = "coverage_banner"
+    }
+}
+
+struct InventoryItem: Decodable, Identifiable {
+    var id: String { "\(kind)-\(frameIndex)-\(label)" }
+    var kind: String
+    var label: String
+    var crop: String?
+    var frameIndex: Int
+    enum CodingKeys: String, CodingKey {
+        case kind, label, crop
+        case frameIndex = "frame_index"
+    }
+}
+
+struct Candidate: Decodable, Identifiable {
+    var id: String { "\(posterId)-\(frameIndex)-\(kind)" }
+    var wording: String
+    var kind: String
+    var uncertainty: String
+    var posterTitle: String
+    var posterClass: String
+    var fbiUrl: String
+    var crop: String?
+    var frame: String?
+    var leaving: String
+    var frameIndex: Int
+    var posterId: String
+    enum CodingKeys: String, CodingKey {
+        case wording, kind, uncertainty, crop, frame, leaving
+        case posterTitle = "poster_title"
+        case posterClass = "poster_class"
+        case fbiUrl = "fbi_url"
+        case frameIndex = "frame_index"
+        case posterId = "poster_id"
+    }
+}
