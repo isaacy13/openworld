@@ -32,7 +32,11 @@ class FlowModel {
         val copy = File.createTempFile("openworld", null)
         resolver.openInputStream(uri)?.use { input ->
             copy.outputStream().use { input.copyTo(it) }
+        } ?: run {
+            fileName = ""
+            return
         }
+        originalModified(uri, resolver)?.let { modified -> copy.setLastModified(modified) }
         localCopy = copy
         val ageMs = System.currentTimeMillis() - copy.lastModified()
         oldFile = ageMs > 30L * 24 * 60 * 60 * 1000
@@ -69,6 +73,7 @@ class FlowModel {
             return
         }
         try {
+            val facts = PlatformDecode.facts(file)
             val json = Core.json(
                 listOf(
                     "--json", "estimate",
@@ -78,7 +83,7 @@ class FlowModel {
                     "--coverage", coverage,
                     "--form-factor", "phone",
                     "--provider", "cpu",
-                )
+                ) + facts.arguments(null)
             )
             if (json.optString("status") == "refused") {
                 estimateText = json.optString("message", "Refusing.")
@@ -106,10 +111,14 @@ class FlowModel {
         val file = localCopy ?: return
         if (!canAnalyze) return
         try {
-            val root = File.createTempFile("openworld-out", null).parentFile ?: return
+            val parent = File.createTempFile("openworld-out", null).parentFile ?: return
+            val root = File(parent, "openworld-" + System.nanoTime())
+            if (!root.mkdirs()) return
             val posters = File(root, "openworld-posters")
             val out = File(root, "openworld-result")
             Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
+            val frames = File(root, "openworld-frames")
+            val reel = PlatformDecode.writeFrames(file, frames)
             val json = Core.json(
                 listOf(
                     "--json", "scan",
@@ -121,7 +130,7 @@ class FlowModel {
                     "--out", out.absolutePath,
                     "--form-factor", "phone",
                     "--provider", "cpu",
-                )
+                ) + reel.arguments(reel.directory)
             )
             summary = json.optString("summary", "Incomplete.")
             val lines = mutableListOf<String>()
@@ -143,8 +152,9 @@ class FlowModel {
             }
             detail = lines.joinToString("\n")
         } catch (err: IOException) {
-            summary = "Incomplete."
-            detail = err.message ?: "Incomplete."
+            val message = err.message ?: "Incomplete."
+            summary = if (message.contains("Refusing")) message else "Incomplete."
+            detail = message
         }
         step = Step.Results
     }
@@ -157,5 +167,20 @@ class FlowModel {
             }
         }
         return uri.lastPathSegment ?: "file"
+    }
+
+    private fun originalModified(uri: Uri, resolver: ContentResolver): Long? {
+        resolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            for (name in listOf("last_modified", "date_modified", "datetaken")) {
+                val index = cursor.getColumnIndex(name)
+                if (index >= 0 && !cursor.isNull(index)) {
+                    val value = cursor.getLong(index)
+                    if (value > 1_000_000_000_000L) return value
+                    if (value > 1_000_000_000L) return value * 1000
+                }
+            }
+        }
+        return null
     }
 }

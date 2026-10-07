@@ -13,7 +13,8 @@ struct CoreClient {
     }
 
     func estimate(input: URL, bundle: String, longSide: String, coverage: String, phone: Bool) throws -> Estimate {
-        let data = try run([
+        let facts = try PlatformDecoder.facts(url: input)
+        var args = [
             "--json", "--bundles", bundles, "estimate",
             "--input", input.path,
             "--bundle", bundle,
@@ -21,12 +22,14 @@ struct CoreClient {
             "--coverage", coverage,
             "--form-factor", phone ? "phone" : "computer",
             "--provider", "cpu",
-        ])
+        ]
+        args.append(contentsOf: facts.arguments(framesDirectory: nil))
+        let data = try run(args)
         return try JSONDecoder().decode(Estimate.self, from: data)
     }
 
-    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, out: URL, phone: Bool) throws -> ScanReport {
-        let data = try run([
+    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool) throws -> ScanReport {
+        var args = [
             "--json", "--bundles", bundles, "scan",
             "--input", input.path,
             "--bundle", bundle,
@@ -36,7 +39,9 @@ struct CoreClient {
             "--out", out.path,
             "--form-factor", phone ? "phone" : "computer",
             "--provider", "cpu",
-        ])
+        ]
+        args.append(contentsOf: facts.arguments(framesDirectory: frames))
+        let data = try run(args)
         return try JSONDecoder().decode(ScanReport.self, from: data)
     }
 

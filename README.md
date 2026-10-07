@@ -31,7 +31,7 @@ python3 desktop/openworld_gtk.py
 
 Drop a photo or video, or use Choose File. Fast is selected. 640 px on the long side is selected. The estimate is shown before Analyze. The scan runs on the CPU in this build and says so.
 
-`apple/` is the SwiftUI app for iPhone and Mac. `android/` is the Material app. Both call the same `openworld` program. They do not implement a second detector.
+`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both pass those frames to the same `openworld` program. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
 
 ```sh
 python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles --out eval/curves/fast.json --check eval/curves/fast.json

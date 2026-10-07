@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use openworld_core::copy::product_copy;
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::hardware::execution_from_provider;
 use openworld_core::hardware::loaded_execution;
 use openworld_core::posters::write_fixture_pack;
-use openworld_core::scan::{delete_output, estimate_for, leave_prompt, scan_path, Progress, ScanRequest};
+use openworld_core::scan::{delete_output, estimate_for, leave_prompt, scan_path, MediaFacts, Progress, ScanRequest};
 use openworld_core::scene::demo_scene;
 use openworld_core::{load_bundles, measure_fast};
 use serde_json::json;
@@ -48,6 +48,8 @@ enum Cmd {
         form_factor: String,
         #[arg(long, default_value = "cpu")]
         provider: String,
+        #[command(flatten)]
+        media: PlatformMedia,
     },
     /// Scan a photo or video the user already has.
     Scan {
@@ -77,6 +79,11 @@ enum Cmd {
         no_wanted: bool,
         #[arg(long)]
         abort_after_frames: Option<u64>,
+        /// Frames already decoded by AVFoundation or MediaCodec. Skips FFmpeg.
+        #[arg(long)]
+        frames: Option<PathBuf>,
+        #[command(flatten)]
+        media: PlatformMedia,
         /// JSON progress lines on stderr, including face crops as they are written.
         #[arg(long)]
         progress: bool,
@@ -140,6 +147,57 @@ enum PosterCmd {
     },
 }
 
+#[derive(Args, Clone)]
+struct PlatformMedia {
+    /// From the platform decoder. When set, the file is not probed with FFmpeg.
+    #[arg(long)]
+    width: Option<u32>,
+    #[arg(long)]
+    height: Option<u32>,
+    #[arg(long)]
+    fps: Option<f64>,
+    #[arg(long)]
+    frame_count: Option<u64>,
+    #[arg(long)]
+    duration: Option<f64>,
+    /// Container creation time, seconds since the Unix epoch.
+    #[arg(long)]
+    container_unix: Option<u64>,
+    /// The file is a video. Stills omit this.
+    #[arg(long)]
+    video: bool,
+}
+
+impl PlatformMedia {
+    fn facts(&self) -> Result<Option<MediaFacts>, String> {
+        let untouched = self.width.is_none()
+            && self.height.is_none()
+            && self.frame_count.is_none()
+            && self.fps.is_none()
+            && self.duration.is_none()
+            && self.container_unix.is_none()
+            && !self.video;
+        if untouched {
+            return Ok(None);
+        }
+        let width = self.width.ok_or("A platform decode needs a width.")?;
+        let height = self.height.ok_or("A platform decode needs a height.")?;
+        let frames = self.frame_count.ok_or("A platform decode needs a frame count.")?;
+        if width == 0 || height == 0 || frames == 0 {
+            return Err("Bad codec or unreadable file. Refusing.".into());
+        }
+        Ok(Some(MediaFacts {
+            width,
+            height,
+            fps: self.fps.unwrap_or(0.0),
+            frames,
+            duration_sec: self.duration.unwrap_or(0.0),
+            video: self.video,
+            container_unix: self.container_unix,
+        }))
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let code = match run(cli) {
@@ -175,8 +233,8 @@ fn run(cli: Cli) -> Result<i32, String> {
             }
             Ok(0)
         }
-        Cmd::Estimate { input, bundle, long_side, coverage, form_factor, provider } => {
-            let req = request(&bundles, &input, &bundle, &long_side, &coverage, &form_factor, &provider, PathBuf::from("."), PathBuf::from("."), true, true, None)?;
+        Cmd::Estimate { input, bundle, long_side, coverage, form_factor, provider, media } => {
+            let req = request(&bundles, &input, &bundle, &long_side, &coverage, &form_factor, &provider, PathBuf::from("."), PathBuf::from("."), true, true, None, None, media.facts()?)?;
             match estimate_for(&req) {
                 Ok(est) => {
                     emit(cli.json, serde_json::to_value(&est).map_err(|e| e.to_string())?);
@@ -218,6 +276,8 @@ fn run(cli: Cli) -> Result<i32, String> {
             no_missing,
             no_wanted,
             abort_after_frames,
+            frames,
+            media,
             progress,
         } => {
             let req = request(
@@ -233,6 +293,8 @@ fn run(cli: Cli) -> Result<i32, String> {
                 missing && !no_missing,
                 wanted && !no_wanted,
                 abort_after_frames,
+                frames,
+                media.facts()?,
             )?;
             let mut progress_fn = |event: Progress| {
                 if progress {
@@ -403,7 +465,7 @@ fn analyze(
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:")?),
     };
-    let req = request(bundles, &input, &bundle, &long_side, &coverage, form_factor, "cpu", posters, out, true, true, None)?;
+    let req = request(bundles, &input, &bundle, &long_side, &coverage, form_factor, "cpu", posters, out, true, true, None, None, None)?;
     match estimate_for(&req) {
         Ok(est) => {
             println!("{}", est.human);
@@ -446,7 +508,7 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
     let input = out.join("input.png");
     scene.image.save(&input).map_err(|e| e.to_string())?;
     let result = out.join("result");
-    let req = request(bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true, None)?;
+    let req = request(bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true, None, None, None)?;
     let report = scan_path(&req, &mut |_| {});
     let _ = pack;
     finish_report(json_mode, &report)
@@ -483,6 +545,8 @@ fn request(
     missing: bool,
     wanted: bool,
     abort_after_frames: Option<u64>,
+    frames_dir: Option<PathBuf>,
+    media: Option<MediaFacts>,
 ) -> Result<ScanRequest, String> {
     let detection = DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
     let coverage = Coverage::parse(coverage).ok_or("Coverage must be complete or measured.")?;
@@ -504,6 +568,8 @@ fn request(
         missing,
         wanted,
         abort_after_frames,
+        frames_dir,
+        media,
         now: SystemTime::now(),
     })
 }

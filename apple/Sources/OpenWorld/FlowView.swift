@@ -26,6 +26,7 @@ final class FlowModel: ObservableObject {
     }
 
     func choose(_ url: URL) {
+        _ = url.startAccessingSecurityScopedResource()
         file = url
         if let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
            let modified = values.contentModificationDate,
@@ -47,25 +48,41 @@ final class FlowModel: ObservableObject {
 
     func loadEstimate() {
         guard let file else { return }
-        estimate = try? core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
+        do {
+            estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
+            error = nil
+        } catch {
+            estimate = nil
+            self.error = error.localizedDescription
+        }
         step = .estimate
     }
 
     func analyze() {
         guard let file else { return }
-        let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let posters = out.appendingPathComponent("posters")
-        // The fixture pack is written by the CLI before a real curve allows FBI photos.
-        _ = try? CoreClient().runPublic(posters: posters)
-        report = try? core.scan(
-            input: file,
-            bundle: bundleID,
-            longSide: longSide,
-            coverage: coverage,
-            posters: posters,
-            out: out.appendingPathComponent("result"),
-            phone: phone
-        )
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let posters = root.appendingPathComponent("posters")
+        let frames = root.appendingPathComponent("frames")
+        do {
+            // The fixture pack is written by the CLI before a real curve allows FBI photos.
+            try CoreClient().runPublic(posters: posters)
+            let reel = try PlatformDecoder.writeFrames(url: file, directory: frames)
+            report = try core.scan(
+                input: file,
+                bundle: bundleID,
+                longSide: longSide,
+                coverage: coverage,
+                posters: posters,
+                frames: reel.directory ?? frames,
+                facts: reel,
+                out: root.appendingPathComponent("result"),
+                phone: phone
+            )
+            error = nil
+        } catch {
+            report = nil
+            self.error = error.localizedDescription
+        }
         step = .results
     }
 }
@@ -182,6 +199,8 @@ struct FlowView: View {
                 if let note = estimate.heatNote { Text(note) }
                 if let note = estimate.batteryNote { Text(note) }
                 if let note = estimate.suggestComputerText { Text(note) }
+            } else if let error = model.error {
+                Text(error)
             }
             if model.coverage == "measured" {
                 Text(Copy.brief)
@@ -196,7 +215,7 @@ struct FlowView: View {
     private var results: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(model.report?.summary ?? Copy.incomplete)
+                Text(model.report?.summary ?? model.error ?? Copy.incomplete)
                     .font(model.phone ? .largeTitle : .title)
                 if let banner = model.report?.coverageBanner {
                     Text(banner)

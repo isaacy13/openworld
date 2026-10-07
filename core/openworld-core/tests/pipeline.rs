@@ -10,7 +10,7 @@ use openworld_core::fiducial::{self, render_face_module, render_plate, render_ve
 use openworld_core::geom::{blank, resize_long_side, Rect, FACE_COMPARE_PX, FACE_SEEN_PX};
 use openworld_core::hardware::{execution_from_provider, Execution};
 use openworld_core::posters::{self, sha256_hex};
-use openworld_core::scan::{leave_prompt, media_warnings, scan_images, scan_path, ScanOpts, ScanRequest};
+use openworld_core::scan::{leave_prompt, media_warnings, scan_images, scan_path, MediaFacts, ScanOpts, ScanRequest};
 use openworld_core::scene::demo_scene;
 use openworld_core::timeutil::parse_rfc3339;
 use std::fs;
@@ -268,6 +268,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
             missing: true,
             wanted: true,
             abort_after_frames: None,
+            frames_dir: None,
+            media: None,
             now: now(),
         },
         &mut |_| {},
@@ -290,6 +292,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
             missing: true,
             wanted: true,
             abort_after_frames: None,
+            frames_dir: None,
+            media: None,
             now: now(),
         },
         &mut |_| {},
@@ -327,6 +331,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
             missing: true,
             wanted: true,
             abort_after_frames: None,
+            frames_dir: None,
+            media: None,
             now: now(),
         },
         &mut |_| {},
@@ -364,6 +370,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
             missing: true,
             wanted: true,
             abort_after_frames: None,
+            frames_dir: None,
+            media: None,
             now: now(),
         },
         &mut |_| {},
@@ -424,6 +432,8 @@ fn ffmpeg_decodes_a_lossless_fixture_video() {
             missing: true,
             wanted: true,
             abort_after_frames: None,
+            frames_dir: None,
+            media: None,
             now: now(),
         },
         &mut |_| {},
@@ -433,4 +443,103 @@ fn ffmpeg_decodes_a_lossless_fixture_video() {
     assert_eq!(report.frames_analyzed, 6);
     assert!(report.inventory.iter().any(|i| i.kind == "face"));
     assert!(report.coverage_banner.is_none());
+}
+
+#[test]
+fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
+    let dir = tempfile::tempdir().unwrap();
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(frames.join("frame_000000.png")).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: dir.path().join("original-that-is-not-decoded.png"),
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Phone,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: Some(frames.clone()),
+            media: Some(MediaFacts {
+                width: scene.image.width(),
+                height: scene.image.height(),
+                fps: 0.0,
+                frames: 1,
+                duration_sec: 0.0,
+                video: false,
+                container_unix: None,
+            }),
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert!(report.summary.contains("Possible candidate"));
+    assert!(report.inventory.iter().any(|item| item.label == NOT_COMPARED));
+    assert!(report.disclosure.iter().any(|line| line.contains("Nothing is uploaded")));
+
+    let bare = dir.path().join("two");
+    fs::create_dir_all(&bare).unwrap();
+    scene.image.save(bare.join("frame_000000.png")).unwrap();
+    scene.image.save(bare.join("frame_000001.png")).unwrap();
+    let refused = scan_path(
+        &ScanRequest {
+            input: dir.path().join("original-that-is-not-decoded.png"),
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: dir.path().join("posters"),
+            out_dir: dir.path().join("out-two"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Measured,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: Some(bare),
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(refused.refusal.as_deref(), Some("bad_codec"));
+
+    let est = openworld_core::scan::estimate_for(&ScanRequest {
+        input: dir.path().join("missing.mov"),
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: dir.path().join("posters"),
+        out_dir: dir.path().join("unused"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Complete,
+        form_factor: FormFactor::Phone,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: Some(MediaFacts {
+            width: 1280,
+            height: 720,
+            fps: 30.0,
+            frames: 3000,
+            duration_sec: 100.0,
+            video: true,
+            container_unix: None,
+        }),
+        now: now(),
+    })
+    .expect("platform facts");
+    assert_eq!(est.frames_analyzed, 3000);
+    assert!(est.heat_note.is_some());
+    assert!(est.battery_note.is_some());
 }

@@ -26,4 +26,4 @@ pub use estimate::{estimate, Coverage, DetectionSize, FormFactor};
 pub use hardware::{execution_from_provider, loaded_execution, Execution};
 pub use measure::measure_fast;
 pub use posters::{load_pack, write_fixture_pack, PosterPack};
-pub use scan::{delete_output, leave_prompt, media_warnings, scan_path, ScanReport, ScanRequest};
+pub use scan::{delete_output, leave_prompt, media_warnings, scan_path, MediaFacts, ScanReport, ScanRequest};

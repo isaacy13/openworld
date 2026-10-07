@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Desktop decode uses FFmpeg for video and the image crate for stills.
-//! Audio is not decoded. Phone shells should decode with AVFoundation or MediaCodec
-//! and pass frames into `scan_images`; they should not shell out to FFmpeg.
+//! Desktop file scans use FFmpeg for video and the image crate for stills.
+//! Audio is not decoded. Phone, Mac, and Android shells decode with
+//! AVFoundation or MediaCodec and pass the frames through `load_frame_dir`.
+//! That path does not run FFmpeg.
 
 use crate::timeutil::parse_rfc3339;
 use image::RgbImage;
@@ -220,4 +221,34 @@ fn json_u32(value: Option<&Value>) -> Option<u32> {
         return text.parse().ok();
     }
     None
+}
+
+/// Ordered stills already decoded by a platform shell or a test.
+/// Names sort in decode order, so callers pad the index (`frame_000001.png`).
+pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
+    if !dir.is_dir() {
+        return Err(MediaError::BadCodec);
+    }
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|_| MediaError::BadCodec)? {
+        let path = entry.map_err(|_| MediaError::BadCodec)?.path();
+        let ext = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext == "png" || ext == "jpg" || ext == "jpeg" {
+            names.push(path);
+        }
+    }
+    names.sort();
+    if names.is_empty() {
+        return Err(MediaError::BadCodec);
+    }
+    let mut frames = Vec::with_capacity(names.len());
+    for path in names {
+        let image = image::open(&path).map_err(|_| MediaError::BadCodec)?.to_rgb8();
+        frames.push(image);
+    }
+    Ok(frames)
 }

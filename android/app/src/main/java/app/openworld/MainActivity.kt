@@ -31,7 +31,12 @@ class MainActivity : ComponentActivity() {
 
     private fun handleShare(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
-            val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            val uri = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
             if (uri != null) model.choose(uri, contentResolver)
         }
     }

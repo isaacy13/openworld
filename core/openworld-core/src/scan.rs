@@ -100,6 +100,19 @@ pub struct Progress {
     pub crop: Option<String>,
 }
 
+/// Size and timing from AVFoundation or MediaCodec. When this is set, FFmpeg is not used.
+#[derive(Clone, Debug)]
+pub struct MediaFacts {
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
+    pub frames: u64,
+    pub duration_sec: f64,
+    pub video: bool,
+    /// Container creation time, seconds since the Unix epoch, when the file has one.
+    pub container_unix: Option<u64>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ScanRequest {
     pub input: PathBuf,
@@ -114,6 +127,10 @@ pub struct ScanRequest {
     pub missing: bool,
     pub wanted: bool,
     pub abort_after_frames: Option<u64>,
+    /// Stills already decoded by the platform. Desktop file scans leave this empty.
+    pub frames_dir: Option<PathBuf>,
+    /// When set, estimate and the frame rate come from the platform decoder.
+    pub media: Option<MediaFacts>,
     pub now: SystemTime,
 }
 
@@ -181,6 +198,9 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     if pack.perception != PERCEPTION_FIDUCIAL && pack.perception != PERCEPTION_ONNX {
         return refused("bad_hash", "The poster pack perception is not recognized. Refusing.");
     }
+    if req.frames_dir.is_some() {
+        return scan_decoded_dir(req, &bundle, &pack, progress);
+    }
     let probed = match decode::probe(&req.input) {
         Ok(probe) => probe,
         Err(MediaError::BadCodec) => {
@@ -227,6 +247,65 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
         engine.stopped = true;
         engine.incomplete_reason = Some("The file was not fully decoded.".into());
     }
+    let mut report = engine.finish();
+    if let Err(err) = write_report(&req.out_dir, &report) {
+        report.status = "incomplete".into();
+        report.summary = INCOMPLETE.into();
+        report.message = err;
+    }
+    report
+}
+
+fn scan_decoded_dir(
+    req: &ScanRequest,
+    bundle: &Bundle,
+    pack: &PosterPack,
+    progress: &mut dyn FnMut(Progress),
+) -> ScanReport {
+    let dir = match &req.frames_dir {
+        Some(dir) => dir.as_path(),
+        None => return refused("bad_codec", "Bad codec or unreadable file. Refusing."),
+    };
+    let frames = match decode::load_frame_dir(dir) {
+        Ok(frames) => frames,
+        Err(MediaError::BadCodec) => {
+            return refused("bad_codec", "Bad codec or unreadable file. Refusing.")
+        }
+    };
+    let fps = req.media.as_ref().map(|media| media.fps).unwrap_or(0.0);
+    if frames.len() > 1 && fps <= 0.0 {
+        return refused("bad_codec", "The decoder did not report a frame rate. Refusing.");
+    }
+    let mtime = fs::metadata(&req.input).and_then(|meta| meta.modified()).ok();
+    let container = req
+        .media
+        .as_ref()
+        .and_then(|media| media.container_unix)
+        .map(|secs| SystemTime::UNIX_EPOCH + Duration::from_secs(secs));
+    let warnings = media_warnings(mtime, container, req.now);
+    if let Err(report) = prepare_out(&req.out_dir) {
+        return report;
+    }
+    let opts = ScanOpts {
+        detection: req.detection,
+        coverage: req.coverage,
+        execution: req.execution,
+        form_factor: req.form_factor,
+        missing: req.missing,
+        wanted: req.wanted,
+        abort_after_frames: req.abort_after_frames,
+        fps,
+        frame_count_hint: Some(frames.len() as u64),
+        warnings,
+        out_dir: Some(req.out_dir.clone()),
+    };
+    let mut engine = Engine::new(bundle, pack, &opts);
+    for (index, frame) in frames.iter().enumerate() {
+        if !engine.push(index as u64, frame, progress) {
+            break;
+        }
+    }
+    engine.frames_decoded = frames.len() as u64;
     let mut report = engine.finish();
     if let Err(err) = write_report(&req.out_dir, &report) {
         report.status = "incomplete".into();
@@ -761,27 +840,48 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         .ok()
         .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
         .ok_or_else(|| refused("bundle_not_found", "That bundle is not in the catalog."))?;
-    let probed = decode::probe(&req.input).map_err(|_| refused("bad_codec", "Bad codec or unreadable file. Refusing."))?;
-    let duration = if probed.video {
-        if probed.duration_sec > 0.0 {
-            probed.duration_sec
-        } else if probed.fps > 0.0 {
-            probed.frames as f64 / probed.fps
+    let (frames, fps, duration, long_side) = if let Some(media) = &req.media {
+        if media.width == 0 || media.height == 0 || media.frames == 0 {
+            return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));
+        }
+        (media.frames, media.fps, media_duration(media), media.width.max(media.height))
+    } else {
+        let probed = decode::probe(&req.input).map_err(|_| refused("bad_codec", "Bad codec or unreadable file. Refusing."))?;
+        let duration = if probed.video {
+            if probed.duration_sec > 0.0 {
+                probed.duration_sec
+            } else if probed.fps > 0.0 {
+                probed.frames as f64 / probed.fps
+            } else {
+                0.0
+            }
         } else {
             0.0
-        }
-    } else {
-        0.0
+        };
+        (probed.frames.max(1), probed.fps, duration, probed.width.max(probed.height))
     };
     Ok(crate::estimate::estimate(&crate::estimate::EstimateInput {
-        frames: probed.frames.max(1),
-        fps: probed.fps,
+        frames: frames.max(1),
+        fps,
         duration_sec: duration,
-        original_long_side: probed.width.max(probed.height),
+        original_long_side: long_side,
         detection: req.detection,
         coverage: req.coverage,
         bundle_factor: bundle.estimate_factor,
         execution: req.execution,
         form_factor: req.form_factor,
     }))
+}
+
+fn media_duration(media: &MediaFacts) -> f64 {
+    if !media.video {
+        return 0.0;
+    }
+    if media.duration_sec > 0.0 {
+        media.duration_sec
+    } else if media.fps > 0.0 {
+        media.frames as f64 / media.fps
+    } else {
+        0.0
+    }
 }
