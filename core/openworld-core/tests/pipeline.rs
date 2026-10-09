@@ -1528,3 +1528,120 @@ fn a_video_with_audio_past_the_pictures_stays_complete() {
     assert_eq!(report.summary, POSSIBLE_CANDIDATE);
     assert!(!report.candidates.is_empty());
 }
+
+#[test]
+fn an_edit_list_scans_the_frames_a_player_shows() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let scene_video = dir.path().join("scene.mp4");
+    let blank_video = dir.path().join("blank.mp4");
+    let show_scene = dir.path().join("show-scene.mp4");
+    let show_blank = dir.path().join("show-blank.mp4");
+    let encode = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&scene_video)
+        .status()
+        .expect("ffmpeg");
+    assert!(encode.success());
+    let blank = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=640x480:r=10:d=0.4",
+            "-frames:v",
+            "4",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+        .arg(&blank_video)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank.success());
+    let joined = |name: &str, first: &std::path::Path, second: &std::path::Path| {
+        let out = dir.path().join(name);
+        let status = Command::new("ffmpeg")
+            .args(["-y", "-v", "error", "-i"])
+            .arg(first)
+            .args(["-i"])
+            .arg(second)
+            .args(["-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+            .arg(&out)
+            .status()
+            .expect("ffmpeg");
+        assert!(status.success());
+        out
+    };
+    let trim = |src: &std::path::Path, start: &str, dest: &std::path::Path| {
+        let status = Command::new("ffmpeg")
+            .args(["-y", "-v", "error", "-ss", start, "-i"])
+            .arg(src)
+            .args(["-c", "copy"])
+            .arg(dest)
+            .status()
+            .expect("ffmpeg");
+        assert!(status.success());
+    };
+    let hidden_blank = joined("blank-then-scene.mp4", &blank_video, &scene_video);
+    let hidden_scene = joined("scene-then-blank.mp4", &scene_video, &blank_video);
+    trim(&hidden_blank, "0.4", &show_scene);
+    trim(&hidden_scene, "0.8", &show_blank);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let whole = openworld_core::decode::probe(&scene_video).unwrap();
+    assert!(whole.frames_exact);
+    assert_eq!(whole.frames, 8);
+    let plain = scan(scene_video);
+    assert_eq!(plain.status, "complete", "{}", plain.message);
+    assert_eq!(plain.frames_decoded, 8);
+    assert_eq!(plain.summary, POSSIBLE_CANDIDATE);
+    let shown = openworld_core::decode::probe(&show_scene).unwrap();
+    let hidden = openworld_core::decode::probe(&hidden_blank).unwrap();
+    assert!(shown.frames_exact);
+    assert!(shown.frames < hidden.frames);
+    let kept = scan(show_scene);
+    assert_eq!(kept.status, "complete", "{}", kept.message);
+    assert_eq!(kept.summary, POSSIBLE_CANDIDATE);
+    assert_eq!(kept.frames_decoded, shown.frames);
+    assert!(!kept.candidates.is_empty());
+    let dropped = openworld_core::decode::probe(&show_blank).unwrap();
+    let full = openworld_core::decode::probe(&hidden_scene).unwrap();
+    assert!(dropped.frames < full.frames);
+    let gone = scan(show_blank);
+    assert_eq!(gone.status, "complete", "{}", gone.message);
+    assert_eq!(gone.summary, NO_CLEARANCE);
+    assert!(gone.candidates.is_empty());
+    assert_eq!(gone.frames_decoded, dropped.frames);
+}

@@ -9,6 +9,7 @@ whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
 orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
 orientation tag, a two-page TIFF whose marker is only on the second page,
+a video whose edit list hides the samples a player does not show,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
@@ -321,6 +322,7 @@ def main() -> int:
         "oriented_png_candidate": 0,
         "oriented_tiff_candidate": 0,
         "tiff_later_candidate": 0,
+        "edit_list_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
         "turned_anamorphic_video_candidate": 0,
@@ -649,6 +651,55 @@ def main() -> int:
             fail(f"later tiff candidates were not on the second page: {found}")
         counts["tiff_later_candidate"] += 1
 
+        width, height = png_size(scene)
+        blank_clip = root / "blank-clip.mp4"
+        scene_clip = root / "scene-clip.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+            "-i", f"color=c=black:s={width}x{height}:r=10:d=0.4",
+            "-frames:v", "4", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(blank_clip),
+        ])
+        if proc.returncode != 0 or not blank_clip.is_file():
+            fail(proc.stderr or "blank clip was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(scene_clip),
+        ])
+        if proc.returncode != 0 or not scene_clip.is_file():
+            fail(proc.stderr or "scene clip was not written")
+        hidden_blank = root / "blank-then-scene.mp4"
+        hidden_scene = root / "scene-then-blank.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(blank_clip), "-i", str(scene_clip),
+            "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(hidden_blank),
+        ])
+        if proc.returncode != 0 or not hidden_blank.is_file():
+            fail(proc.stderr or "blank-then-scene was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(scene_clip), "-i", str(blank_clip),
+            "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(hidden_scene),
+        ])
+        if proc.returncode != 0 or not hidden_scene.is_file():
+            fail(proc.stderr or "scene-then-blank was not written")
+        shown_edit = root / "edit-scene.mp4"
+        blank_edit = root / "edit-blank.mp4"
+        proc = run(["ffmpeg", "-y", "-v", "error", "-ss", "0.4", "-i", str(hidden_blank), "-c", "copy", str(shown_edit)])
+        if proc.returncode != 0 or not shown_edit.is_file():
+            fail(proc.stderr or "edit list was not written")
+        proc = run(["ffmpeg", "-y", "-v", "error", "-ss", "0.8", "-i", str(hidden_scene), "-c", "copy", str(blank_edit)])
+        if proc.returncode != 0 or not blank_edit.is_file():
+            fail(proc.stderr or "blank edit list was not written")
+        report = scan(args.bin, args.bundles, posters, shown_edit, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"edit list summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates") or not report.get("frames_decoded"):
+            fail("edit list produced no candidate")
+        counts["edit_list_candidate"] += 1
+        report = scan(args.bin, args.bundles, posters, blank_edit, out, "complete")
+        assert_clearance(report, "edit list that hides the marker")
+
         stored_video = root / "stored.mp4"
         shown_video = root / "shown.mp4"
         proc = run([
@@ -781,6 +832,7 @@ def main() -> int:
         or counts["oriented_png_candidate"] != 1
         or counts["oriented_tiff_candidate"] != 1
         or counts["tiff_later_candidate"] != 1
+        or counts["edit_list_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
         or counts["turned_anamorphic_video_candidate"] != 1

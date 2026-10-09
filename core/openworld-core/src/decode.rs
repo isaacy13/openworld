@@ -462,13 +462,14 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     // Matroska and WebM put the picture length in the track's DURATION tag.
     // MP4 puts it on the video stream. The frame estimate uses that length.
     let picture = picture_duration(stream, duration);
-    let frames = nb.unwrap_or_else(|| {
-        if picture > 0.0 {
-            (picture * fps).round() as u64
-        } else {
-            0
-        }
-    });
+    let presented = if picture > 0.0 { (picture * fps).round() as u64 } else { 0 };
+    // nb_frames counts every stored sample. An edit list can hide some of them.
+    // The stream duration is the length a player shows.
+    let frames = match nb {
+        Some(exact) if presented > 0 && presented < exact => presented,
+        Some(exact) => exact,
+        None => presented,
+    };
     Ok(Probe {
         width,
         height,
