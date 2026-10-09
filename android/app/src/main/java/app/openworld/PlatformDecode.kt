@@ -131,13 +131,17 @@ object PlatformDecode {
                     if (image != null && info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
                         val bitmap = imageToBitmap(image)
                         image.close()
-                        File(directory, "frame_%06d.png".format(written)).outputStream().use { out ->
-                            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                                bitmap.recycle()
-                                throw IOException("Bad codec or unreadable file. Refusing.")
+                        val turned = JpegOrientation.apply(bitmap, JpegOrientation.tagForClockwise(rotationDegrees(format)))
+                        try {
+                            File(directory, "frame_%06d.png".format(written)).outputStream().use { out ->
+                                if (!turned.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                                    throw IOException("Bad codec or unreadable file. Refusing.")
+                                }
                             }
+                        } finally {
+                            if (turned !== bitmap) turned.recycle()
+                            bitmap.recycle()
                         }
-                        bitmap.recycle()
                         written += 1
                     } else {
                         image?.close()
@@ -221,12 +225,19 @@ object PlatformDecode {
         val width = if (format.containsKey(MediaFormat.KEY_WIDTH)) format.getInteger(MediaFormat.KEY_WIDTH) else 0
         val height = if (format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0
         if (width <= 0 || height <= 0) throw IOException("Bad codec or unreadable file. Refusing.")
+        val shown = JpegOrientation.displaySize(width, height, JpegOrientation.tagForClockwise(rotationDegrees(format)))
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
         val duration = durationUs / 1_000_000.0
         val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() else 0.0
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
         val frames = if (duration > 0.0) maxOf(1L, (duration * fps).roundToInt().toLong()) else 1L
-        return Facts(width, height, fps, frames, duration, true)
+        return Facts(shown.first, shown.second, fps, frames, duration, true)
+    }
+
+    /** Clockwise degrees the track says to turn the stored frame. Absent means none. */
+    private fun rotationDegrees(format: MediaFormat): Int {
+        if (!format.containsKey(MediaFormat.KEY_ROTATION)) return 0
+        return format.getInteger(MediaFormat.KEY_ROTATION)
     }
 
     private fun trackIndex(extractor: MediaExtractor): Int? {

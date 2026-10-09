@@ -134,9 +134,14 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,avg_frame_rate,codec_name,nb_frames",
+            "stream=width,height,avg_frame_rate,codec_name,nb_frames:stream_side_data=rotation",
             "-show_entries",
             "format=duration:format_tags=creation_time",
+            "-show_frames",
+            "-read_intervals",
+            "%+#1",
+            "-show_entries",
+            "frame_side_data=rotation",
             "-of",
             "json",
         ])
@@ -169,6 +174,13 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     if width == 0 || height == 0 || fps <= 0.0 {
         return Err(MediaError::BadCodec);
     }
+    // FFmpeg turns the frames to the displayed orientation. A quarter turn swaps
+    // the stored width and height. The buffer has to match those displayed pixels.
+    let (width, height) = if swaps_axes(display_rotation(&value)) {
+        (height, width)
+    } else {
+        (width, height)
+    };
     let frames = nb.unwrap_or_else(|| {
         if duration > 0.0 {
             (duration * fps).round() as u64
@@ -255,6 +267,33 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
         return Ok(DecodeStats { frames_decoded: decoded, clean: false, probe: info.clone() });
     }
     Ok(DecodeStats { frames_decoded: decoded, clean: !stopped, probe: info.clone() })
+}
+
+/// Rotation from the track matrix or from a display-orientation message, in degrees.
+fn display_rotation(value: &Value) -> f64 {
+    if let Some(rotation) = side_rotation(value.get("streams").and_then(|s| s.get(0))) {
+        return rotation;
+    }
+    side_rotation(value.get("frames").and_then(|s| s.get(0))).unwrap_or(0.0)
+}
+
+fn side_rotation(node: Option<&Value>) -> Option<f64> {
+    let list = node?.get("side_data_list")?.as_array()?;
+    for item in list {
+        let Some(rotation) = item.get("rotation").and_then(Value::as_f64) else {
+            continue;
+        };
+        if rotation.abs() > 0.5 {
+            return Some(rotation);
+        }
+    }
+    None
+}
+
+/// A quarter turn or three quarter turns exchange width and height. A half turn does not.
+fn swaps_axes(rotation: f64) -> bool {
+    let turns = rotation.abs() % 180.0;
+    (turns - 90.0).abs() < 1.0
 }
 
 fn parse_ratio(text: &str) -> Option<f64> {
@@ -391,5 +430,17 @@ mod tests {
         let _ = fs::remove_file(&path);
         assert_eq!(opened.dimensions(), raw.dimensions());
         assert_eq!(opened.as_raw(), raw.as_raw());
+    }
+
+    #[test]
+    fn a_quarter_turn_swaps_the_displayed_axes() {
+        let frame = serde_json::json!({"frames":[{"side_data_list":[{"rotation": -90}]}]});
+        assert!(super::swaps_axes(super::display_rotation(&frame)));
+        let stream = serde_json::json!({"streams":[{"side_data_list":[{"rotation": 90}]}]});
+        assert!(super::swaps_axes(super::display_rotation(&stream)));
+        let half = serde_json::json!({"streams":[{"side_data_list":[{"rotation": 180}]}]});
+        assert!(!super::swaps_axes(super::display_rotation(&half)));
+        let none = serde_json::json!({"streams":[{"side_data_list":[{}]}],"frames":[{"side_data_list":[{}]}]});
+        assert!(!super::swaps_axes(super::display_rotation(&none)));
     }
 }

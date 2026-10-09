@@ -38,6 +38,14 @@ object JpegOrientation {
         return 1
     }
 
+    /** Clockwise degrees from a video track. 90 matches tag 6, a quarter turn clockwise. */
+    fun tagForClockwise(degrees: Int): Int = when (Math.floorMod(degrees, 360)) {
+        90 -> 6
+        180 -> 3
+        270 -> 8
+        else -> 1
+    }
+
     fun displaySize(width: Int, height: Int, tag: Int): Pair<Int, Int> {
         return if (tag in 5..8) height to width else width to height
     }

@@ -234,7 +234,11 @@ enum PlatformDecoder {
         var index = 0
         while let sample = output.copyNextSampleBuffer() {
             guard let buffer = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let image = CIImage(cvPixelBuffer: buffer)
+            var image = CIImage(cvPixelBuffer: buffer).transformed(by: track.preferredTransform)
+            let origin = image.extent.origin
+            if origin.x != 0 || origin.y != 0 {
+                image = image.transformed(by: CGAffineTransform(translationX: -origin.x, y: -origin.y))
+            }
             let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
             try context.writePNGRepresentation(
                 of: image,

@@ -6,7 +6,8 @@ The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
-a JPEG with a camera orientation tag, and an audio file.
+a JPEG with a camera orientation tag, a video with a quarter-turn
+display rotation, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -152,6 +153,7 @@ def main() -> int:
         "gif_later_candidate": 0,
         "apng_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
+        "oriented_video_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -410,6 +412,30 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, turned, out, "complete")
         assert_clearance(report, "jpeg without the orientation tag")
 
+        stored_video = root / "stored.mp4"
+        shown_video = root / "shown.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-vf", "transpose=2", "-frames:v", "8", "-r", "10", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(stored_video),
+        ])
+        if proc.returncode != 0 or not stored_video.is_file():
+            fail(proc.stderr or "stored video was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(stored_video), "-an", "-c:v", "copy",
+            "-bsf:v", "h264_metadata=display_orientation=insert:rotate=-90", str(shown_video),
+        ])
+        if proc.returncode != 0 or not shown_video.is_file():
+            fail(proc.stderr or "display rotation was not written")
+        report = scan(args.bin, args.bundles, posters, shown_video, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"oriented video summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates") or not report.get("frames_decoded"):
+            fail("oriented video produced no candidate")
+        counts["oriented_video_candidate"] += 1
+        report = scan(args.bin, args.bundles, posters, stored_video, out, "complete")
+        assert_clearance(report, "video without the display rotation")
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -443,6 +469,7 @@ def main() -> int:
         or counts["gif_later_candidate"] != 1
         or counts["apng_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
+        or counts["oriented_video_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90
     ):

@@ -477,6 +477,12 @@ class PhoneFlowTest {
         val mirrored = JpegOrientation.apply(stored, 2)
         assertEquals(0xFF030000.toInt(), mirrored.getPixel(0, 0))
         assertEquals(0xFF010000.toInt(), mirrored.getPixel(2, 0))
+        val fromTrack = JpegOrientation.apply(stored, JpegOrientation.tagForClockwise(90))
+        assertEquals(shown.getPixel(0, 0), fromTrack.getPixel(0, 0))
+        assertEquals(shown.getPixel(1, 2), fromTrack.getPixel(1, 2))
+        assertEquals(1, JpegOrientation.tagForClockwise(0))
+        assertEquals(8, JpegOrientation.tagForClockwise(270))
+        assertEquals(6, JpegOrientation.tagForClockwise(-270))
     }
 
     @Test
