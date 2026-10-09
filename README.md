@@ -31,7 +31,7 @@ python3 desktop/openworld_gtk.py
 
 Drop a photo or video, or use Choose File. Fast is selected. 640 px on the long side is selected. The estimate is shown before Analyze. The scan runs on the CPU in this build and says so.
 
-`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both call `ow_command` in the Rust library when that library is linked into the process (`include/openworld.h`). Until a store build links it, they start the `openworld` program with the same arguments. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
+`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. That executable is built on a macOS runner. Linux CI compiles the same screens with OpenSwiftUI, and only the test target depends on it. `android/` is the Material app. It decodes with MediaCodec. Both call `ow_command` in the Rust library when that library is linked into the process (`include/openworld.h`). Until a store build links it, they start the `openworld` program with the same arguments. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
 
 ```sh
 python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles --out eval/curves/fast.json --check eval/curves/fast.json
@@ -64,7 +64,7 @@ It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
 
 ## Continuous integration
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on pushes to `main`. The job rebuilds the Rust library, requires 90% line coverage, checks this Fast curve against a fresh run, checks the product sentences, runs the Apple phone contract, and runs the Android phone tests. The desktop window is not launched there.
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on pushes to `main`. The Ubuntu job rebuilds the Rust library, requires 90% line coverage, checks this Fast curve against a fresh run, checks the product sentences, and runs the Android phone tests. A second Ubuntu job runs the Apple contract and builds the screens with OpenSwiftUI. The macOS job builds the SwiftUI app and does not depend on OpenSwiftUI. The desktop window is not launched there.
 
 The crops in those phone tests are synthetic markers drawn for the fixture pack. They are not photographs of people, and they are not a training set. OpenWorld does not train on photos. Face photographs are not committed. InsightFace pretrained weights stay out. A photograph curve is still open, and `real_posters_allowed` stays false until that curve exists.
 

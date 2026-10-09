@@ -86,11 +86,15 @@ def main() -> None:
     run([sys.executable, str(ROOT / "tests/words.py")])
     bin_path = binary()
     if shutil.which("swift"):
-        run(
-            ["swift", "test", "--filter", "PhoneContractTests"],
-            cwd=ROOT / "apple",
-            env={"OPENWORLD_BIN": str(bin_path), "OPENWORLD_BUNDLES": str(ROOT / "bundles")},
-        )
+        apple_env = {"OPENWORLD_BIN": str(bin_path), "OPENWORLD_BUNDLES": str(ROOT / "bundles")}
+        if sys.platform.startswith("linux"):
+            run(
+                ["sh", str(ROOT / "apple/scripts/test-linux.sh"), "--filter", "PhoneContractTests|OpenWorldUITests"],
+                cwd=ROOT / "apple",
+                env=apple_env,
+            )
+        else:
+            run(["swift", "test", "--filter", "PhoneContractTests"], cwd=ROOT / "apple", env=apple_env)
     else:
         print("swift is not installed; skipping the Apple contract")
     if os.environ.get("ANDROID_HOME") and (ROOT / "android/gradlew").is_file():

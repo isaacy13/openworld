@@ -19,9 +19,17 @@ SHELLS = [
 BANNED = ["Identified", "more accurate", "found this person"]
 
 
+def shell_files(root: Path):
+    skip = {".build", ".git", "checkouts"}
+    for path in root.rglob("*"):
+        if not path.is_file() or skip.intersection(path.parts):
+            continue
+        yield path
+
+
 def main() -> None:
     for shell in SHELLS:
-        text = "\n".join(path.read_text(errors="replace") for path in shell.rglob("*") if path.is_file())
+        text = "\n".join(path.read_text(errors="replace") for path in shell_files(shell))
         for phrase in REQUIRED:
             if phrase not in text:
                 raise SystemExit(f"{shell.name} is missing {phrase!r}")

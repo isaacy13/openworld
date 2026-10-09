@@ -4,7 +4,7 @@ import OpenWorldContract
 import XCTest
 
 /// The iPhone screen's argument list and JSON models, run against the openworld program.
-/// SwiftUI and AVFoundation are not on this host, so this does not launch the iPhone UI.
+/// Drawing the screens on Linux is OpenWorldUITests, and that target uses OpenSwiftUI.
 /// A PNG is copied to frame_000000.png, which is what the phone does for a PNG still.
 final class PhoneContractTests: XCTestCase {
     func testSceneShowsACandidateAndAFaceThatWasNotCompared() throws {

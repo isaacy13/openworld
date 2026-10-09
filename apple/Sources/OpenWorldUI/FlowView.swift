@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
+#if os(Linux)
+import OpenSwiftUI
+#else
 import SwiftUI
+#endif
 import OpenWorldContract
 #if os(macOS)
 import AppKit
-#else
+#elseif os(iOS)
 import UIKit
 #endif
+import Foundation
 
 enum Step {
     case choose, device, bundle, size, estimate, results
 }
 
 @MainActor
-final class FlowModel: ObservableObject {
+public final class FlowModel: ObservableObject {
     @Published var step: Step = .choose
     @Published var file: URL?
     @Published var bundles: [BundleRow] = []
@@ -28,12 +33,14 @@ final class FlowModel: ObservableObject {
     let phone: Bool
     private let core = CoreClient()
 
-    init(phone: Bool) {
+    public init(phone: Bool) {
         self.phone = phone
     }
 
-    func choose(_ url: URL) {
+    public func choose(_ url: URL) {
+        #if !os(Linux)
         _ = url.startAccessingSecurityScopedResource()
+        #endif
         file = url
         if let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
            let modified = values.contentModificationDate,
@@ -103,12 +110,17 @@ extension CoreClient {
     }
 }
 
-struct FlowView: View {
+public struct FlowView: View {
     @ObservedObject var model: FlowModel
     var importControl: AnyView
     @Environment(\.openURL) private var openURL
 
-    var body: some View {
+    public init(model: FlowModel, importControl: AnyView) {
+        self.model = model
+        self.importControl = importControl
+    }
+
+    public var body: some View {
         Group {
             switch model.step {
             case .choose:
@@ -154,8 +166,7 @@ struct FlowView: View {
             Text("Fixture posters. Real FBI photos stay off.")
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("Continue") { model.loadBundles() }
-                .buttonStyle(.borderedProminent)
+            prominent("Continue") { model.loadBundles() }
         }
         .padding()
     }
@@ -165,6 +176,17 @@ struct FlowView: View {
             Text("Model bundle").font(model.phone ? .largeTitle : .title)
             Text("Scores are not comparable across bundles. Results name the bundle you pick.")
                 .foregroundStyle(.secondary)
+            #if os(Linux)
+            ForEach(model.bundles) { row in
+                Button(action: { model.bundleID = row.id }) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.name).font(.headline)
+                        Text(row.bestFor)
+                        Text(row.curveLine).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            #else
             List(model.bundles) { row in
                 Button {
                     model.bundleID = row.id
@@ -177,8 +199,8 @@ struct FlowView: View {
                 }
                 .listRowBackground(row.id == model.bundleID ? Color.accentColor.opacity(0.15) : Color.clear)
             }
-            Button("Continue") { model.step = .size }
-                .buttonStyle(.borderedProminent)
+            #endif
+            prominent("Continue") { model.step = .size }
         }
         .padding(model.phone ? 0 : 8)
     }
@@ -193,8 +215,7 @@ struct FlowView: View {
             if model.coverage == "measured" {
                 Text(Copy.brief)
             }
-            Button("Continue") { model.loadEstimate() }
-                .buttonStyle(.borderedProminent)
+            prominent("Continue") { model.loadEstimate() }
         }
         .padding()
     }
@@ -215,16 +236,40 @@ struct FlowView: View {
             if model.coverage == "measured" {
                 Text(Copy.brief)
             }
-            Button("Analyze") { model.analyze() }
-                .buttonStyle(.borderedProminent)
+            prominent("Analyze") { model.analyze() }
             Spacer()
         }
         .padding()
     }
 
+    @ViewBuilder
     private var results: some View {
+        #if os(Linux)
+        resultsColumn
+        if model.leavingURL != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(Copy.leaving)
+                Text(model.leavingURL?.absoluteString ?? "")
+                prominent("Stay") { model.leavingURL = nil }
+            }
+        }
+        #else
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            resultsColumn
+        }
+        .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
+            Button("Open") {
+                if let url = model.leavingURL { openURL(url) }
+            }
+            Button("Stay", role: .cancel) { model.leavingURL = nil }
+        } message: {
+            Text(model.leavingURL?.absoluteString ?? "")
+        }
+        #endif
+    }
+
+    private var resultsColumn: some View {
+        VStack(alignment: .leading, spacing: 12) {
                 Text(model.report?.summary ?? model.error ?? Copy.incomplete)
                     .font(model.phone ? .largeTitle : .title)
                 if let banner = model.report?.coverageBanner {
@@ -237,6 +282,16 @@ struct FlowView: View {
                     Text(note)
                 }
                 if let items = model.report?.inventory, !items.isEmpty {
+                    #if os(Linux)
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(items) { item in
+                            VStack(spacing: 4) {
+                                cropImage(item.crop)
+                                Text(item.label)
+                            }
+                        }
+                    }
+                    #else
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(items) { item in
@@ -250,6 +305,7 @@ struct FlowView: View {
                             }
                         }
                     }
+                    #endif
                 }
                 if model.report?.candidates.isEmpty == false {
                     ForEach(model.report?.candidates ?? []) { candidate in
@@ -257,13 +313,15 @@ struct FlowView: View {
                             Text(candidate.wording).font(.headline)
                             Text(candidate.uncertainty)
                             Text("\(candidate.posterTitle) (\(candidate.posterClass))")
-                            Button("Open FBI page") {
+                            prominent("Open FBI page") {
                                 model.leavingURL = URL(string: candidate.fbiUrl)
                             }
                         }
+                        #if !os(Linux)
                         .padding()
                         .background(.quaternary.opacity(0.4))
                         .clipShape(RoundedRectangle(cornerRadius: model.phone ? 12 : 8))
+                        #endif
                     }
                 } else if model.report?.status == "complete" {
                     Text(Copy.clearance)
@@ -273,15 +331,6 @@ struct FlowView: View {
                 }
             }
             .padding()
-        }
-        .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
-            Button("Open") {
-                if let url = model.leavingURL { openURL(url) }
-            }
-            Button("Stay", role: .cancel) { model.leavingURL = nil }
-        } message: {
-            Text(model.leavingURL?.absoluteString ?? "")
-        }
     }
 
 
@@ -295,17 +344,27 @@ struct FlowView: View {
                 .interpolation(.none)
                 .frame(width: 112, height: 112)
         }
-        #else
+        #elseif os(iOS)
         if let path, let image = UIImage(contentsOfFile: path) {
             Image(uiImage: image)
                 .resizable()
                 .interpolation(.none)
                 .frame(width: 112, height: 112)
         }
+        #else
+        Color.clear.frame(width: 112, height: 112)
         #endif
     }
 
     @ViewBuilder private var sizePicker: some View {
+        #if os(Linux)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("320 px on the long side")
+            Text("480 px on the long side")
+            Text("640 px on the long side")
+            Text("Full resolution")
+        }
+        #elseif os(macOS)
         let picker = Picker("Detection size", selection: $model.longSide) {
             Text("320 px on the long side").tag("320")
             Text("480 px on the long side").tag("480")
@@ -317,9 +376,24 @@ struct FlowView: View {
         } else {
             picker.pickerStyle(.radioGroup)
         }
+        #else
+        Picker("Detection size", selection: $model.longSide) {
+            Text("320 px on the long side").tag("320")
+            Text("480 px on the long side").tag("480")
+            Text("640 px on the long side").tag("640")
+            Text("Full resolution").tag("full")
+        }
+        .pickerStyle(.inline)
+        #endif
     }
 
     @ViewBuilder private var coveragePicker: some View {
+        #if os(Linux)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Complete. Every decoded frame.")
+            Text("Measured. 5 frames a second, plus the tracker.")
+        }
+        #elseif os(macOS)
         let picker = Picker("Coverage", selection: $model.coverage) {
             Text("Complete. Every decoded frame.").tag("complete")
             Text("Measured. 5 frames a second, plus the tracker.").tag("measured")
@@ -329,6 +403,22 @@ struct FlowView: View {
         } else {
             picker.pickerStyle(.radioGroup)
         }
+        #else
+        Picker("Coverage", selection: $model.coverage) {
+            Text("Complete. Every decoded frame.").tag("complete")
+            Text("Measured. 5 frames a second, plus the tracker.").tag("measured")
+        }
+        .pickerStyle(.inline)
+        #endif
+    }
+
+    @ViewBuilder
+    private func prominent(_ title: String, action: @escaping () -> Void) -> some View {
+        #if os(Linux)
+        Button(action: action) { Text(title) }
+        #else
+        Button(title, action: action).buttonStyle(.borderedProminent)
+        #endif
     }
 
     private var leavingPresented: Binding<Bool> {

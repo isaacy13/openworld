@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Calls `ow_command` when the app linked the Rust library. Otherwise the caller starts the program.

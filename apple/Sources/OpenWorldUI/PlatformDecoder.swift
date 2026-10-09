@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
+#if os(Linux)
+import Foundation
+import OpenWorldContract
+#else
 import AVFoundation
 import OpenWorldContract
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
+#endif
 
 /// Decodes with AVFoundation. The Rust library does the scan. Audio is ignored.
 enum PlatformDecoder {
@@ -34,6 +39,18 @@ enum PlatformDecoder {
         }
     }
 
+    #if os(Linux)
+    static func facts(url: URL) throws -> Facts {
+        _ = url
+        throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+    }
+
+    static func writeFrames(url: URL, directory: URL) throws -> Facts {
+        _ = url
+        _ = directory
+        throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+    }
+    #else
     static func facts(url: URL) throws -> Facts {
         let container = containerUnix(url)
         if isVideo(url) {
@@ -177,6 +194,7 @@ enum PlatformDecoder {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
     }
+    #endif
 
     private struct Failure: LocalizedError {
         var message: String

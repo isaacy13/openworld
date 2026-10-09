@@ -18,15 +18,6 @@ jobs:
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
       - run: python3 eval/measure_fast.py --bin core/target/release/openworld --bundles bundles --out /tmp/fast-curve.json --check eval/curves/fast.json
       - run: python3 tests/words.py
-      - uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.2"
-      - name: apple phone contract
-        working-directory: apple
-        env:
-          OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
-          OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
-        run: swift test --filter PhoneContractTests
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -42,3 +33,32 @@ jobs:
       - name: android phone screens
         working-directory: android
         run: ./gradlew testDebugUnitTest --stacktrace
+  apple-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.3.3"
+      - name: OpenSwiftUI screen tests
+        working-directory: apple
+        env:
+          OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
+          OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
+        run: sh scripts/test-linux.sh --filter 'PhoneContractTests|OpenWorldUITests'
+  apple-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SwiftUI app build
+        run: |
+          swift package --package-path apple show-dependencies > /tmp/openworld-deps.txt
+          if grep -i OpenSwiftUI /tmp/openworld-deps.txt; then
+            echo "The macOS app must not depend on OpenSwiftUI."
+            exit 1
+          fi
+          swift build --package-path apple
+          test -x "$(swift build --package-path apple --show-bin-path)/OpenWorld"

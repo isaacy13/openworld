@@ -16,3 +16,4 @@ android/local.properties
 .idea/
 apple/.build/
 apple/.swiftpm/
+apple/Package.resolved
