@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// Camera orientation for a JPEG or a still WebP. The tag says how the stored pixels are shown.
+/// Camera orientation for a JPEG, a still WebP, or a PNG. The tag says how the stored pixels are shown.
 /// Values match the image crate: 6 is a quarter turn clockwise, 8 is three
 /// quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
 public enum JpegOrientation {
@@ -12,6 +12,7 @@ public enum JpegOrientation {
 
     public static func tag(_ data: Data) -> Int {
         if isWebp(data) { return webpTag(data) }
+        if isPng(data) { return pngTag(data) }
         if data.count < 4 || data[0] != 0xFF || data[1] != 0xD8 { return 1 }
         var index = 2
         while index + 4 < data.count {
@@ -72,6 +73,33 @@ public enum JpegOrientation {
         case 8: return (y, width - 1 - x)
         default: return (x, y)
         }
+    }
+
+    private static func isPng(_ data: Data) -> Bool {
+        let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        if data.count < signature.count { return false }
+        return Array(data[0..<signature.count]) == signature
+    }
+
+    private static func pngTag(_ data: Data) -> Int {
+        var index = 8
+        while index + 12 <= data.count {
+            let length = be32(data, index)
+            let kind = Array(data[(index + 4)..<(index + 8)])
+            let start = index + 8
+            if length < 0 || start > data.count || length > data.count - start - 4 { return 1 }
+            let end = start + length
+            if kind == Array("eXIf".utf8) {
+                return orientationInExif(data, start: start, end: end) ?? 1
+            }
+            if kind == Array("IEND".utf8) { return 1 }
+            index = end + 4
+        }
+        return 1
+    }
+
+    private static func be32(_ data: Data, _ offset: Int) -> Int {
+        return (Int(data[offset]) << 24) | (Int(data[offset + 1]) << 16) | (Int(data[offset + 2]) << 8) | Int(data[offset + 3])
     }
 
     private static func isWebp(_ data: Data) -> Bool {

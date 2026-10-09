@@ -52,9 +52,10 @@ enum PlatformDecoder {
         guard let size = pngSize(url) else {
             throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
         }
+        let shown = JpegOrientation.displaySize(width: size.0, height: size.1, tag: JpegOrientation.tag(url))
         return Facts(
-            width: size.0,
-            height: size.1,
+            width: shown.0,
+            height: shown.1,
             fps: 0,
             frames: 1,
             duration: 0,

@@ -899,6 +899,99 @@ fn webp_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
     out
 }
 
+fn png_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut encoded)
+        .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    let mut tiff = Vec::new();
+    tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00]);
+    tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+    tiff.extend_from_slice(&3u16.to_le_bytes());
+    tiff.extend_from_slice(&1u32.to_le_bytes());
+    tiff.extend_from_slice(&(u16::from(orientation)).to_le_bytes());
+    tiff.extend_from_slice(&0u16.to_le_bytes());
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    let mut typed = b"eXIf".to_vec();
+    typed.extend_from_slice(&tiff);
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in &typed {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    let crc = !crc;
+    let mut chunk = Vec::new();
+    chunk.extend_from_slice(&(tiff.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&typed);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut index = 8usize;
+    while index + 8 <= encoded.len() {
+        let len = u32::from_be_bytes(encoded[index..index + 4].try_into().unwrap()) as usize;
+        if &encoded[index + 4..index + 8] == b"IDAT" {
+            let mut out = Vec::with_capacity(encoded.len() + chunk.len());
+            out.extend_from_slice(&encoded[..index]);
+            out.extend_from_slice(&chunk);
+            out.extend_from_slice(&encoded[index..]);
+            return out;
+        }
+        index += 12 + len;
+    }
+    panic!("png had no image data");
+}
+
+#[test]
+fn a_png_with_camera_orientation_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("side.png");
+    fs::write(&side, png_with_orientation(&stored, 6)).unwrap();
+    let raw = dir.path().join("raw.png");
+    let mut raw_bytes = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut raw_bytes)
+        .write_image(stored.as_raw(), stored.width(), stored.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    fs::write(&raw, raw_bytes).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&side).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    let turned = scan(side);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let sideways = scan(raw);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
+}
+
 #[test]
 fn a_jpeg_with_camera_orientation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();

@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
 
 /**
  * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
- * because BitmapFactory keeps only the first one. A JPEG or a still WebP is turned
+ * because BitmapFactory keeps only the first one. A JPEG, a still WebP, or a PNG is turned
  * to match its camera orientation tag, because BitmapFactory keeps the stored pixels.
  * The Rust library does the scan. Audio is ignored. FFmpeg is not used.
  */
@@ -50,7 +50,8 @@ object PlatformDecode {
             if (StillMotion.animatedPng(file)) {
                 throw IOException("The file was not fully decoded. Refusing.")
             }
-            return Facts(width, height, 0.0, 1, 0.0, false)
+            val shown = JpegOrientation.displaySize(width, height, JpegOrientation.tag(file))
+            return Facts(shown.first, shown.second, 0.0, 1, 0.0, false)
         }
         if (StillMotion.animatedWebp(file)) {
             throw IOException("The file was not fully decoded. Refusing.")

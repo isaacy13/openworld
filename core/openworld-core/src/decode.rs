@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
-//! A JPEG or a still WebP is turned to match its camera orientation tag before
-//! the pixels are scanned. Audio is not decoded. Phone, Mac, and Android shells
+//! A JPEG, a still WebP, or a PNG is turned to match its camera orientation tag
+//! before the pixels are scanned. Audio is not decoded. Phone, Mac, and Android shells
 //! decode with AVFoundation or MediaCodec and pass the frames through
 //! `load_frame_dir`. That path does not run FFmpeg.
 
@@ -98,7 +98,7 @@ fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
     // The WebP decoder reads a TIFF header at the start of the EXIF chunk.
     // Some files put the JPEG "Exif" marker in front of that header.
     if orientation == Orientation::NoTransforms {
-        if let Some(parsed) = webp_exif_orientation(path) {
+        if let Some(parsed) = webp_exif_orientation(path).or_else(|| png_exif_orientation(path)) {
             orientation = parsed;
         }
     }
@@ -188,6 +188,33 @@ fn webp_exif_orientation(path: &Path) -> Option<Orientation> {
             return orientation_in_exif(&bytes[start..end]);
         }
         index = end + (size & 1);
+    }
+    None
+}
+
+/// Orientation from a PNG eXIf chunk. The payload is a TIFF header, sometimes
+/// behind the six-byte marker a JPEG uses.
+fn png_exif_orientation(path: &Path) -> Option<Orientation> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() < 8 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let mut index = 8usize;
+    while index + 12 <= bytes.len() {
+        let len = u32::from_be_bytes(bytes[index..index + 4].try_into().ok()?) as usize;
+        let tag = &bytes[index + 4..index + 8];
+        let start = index + 8;
+        let end = start.checked_add(len)?;
+        if end + 4 > bytes.len() {
+            return None;
+        }
+        if tag == b"eXIf" {
+            return orientation_in_exif(&bytes[start..end]);
+        }
+        if tag == b"IEND" {
+            return None;
+        }
+        index = end + 4;
     }
     None
 }
@@ -643,6 +670,78 @@ mod tests {
         let _ = fs::remove_file(&path);
         assert_eq!(opened.dimensions(), raw.dimensions());
         assert_eq!(opened.as_raw(), raw.as_raw());
+    }
+
+    fn png_crc(data: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFFu32;
+        for &byte in data {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    fn png_with_orientation(image: &RgbImage, orientation: u8, prefix: bool) -> Vec<u8> {
+        let mut encoded = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut encoded)
+            .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let tiff = tiff_orientation(orientation, false);
+        let mut payload = Vec::new();
+        if prefix {
+            payload.extend_from_slice(b"Exif\0\0");
+        }
+        payload.extend_from_slice(&tiff);
+        let mut typed = b"eXIf".to_vec();
+        typed.extend_from_slice(&payload);
+        let crc = png_crc(&typed);
+        let mut chunk = Vec::new();
+        chunk.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        chunk.extend_from_slice(&typed);
+        chunk.extend_from_slice(&crc.to_be_bytes());
+        let mut index = 8usize;
+        while index + 8 <= encoded.len() {
+            let len = u32::from_be_bytes(encoded[index..index + 4].try_into().unwrap()) as usize;
+            if &encoded[index + 4..index + 8] == b"IDAT" {
+                let mut out = Vec::with_capacity(encoded.len() + chunk.len());
+                out.extend_from_slice(&encoded[..index]);
+                out.extend_from_slice(&chunk);
+                out.extend_from_slice(&encoded[index..]);
+                return out;
+            }
+            index += 12 + len;
+        }
+        panic!("png had no image data");
+    }
+
+    #[test]
+    fn png_orientation_six_matches_a_clockwise_quarter_turn() {
+        let shown = RgbImage::from_raw(3, 2, vec![10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0, 50, 0, 0, 60, 0, 0]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        for prefix in [false, true] {
+            let path = write_bytes("png6", &png_with_orientation(&stored, 6, prefix));
+            let opened = open_oriented(&path).unwrap();
+            let _ = fs::remove_file(&path);
+            assert_eq!(opened.dimensions(), shown.dimensions(), "prefix {prefix}");
+            assert_eq!(opened.as_raw(), shown.as_raw(), "prefix {prefix}");
+        }
+    }
+
+    #[test]
+    fn a_png_without_an_orientation_tag_keeps_the_stored_pixels() {
+        let stored = RgbImage::from_raw(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
+        let mut encoded = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut encoded)
+            .write_image(stored.as_raw(), stored.width(), stored.height(), image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let path = write_bytes("png1", &encoded);
+        let opened = open_oriented(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(opened.dimensions(), stored.dimensions());
+        assert_eq!(opened.as_raw(), stored.as_raw());
     }
 
     fn webp_lossless(image: &RgbImage) -> Vec<u8> {

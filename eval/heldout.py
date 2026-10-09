@@ -7,7 +7,7 @@ identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
-orientation tag, a video with a quarter-turn
+orientation tag, a PNG with a camera orientation tag, a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
@@ -50,6 +50,42 @@ def with_orientation(jpeg: bytes, tag: int) -> bytes:
     payload = b"Exif\x00\x00" + tiff
     length = len(payload) + 2
     return bytes([0xFF, 0xD8, 0xFF, 0xE1, (length >> 8) & 0xFF, length & 0xFF]) + payload + jpeg[2:]
+
+
+def with_png_orientation(data: bytes, tag: int) -> bytes:
+    """Insert an eXIf orientation chunk. The stored canvas stays as written."""
+    import zlib
+
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        fail("stored png was not a png")
+    tiff = bytes([
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag & 0xFF, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ])
+    typed = b"eXIf" + tiff
+    chunk = len(tiff).to_bytes(4, "big") + typed + zlib.crc32(typed).to_bytes(4, "big")
+    index = 8
+    out = bytearray(data[:8])
+    while index + 8 <= len(data):
+        length = int.from_bytes(data[index : index + 4], "big")
+        kind = data[index + 4 : index + 8]
+        block = index + 12 + length
+        if block > len(data):
+            fail("stored png chunk ran past the file")
+        if kind == b"IDAT":
+            out += chunk
+            out += data[index:]
+            return bytes(out)
+        out += data[index:block]
+        index = block
+    fail("stored png had no image data")
 
 
 def with_webp_orientation(data: bytes, tag: int) -> bytes:
@@ -210,6 +246,7 @@ def main() -> int:
         "apng_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
+        "oriented_png_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
         "turned_anamorphic_video_candidate": 0,
@@ -490,6 +527,24 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, stored_webp, out, "complete")
         assert_clearance(report, "webp without the orientation tag")
 
+        stored_png = root / "stored-side.png"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(scene),
+            "-vf", "transpose=2", str(stored_png),
+        ])
+        if proc.returncode != 0 or not stored_png.is_file():
+            fail(proc.stderr or "stored png was not written")
+        shown_png = root / "shown-side.png"
+        shown_png.write_bytes(with_png_orientation(stored_png.read_bytes(), 6))
+        report = scan(args.bin, args.bundles, posters, shown_png, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"oriented png summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("oriented png produced no candidate")
+        counts["oriented_png_candidate"] += 1
+        report = scan(args.bin, args.bundles, posters, stored_png, out, "complete")
+        assert_clearance(report, "png without the orientation tag")
+
         stored_video = root / "stored.mp4"
         shown_video = root / "shown.mp4"
         proc = run([
@@ -619,6 +674,7 @@ def main() -> int:
         or counts["apng_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
+        or counts["oriented_png_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
         or counts["turned_anamorphic_video_candidate"] != 1

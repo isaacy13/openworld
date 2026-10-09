@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import java.io.File
 
 /**
- * Camera orientation for a JPEG or a still WebP. BitmapFactory keeps the stored pixels.
+ * Camera orientation for a JPEG, a still WebP, or a PNG. BitmapFactory keeps the stored pixels.
  * The tag says how those pixels are shown. The scan reads the shown pixels.
  * Values match the image crate: 6 is a quarter turn clockwise, 8 is three
  * quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
@@ -18,6 +18,7 @@ object JpegOrientation {
 
     fun tag(bytes: ByteArray): Int {
         if (isWebp(bytes)) return webpTag(bytes)
+        if (isPng(bytes)) return pngTag(bytes)
         if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return 1
         var index = 2
         while (index + 4 < bytes.size) {
@@ -80,6 +81,35 @@ object JpegOrientation {
             8 -> y to width - 1 - x
             else -> x to y
         }
+    }
+
+    private fun isPng(bytes: ByteArray): Boolean {
+        val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        return bytes.size >= signature.size && bytes.copyOf(signature.size).contentEquals(signature)
+    }
+
+    private fun pngTag(bytes: ByteArray): Int {
+        var index = 8
+        while (index + 12 <= bytes.size) {
+            val length = be32(bytes, index)
+            val kind = bytes.copyOfRange(index + 4, index + 8)
+            val start = index + 8
+            if (length < 0 || start > bytes.size || length > bytes.size - start - 4) return 1
+            val end = start + length
+            if (kind.contentEquals("eXIf".encodeToByteArray())) {
+                return orientationInExif(bytes, start, end) ?: 1
+            }
+            if (kind.contentEquals("IEND".encodeToByteArray())) return 1
+            index = end + 4
+        }
+        return 1
+    }
+
+    private fun be32(bytes: ByteArray, offset: Int): Int {
+        return ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
     }
 
     private fun isWebp(bytes: ByteArray): Boolean {

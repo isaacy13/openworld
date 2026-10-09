@@ -266,6 +266,8 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(size.0, 640)
         XCTAssertEqual(size.1, 480)
         XCTAssertEqual(JpegOrientation.tag(Data([0x89, 0x50, 0x4E, 0x47])), 1)
+        XCTAssertEqual(JpegOrientation.tag(Data(pngWithOrientation(6))), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(pngWithOrientation(1))), 1)
         let webp = FileManager.default.temporaryDirectory.appendingPathComponent("ow-webp-\(UUID().uuidString)")
         try Data(webpWithOrientation(6, prefix: false)).write(to: webp)
         XCTAssertEqual(JpegOrientation.tag(webp), 6)
@@ -616,6 +618,33 @@ private func le32(_ value: Int) -> [UInt8] {
         UInt8((value >> 8) & 0xFF),
         UInt8((value >> 16) & 0xFF),
         UInt8((value >> 24) & 0xFF),
+    ]
+}
+
+private func pngWithOrientation(_ tag: UInt8) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ]
+    let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    let chunk = be32(tiff.count) + Array("eXIf".utf8) + tiff + be32(0)
+    let end = be32(0) + Array("IEND".utf8) + be32(0)
+    return signature + chunk + end
+}
+
+private func be32(_ value: Int) -> [UInt8] {
+    [
+        UInt8((value >> 24) & 0xFF),
+        UInt8((value >> 16) & 0xFF),
+        UInt8((value >> 8) & 0xFF),
+        UInt8(value & 0xFF),
     ]
 }
 

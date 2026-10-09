@@ -501,6 +501,15 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aPngOrientationTagIsReadWithoutAnExtension() {
+        val file = File.createTempFile("ow-png", "")
+        file.writeBytes(pngWithOrientation(6))
+        assertEquals(6, JpegOrientation.tag(file))
+        assertEquals(640 to 480, JpegOrientation.displaySize(480, 640, JpegOrientation.tag(file)))
+        assertEquals(1, JpegOrientation.tag(pngWithOrientation(1)))
+    }
+
+    @Test
     fun aWebpOrientationTagIsReadWithoutAnExtension() {
         val direct = File.createTempFile("ow-webp", "")
         direct.writeBytes(webpWithOrientation(6, prefix = false))
@@ -842,6 +851,33 @@ private fun movingPicture(kind: String): File {
         )
     }
     return out
+}
+
+private fun pngWithOrientation(tag: Int): ByteArray {
+    val tiff = byteArrayOf(
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag.toByte(), 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    )
+    val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    val chunk = be32(tiff.size) + "eXIf".encodeToByteArray() + tiff + be32(0)
+    val end = be32(0) + "IEND".encodeToByteArray() + be32(0)
+    return signature + chunk + end
+}
+
+private fun be32(value: Int): ByteArray {
+    return byteArrayOf(
+        (value shr 24).toByte(),
+        (value shr 16).toByte(),
+        (value shr 8).toByte(),
+        value.toByte(),
+    )
 }
 
 private fun webpWithOrientation(tag: Int, prefix: Boolean): ByteArray {
