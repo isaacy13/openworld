@@ -285,8 +285,9 @@ enum PlatformDecoder {
             ) as? NSDictionary else {
                 continue
             }
-            let horizontal = (aspect[kCMFormatDescriptionExtension_PixelAspectRatioHorizontalSpacing] as? NSNumber)?.intValue ?? 0
-            let vertical = (aspect[kCMFormatDescriptionExtension_PixelAspectRatioVerticalSpacing] as? NSNumber)?.intValue ?? 0
+            // The track stores HorizontalSpacing and VerticalSpacing. AVFoundation publishes those names.
+            let horizontal = (aspect[AVVideoPixelAspectRatioHorizontalSpacingKey] as? NSNumber)?.intValue ?? 0
+            let vertical = (aspect[AVVideoPixelAspectRatioVerticalSpacingKey] as? NSNumber)?.intValue ?? 0
             if horizontal > 0, vertical > 0 {
                 return (horizontal, vertical)
             }
