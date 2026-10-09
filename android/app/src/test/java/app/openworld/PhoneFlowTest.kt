@@ -36,6 +36,21 @@ import java.io.File
 @Config(sdk = [34], qualifiers = "w360dp-h800dp")
 class PhoneFlowTest {
     @Test
+    fun inProcessLibraryAgreesWithTheSceneScan() {
+        val required = System.getenv("OPENWORLD_REQUIRE_LINKED") == "1"
+        if (!Core.linkedLibrary()) {
+            if (required) {
+                throw AssertionError("libopenworld_jni did not load")
+            }
+            return
+        }
+        val model = drive("scene")
+        assertEquals("Possible candidate. Not an identification.", model.summary)
+        assertTrue(model.candidateRows.size >= 2)
+        assertTrue(model.candidateRows.all { it.url.startsWith("https://www.fbi.gov") })
+    }
+
+    @Test
     fun sceneShowsACandidateAndAFaceThatWasNotCompared() {
         val model = drive("scene")
         assertEquals("Possible candidate. Not an identification.", model.summary)

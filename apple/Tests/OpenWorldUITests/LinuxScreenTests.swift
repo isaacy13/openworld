@@ -18,6 +18,9 @@ final class OpenWorldUITests: XCTestCase {
 
     func testSceneScanReachesTheResultsScreen() throws {
         try MainActor.assumeIsolated {
+            if ProcessInfo.processInfo.environment["OPENWORLD_LIB"] != nil {
+                XCTAssertTrue(LinkedCore.isLinked)
+            }
             let model = try self.scan("scene")
             XCTAssertEqual(model.step, .results)
             XCTAssertEqual(model.report?.status, "complete")

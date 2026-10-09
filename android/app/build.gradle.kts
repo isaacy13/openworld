@@ -49,4 +49,13 @@ tasks.withType<Test> {
     val bin = listOf(debugBin, releaseBin).firstOrNull { it.canExecute() } ?: debugBin
     environment("OPENWORLD_BIN", bin.absolutePath)
     environment("OPENWORLD_BUNDLES", repoRoot.resolve("bundles").absolutePath)
+    val jni = listOf("debug", "release").firstNotNullOfOrNull { name ->
+        repoRoot.resolve("core/target/$name/libopenworld_jni.so").takeIf { it.isFile }
+    }
+    if (jni != null) {
+        jvmArgs("-Djava.library.path=${jni.parentFile.absolutePath}")
+        val previous = System.getenv("LD_LIBRARY_PATH").orEmpty()
+        val prefix = jni.parentFile.absolutePath
+        environment("LD_LIBRARY_PATH", if (previous.isBlank()) prefix else "$prefix:$previous")
+    }
 }

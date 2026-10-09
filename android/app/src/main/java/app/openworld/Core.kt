@@ -73,5 +73,7 @@ object Core {
         return parsed
     }
 
+    fun linkedLibrary(): Boolean = linked
+
     private external fun nativeCommand(request: String): String
 }

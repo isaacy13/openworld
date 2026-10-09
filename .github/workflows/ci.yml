@@ -31,8 +31,12 @@ jobs:
           packages: platform-tools
       - name: android sdk packages
         run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+      - name: link the host scan library
+        run: OPENWORLD_PROFILE=release sh android/scripts/link-host-jni.sh
       - name: android phone screens
         working-directory: android
+        env:
+          OPENWORLD_REQUIRE_LINKED: "1"
         run: ./gradlew testDebugUnitTest --stacktrace
   apple-linux:
     runs-on: ubuntu-latest
@@ -40,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14
-      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli -p openworld-core
       # swift-actions/setup-swift does not list 6.3.3. OpenSwiftUI needs
       # tools 6.3, so the job installs that release from swift.org.
       - name: Install Swift 6.3.3
@@ -55,6 +59,7 @@ jobs:
         env:
           OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
           OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
+          OPENWORLD_LIB: ${{ github.workspace }}/core/target/release/libopenworld_core.so
         run: sh scripts/test-linux.sh --filter 'PhoneContractTests|OpenWorldUITests'
   apple-macos:
     runs-on: macos-latest

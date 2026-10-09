@@ -17,6 +17,15 @@ export OPENSWIFTUI_COMPATIBILITY_TEST=0
 export OPENSWIFTUI_SWIFT_LOG=1
 export OPENSWIFTUI_SWIFT_CRYPTO=1
 export OPENSWIFTUI_RENDER_GTK=0
+if [ -z "${OPENWORLD_LIB:-}" ]; then
+    for candidate in ../core/target/debug/libopenworld_core.so ../core/target/release/libopenworld_core.so; do
+        if [ -f "$candidate" ]; then
+            OPENWORLD_LIB=$(readlink -f "$candidate")
+            export OPENWORLD_LIB
+            break
+        fi
+    done
+fi
 swift test "$@"
 bin="$(swift build --show-bin-path)/OpenWorld"
 if [ -x "$bin" ]; then
