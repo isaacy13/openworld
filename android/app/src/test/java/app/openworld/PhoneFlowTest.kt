@@ -88,6 +88,42 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aStoppedScanKeepsAReasonBesidesIncomplete() {
+        val file = still("blank")
+        val root = File(file.parentFile, "ow-stop-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val posters = File(root, "posters")
+        val out = File(root, "result")
+        Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
+        val frames = File(root, "frames")
+        val reel = PlatformDecode.writeFrames(file, frames)
+        val json = Core.json(
+            listOf(
+                "--json", "--bundles", Core.bundlesDir(), "scan",
+                "--input", file.absolutePath,
+                "--bundle", "fast",
+                "--long-side", "640",
+                "--coverage", "complete",
+                "--posters", posters.absolutePath,
+                "--out", out.absolutePath,
+                "--form-factor", "phone",
+                "--provider", "cpu",
+                "--abort-after-frames", "0",
+            ) + reel.arguments(reel.directory)
+        )
+        assertEquals("incomplete", json.getString("status"))
+        assertEquals("Incomplete.", json.getString("summary"))
+        val reason = json.getString("message")
+        assertEquals("The scan stopped before every selected frame was analyzed.", reason)
+        val model = FlowModel()
+        model.status = json.getString("status")
+        model.summary = json.getString("summary")
+        model.incompleteReason = if (reason == model.summary) "" else reason
+        assertEquals(reason, model.incompleteReason)
+        root.deleteRecursively()
+    }
+
+    @Test
     fun sceneShowsACandidateAndAFaceThatWasNotCompared() {
         val model = drive("scene")
         assertEquals("Possible candidate. Not an identification.", model.summary)
@@ -426,6 +462,19 @@ class PhoneScreenTest {
         assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
         compose.onAllNodesWithText("Possible candidate. Not an identification.").assertCountEquals(0)
+    }
+
+    @Test
+    fun anIncompleteScanShowsWhyItStopped() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "incomplete"
+        model.summary = "Incomplete."
+        model.incompleteReason = "The file was not fully decoded."
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Incomplete.").assertExists()
+        compose.onNodeWithText("The file was not fully decoded.").assertExists()
+        compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
     }
 
     @Test

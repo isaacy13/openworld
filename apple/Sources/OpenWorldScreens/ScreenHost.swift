@@ -122,6 +122,12 @@ enum ScreenCopy {
             return lines
         case "results", "leaving":
             var lines = [model.report?.summary ?? model.error ?? Copy.incomplete, "Choose another file", "Back"]
+            if model.report?.status == "incomplete",
+               let reason = model.report?.message,
+               !reason.isEmpty,
+               reason != model.report?.summary {
+                lines.append(reason)
+            }
             if let banner = model.report?.coverageBanner { lines.append(banner) }
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
             if let note = model.report?.perceptionNote { lines.append(note) }

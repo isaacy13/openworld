@@ -396,6 +396,12 @@ public struct FlowView: View {
                 backControl
                 Text(model.report?.summary ?? model.error ?? Copy.incomplete)
                     .font(model.phone ? .largeTitle : .title)
+                if model.report?.status == "incomplete",
+                   let reason = model.report?.message,
+                   !reason.isEmpty,
+                   reason != model.report?.summary {
+                    Text(reason)
+                }
                 if let banner = model.report?.coverageBanner {
                     Text(banner)
                 }

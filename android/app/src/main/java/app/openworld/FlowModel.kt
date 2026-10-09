@@ -31,6 +31,7 @@ class FlowModel {
     var estimateText by mutableStateOf("")
     var summary by mutableStateOf("")
     var status by mutableStateOf("")
+    var incompleteReason by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var leaveNotice by mutableStateOf<String?>(null)
@@ -108,6 +109,7 @@ class FlowModel {
         estimateText = ""
         summary = ""
         status = ""
+        incompleteReason = ""
         detail = ""
         strip = emptyList()
         fbiUrl = null
@@ -124,6 +126,7 @@ class FlowModel {
         if (!removeResult()) return
         summary = "Deleted."
         status = "deleted"
+        incompleteReason = ""
         detail = ""
         strip = emptyList()
         candidateRows = emptyList()
@@ -229,6 +232,7 @@ class FlowModel {
         leavingUrl = null
         leaveNotice = null
         deleteNotice = null
+        incompleteReason = ""
         try {
             val parent = File.createTempFile("openworld-out", null).parentFile ?: return
             val root = File(parent, "openworld-" + System.nanoTime())
@@ -258,6 +262,8 @@ class FlowModel {
                 "refused" -> json.present("message") ?: "Refusing."
                 else -> "Incomplete."
             }
+            val reason = json.present("message")
+            incompleteReason = if (status == "incomplete" && reason != null && reason != summary) reason else ""
             val lines = mutableListOf<String>()
             json.present("coverage_banner")?.let(lines::add)
             json.present("bundle_name")?.let { lines.add("Bundle: $it") }
@@ -312,7 +318,8 @@ class FlowModel {
             val message = err.message ?: "Incomplete."
             status = if (message.contains("Refusing")) "refused" else "incomplete"
             summary = if (message.contains("Refusing")) message else "Incomplete."
-            detail = message
+            incompleteReason = if (status == "incomplete" && message != summary) message else ""
+            detail = if (incompleteReason.isNotEmpty()) "" else message
         }
         step = Step.Results
     }

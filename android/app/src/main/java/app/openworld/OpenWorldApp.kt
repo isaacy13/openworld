@@ -128,6 +128,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             },
                             style = MaterialTheme.typography.headlineMedium,
                         )
+                        if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
                         if (model.strip.isNotEmpty()) {
                             Row(
                                 modifier = Modifier.horizontalScroll(rememberScrollState()),

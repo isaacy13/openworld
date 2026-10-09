@@ -205,6 +205,19 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnIncompleteReportKeepsTheReason() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.report = try JSONDecoder().decode(ScanReport.self, from: Data(incompleteJSON.utf8))
+            model.step = .results
+            XCTAssertEqual(model.report?.summary, Copy.incomplete)
+            XCTAssertEqual(model.report?.status, "incomplete")
+            XCTAssertEqual(model.report?.message, "The file was not fully decoded.")
+            XCTAssertNotEqual(model.report?.message, model.report?.summary)
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testLinuxSizeAndCoverageButtonsChangeTheSelection() {
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
@@ -336,6 +349,10 @@ final class OpenWorldUITests: XCTestCase {
         """.utf8))
     }
 }
+
+private let incompleteJSON = """
+{"status":"incomplete","summary":"Incomplete.","message":"The file was not fully decoded.","disclosure":["Nothing is uploaded."],"warnings":[],"faces_seen_not_compared":0,"inventory":[],"candidates":[],"comparisons":[]}
+"""
 
 private let estimateJSON = """
 {"human":"Less than a second","caveat":"This is a planning estimate, not a thermal measurement.","device_note":"This scan runs on the CPU. It will be slower, warmer, and use more battery.","heat_note":"This phone may get hot. If heat or the system stops the scan, the result is Incomplete.","battery_note":"A long scan uses a lot of battery."}

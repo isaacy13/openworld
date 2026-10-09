@@ -46,7 +46,7 @@ python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles
 
 A face enters the inventory at 64 px on the short side of the detection image. It is compared only when the crop from the original frame is at least 112 px on the short side. Below that the label is "Not compared." It is not a candidate and it is not a clearance.
 
-`complete` analyzes every decoded frame. `measured` analyzes 5 frames a second, plus the tracker, and shows "A brief face can be missed." There is no maximum duration. The estimate is a planning model, not a thermal table. On a phone it also shows heat and battery. A long phone estimate suggests a computer. You can still run `complete` on the phone. If the job stops, the result is "Incomplete."
+`complete` analyzes every decoded frame. `measured` analyzes 5 frames a second, plus the tracker, and shows "A brief face can be missed." There is no maximum duration. The estimate is a planning model, not a thermal table. On a phone it also shows heat and battery. A long phone estimate suggests a computer. You can still run `complete` on the phone. If the job stops, the result is "Incomplete." and the screen says why, such as "The file was not fully decoded."
 
 A bad hash, a bad codec, or a missing or expired poster pack is a refusal.
 

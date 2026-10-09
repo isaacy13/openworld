@@ -126,6 +126,7 @@ public struct Estimate: Decodable {
 public struct ScanReport: Decodable {
     public var status: String
     public var summary: String
+    public var message: String?
     public var bundleName: String?
     public var disclosure: [String]
     public var coverageBanner: String?
@@ -136,7 +137,7 @@ public struct ScanReport: Decodable {
     public var comparisons: [Comparison]
     public var facesSeenNotCompared: Int
     enum CodingKeys: String, CodingKey {
-        case status, summary, disclosure, warnings, inventory, candidates, comparisons
+        case status, summary, message, disclosure, warnings, inventory, candidates, comparisons
         case bundleName = "bundle_name"
         case coverageBanner = "coverage_banner"
         case perceptionNote = "perception_note"

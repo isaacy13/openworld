@@ -258,6 +258,9 @@ class OpenWorld(Gtk.Application):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.summary = Gtk.Label(xalign=0, wrap=True)
         self.summary.add_css_class("title")
+        self.reason = Gtk.Label(xalign=0, wrap=True)
+        self.reason.add_css_class("warn")
+        self.reason.set_visible(False)
         self.result_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note.add_css_class("dim")
         self.strip = Gtk.FlowBox()
@@ -270,6 +273,7 @@ class OpenWorld(Gtk.Application):
         scroll.set_vexpand(True)
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
+        inner.append(self.reason)
         inner.append(self.strip)
         inner.append(self.detail)
         inner.append(self.result_note)
@@ -485,7 +489,23 @@ class OpenWorld(Gtk.Application):
 
     def _show_report(self, report: dict) -> bool:
         self.scan_thread = None
-        self.summary.set_text(report.get("summary") or "")
+        summary = report.get("summary") or ""
+        status = report.get("status") or ""
+        if not summary:
+            if status == "complete":
+                summary = PHRASES["possible"] if report.get("candidates") else PHRASES["clearance"]
+            elif status == "refused":
+                summary = report.get("message") or "Refusing."
+            else:
+                summary = PHRASES["incomplete"]
+        self.summary.set_text(summary)
+        reason = report.get("message") or ""
+        if status == "incomplete" and reason and reason != summary:
+            self.reason.set_text(reason)
+            self.reason.set_visible(True)
+        else:
+            self.reason.set_text("")
+            self.reason.set_visible(False)
         notes = []
         if report.get("coverage_banner"):
             notes.append(report["coverage_banner"])
@@ -645,6 +665,8 @@ class OpenWorld(Gtk.Application):
     def _mark_deleted(self) -> None:
         self._clear_results()
         self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
         self.summary.set_text("Deleted.")
         self.out_dir = None
         self.delete_button.set_sensitive(False)
@@ -689,6 +711,8 @@ class OpenWorld(Gtk.Application):
         self._clear_results()
         self.summary.set_text("")
         self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
         self.file_label.set_text("")
         self.warn_label.set_text("")
         self.coverage = "complete"
@@ -758,6 +782,29 @@ class OpenWorld(Gtk.Application):
         if not path:
             self._exercise_fail("missing input")
             return False
+        self._show_report(
+            {
+                "status": "incomplete",
+                "summary": "",
+                "message": "The file was not fully decoded.",
+                "disclosure": ["Nothing is uploaded."],
+                "candidates": [],
+                "inventory": [],
+            }
+        )
+        if (
+            self.summary.get_text() != PHRASES["incomplete"]
+            or self.reason.get_text() != "The file was not fully decoded."
+            or not self.reason.get_visible()
+        ):
+            self._exercise_fail(f"incomplete reason missing: {self.summary.get_text()!r} {self.reason.get_text()!r}")
+            return False
+        self._exercise_report = None
+        self._clear_results()
+        self.summary.set_text("")
+        self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
         self.choose_file(path)
         aged = time.time() - 40 * 24 * 3600
         os.utime(path, (aged, aged))
