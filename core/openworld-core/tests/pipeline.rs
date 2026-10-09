@@ -967,3 +967,60 @@ fn a_video_with_display_rotation_is_scanned_as_shown() {
     assert_eq!(sideways.summary, NO_CLEARANCE);
     assert!(sideways.candidates.is_empty());
 }
+
+#[test]
+fn a_video_with_non_square_pixels_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let wide = dir.path().join("wide.mp4");
+    let squashed = dir.path().join("squashed.mp4");
+    let encode = |output: &std::path::Path, filter: &str| {
+        let status = Command::new("ffmpeg")
+            .args(["-y", "-v", "error", "-loop", "1", "-i"])
+            .arg(dir.path().join("scene.png"))
+            .args(["-vf", filter, "-frames:v", "4", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+            .arg(output)
+            .status()
+            .expect("ffmpeg");
+        assert!(status.success());
+    };
+    encode(&wide, "scale=320:480,setsar=2/1");
+    encode(&squashed, "scale=320:480,setsar=1");
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&wide).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    assert!(probed.square_pixels);
+    let shown = scan(wide);
+    assert_eq!(shown.status, "complete", "{}", shown.message);
+    assert_eq!(shown.summary, POSSIBLE_CANDIDATE);
+    assert!(!shown.candidates.is_empty());
+    let flat = scan(squashed);
+    assert_eq!(flat.status, "complete", "{}", flat.message);
+    assert_eq!(flat.summary, NO_CLEARANCE);
+    assert!(flat.candidates.is_empty());
+}

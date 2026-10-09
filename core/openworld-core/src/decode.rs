@@ -32,6 +32,8 @@ pub struct Probe {
     pub frames_exact: bool,
     pub container_created: Option<SystemTime>,
     pub video: bool,
+    /// The stored pixels are not square. Width and height are the displayed size.
+    pub square_pixels: bool,
 }
 
 #[derive(Debug)]
@@ -81,6 +83,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         frames_exact: true,
         container_created: None,
         video: false,
+        square_pixels: false,
     })
 }
 
@@ -134,7 +137,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,avg_frame_rate,codec_name,nb_frames:stream_side_data=rotation",
+            "stream=width,height,sample_aspect_ratio,avg_frame_rate,codec_name,nb_frames:stream_side_data=rotation",
             "-show_entries",
             "format=duration:format_tags=creation_time",
             "-show_frames",
@@ -175,9 +178,15 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         return Err(MediaError::BadCodec);
     }
     // FFmpeg turns the frames to the displayed orientation. A quarter turn swaps
-    // the stored width and height. The buffer has to match those displayed pixels.
-    let (width, height) = if swaps_axes(display_rotation(&value)) {
+    // the stored width and height. Non-square pixels are stretched to the width
+    // a player shows. The buffer has to match those displayed pixels.
+    let turned = swaps_axes(display_rotation(&value));
+    let (sar_num, sar_den) = sample_aspect(stream.get("sample_aspect_ratio").and_then(|v| v.as_str()));
+    let square_pixels = !turned && sar_num != sar_den;
+    let (width, height) = if turned {
         (height, width)
+    } else if square_pixels {
+        (square_width(width, sar_num, sar_den), height)
     } else {
         (width, height)
     };
@@ -197,13 +206,17 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         frames_exact: nb.is_some(),
         container_created: created,
         video: true,
+        square_pixels,
     })
 }
 
 fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
-    let mut child = Command::new("ffmpeg")
-        .args(["-v", "error", "-i"])
-        .arg(path)
+    let mut command = Command::new("ffmpeg");
+    command.args(["-v", "error", "-i"]).arg(path);
+    if info.square_pixels {
+        command.args(["-vf", "scale=iw*sar:ih,setsar=1"]);
+    }
+    let mut child = command
         .args(["-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -294,6 +307,35 @@ fn side_rotation(node: Option<&Value>) -> Option<f64> {
 fn swaps_axes(rotation: f64) -> bool {
     let turns = rotation.abs() % 180.0;
     (turns - 90.0).abs() < 1.0
+}
+
+/// `N/A`, missing, and `1:1` are square pixels. Anything else is a display stretch.
+fn sample_aspect(text: Option<&str>) -> (u32, u32) {
+    let Some(text) = text else {
+        return (1, 1);
+    };
+    if text.is_empty() || text == "N/A" {
+        return (1, 1);
+    }
+    let Some((num, den)) = text.split_once(':') else {
+        return (1, 1);
+    };
+    let Ok(num) = num.parse::<u32>() else {
+        return (1, 1);
+    };
+    let Ok(den) = den.parse::<u32>() else {
+        return (1, 1);
+    };
+    if num == 0 || den == 0 {
+        (1, 1)
+    } else {
+        (num, den)
+    }
+}
+
+fn square_width(width: u32, num: u32, den: u32) -> u32 {
+    let wide = (u64::from(width) * u64::from(num) + u64::from(den) / 2) / u64::from(den);
+    u32::try_from(wide).unwrap_or(width).max(1)
 }
 
 fn parse_ratio(text: &str) -> Option<f64> {
@@ -442,5 +484,15 @@ mod tests {
         assert!(!super::swaps_axes(super::display_rotation(&half)));
         let none = serde_json::json!({"streams":[{"side_data_list":[{}]}],"frames":[{"side_data_list":[{}]}]});
         assert!(!super::swaps_axes(super::display_rotation(&none)));
+    }
+
+    #[test]
+    fn non_square_pixels_widen_to_the_shown_frame() {
+        assert_eq!(super::sample_aspect(None), (1, 1));
+        assert_eq!(super::sample_aspect(Some("N/A")), (1, 1));
+        assert_eq!(super::sample_aspect(Some("1:1")), (1, 1));
+        assert_eq!(super::sample_aspect(Some("2:1")), (2, 1));
+        assert_eq!(super::square_width(320, 2, 1), 640);
+        assert_eq!(super::square_width(320, 3, 2), 480);
     }
 }

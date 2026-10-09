@@ -7,7 +7,7 @@ identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a video with a quarter-turn
-display rotation, and an audio file.
+display rotation, a video with non-square pixels, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -154,6 +154,7 @@ def main() -> int:
         "apng_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_video_candidate": 0,
+        "anamorphic_video_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -436,6 +437,21 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, stored_video, out, "complete")
         assert_clearance(report, "video without the display rotation")
 
+        wide = root / "wide.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-vf", "scale=320:480,setsar=2/1", "-frames:v", "4", "-r", "10", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(wide),
+        ])
+        if proc.returncode != 0 or not wide.is_file():
+            fail(proc.stderr or "anamorphic video was not written")
+        report = scan(args.bin, args.bundles, posters, wide, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"anamorphic video summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("anamorphic video produced no candidate")
+        counts["anamorphic_video_candidate"] += 1
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -470,6 +486,7 @@ def main() -> int:
         or counts["apng_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
+        or counts["anamorphic_video_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90
     ):
