@@ -93,6 +93,7 @@ struct MacRoot: View {
 }
 #endif
 
+@MainActor
 private func importShared(_ url: URL, model: FlowModel) {
     guard url.scheme == "openworld" else { return }
     let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
