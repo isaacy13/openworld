@@ -7,7 +7,9 @@ identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
-orientation tag, a PNG with a camera orientation tag, a video with a quarter-turn
+orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
+orientation tag, a two-page TIFF whose marker is only on the second page,
+a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
@@ -50,6 +52,76 @@ def with_orientation(jpeg: bytes, tag: int) -> bytes:
     payload = b"Exif\x00\x00" + tiff
     length = len(payload) + 2
     return bytes([0xFF, 0xD8, 0xFF, 0xE1, (length >> 8) & 0xFF, length & 0xFF]) + payload + jpeg[2:]
+
+
+def rgb_tiff(pages: list[tuple[int, int, bytes, int]]) -> bytes:
+    """Uncompressed RGB pages. The last value is the camera orientation tag."""
+    entry_count = 10
+    ifd_len = 2 + entry_count * 12 + 4
+    cursor = 8
+    layout: list[tuple[int, int, int]] = []
+    for width, height, rgb, _tag in pages:
+        if len(rgb) != width * height * 3:
+            fail(f"tiff page {width}x{height} has {len(rgb)} bytes")
+        ifd = cursor
+        bits = ifd + ifd_len
+        pixels = bits + 6
+        cursor = pixels + len(rgb)
+        layout.append((ifd, bits, pixels))
+    out = bytearray(cursor)
+    out[0:4] = b"II*\x00"
+    out[4:8] = layout[0][0].to_bytes(4, "little")
+    for index, (width, height, rgb, tag) in enumerate(pages):
+        ifd, bits, pixels = layout[index]
+        nxt = layout[index + 1][0] if index + 1 < len(layout) else 0
+        out[ifd : ifd + 2] = entry_count.to_bytes(2, "little")
+        entries = [
+            (256, 4, 1, width),
+            (257, 4, 1, height),
+            (258, 3, 3, bits),
+            (259, 3, 1, 1),
+            (262, 3, 1, 2),
+            (273, 4, 1, pixels),
+            (274, 3, 1, tag),
+            (277, 3, 1, 3),
+            (278, 4, 1, height),
+            (279, 4, 1, len(rgb)),
+        ]
+        at = ifd + 2
+        for entry_tag, kind, count, value in entries:
+            out[at : at + 2] = entry_tag.to_bytes(2, "little")
+            out[at + 2 : at + 4] = kind.to_bytes(2, "little")
+            out[at + 4 : at + 8] = count.to_bytes(4, "little")
+            out[at + 8 : at + 12] = value.to_bytes(4, "little")
+            at += 12
+        out[at : at + 4] = nxt.to_bytes(4, "little")
+        out[bits : bits + 6] = b"\x08\x00\x08\x00\x08\x00"
+        out[pixels : pixels + len(rgb)] = rgb
+    return bytes(out)
+
+
+def png_size(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    if data[12:16] != b"IHDR":
+        fail("png had no header")
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def raw_rgb(src: Path, dest: Path, vf: str | None) -> tuple[int, int, bytes]:
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src)]
+    if vf:
+        cmd += ["-vf", vf]
+    cmd += ["-f", "rawvideo", "-pix_fmt", "rgb24", str(dest)]
+    proc = run(cmd)
+    if proc.returncode != 0 or not dest.is_file():
+        fail(proc.stderr or "raw rgb was not written")
+    width, height = png_size(src)
+    if vf == "transpose=2":
+        width, height = height, width
+    raw = dest.read_bytes()
+    if len(raw) != width * height * 3:
+        fail(f"raw rgb length {len(raw)} for {width}x{height}")
+    return width, height, raw
 
 
 def with_png_orientation(data: bytes, tag: int) -> bytes:
@@ -247,6 +319,8 @@ def main() -> int:
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
+        "oriented_tiff_candidate": 0,
+        "tiff_later_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
         "turned_anamorphic_video_candidate": 0,
@@ -545,6 +619,36 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, stored_png, out, "complete")
         assert_clearance(report, "png without the orientation tag")
 
+        side_w, side_h, side_rgb = raw_rgb(scene, root / "side.rgb", "transpose=2")
+        shown_tiff = root / "shown.tif"
+        shown_tiff.write_bytes(rgb_tiff([(side_w, side_h, side_rgb, 6)]))
+        report = scan(args.bin, args.bundles, posters, shown_tiff, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"oriented tiff summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("oriented tiff produced no candidate")
+        counts["oriented_tiff_candidate"] += 1
+        raw_tiff = root / "raw.tif"
+        raw_tiff.write_bytes(rgb_tiff([(side_w, side_h, side_rgb, 1)]))
+        report = scan(args.bin, args.bundles, posters, raw_tiff, out, "complete")
+        assert_clearance(report, "tiff without the orientation tag")
+
+        scene_w, scene_h, scene_rgb = raw_rgb(scene, root / "scene.rgb", None)
+        pages = root / "pages.tif"
+        pages.write_bytes(rgb_tiff([
+            (2, 2, bytes(12), 1),
+            (scene_w, scene_h, scene_rgb, 1),
+        ]))
+        report = scan(args.bin, args.bundles, posters, pages, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"later tiff summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 2:
+            fail(f"later tiff decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 1 for item in found):
+            fail(f"later tiff candidates were not on the second page: {found}")
+        counts["tiff_later_candidate"] += 1
+
         stored_video = root / "stored.mp4"
         shown_video = root / "shown.mp4"
         proc = run([
@@ -675,6 +779,8 @@ def main() -> int:
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
+        or counts["oriented_tiff_candidate"] != 1
+        or counts["tiff_later_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
         or counts["turned_anamorphic_video_candidate"] != 1

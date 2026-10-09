@@ -992,6 +992,139 @@ fn a_png_with_camera_orientation_is_scanned_as_shown() {
     assert!(sideways.candidates.is_empty());
 }
 
+fn tiff_entry(tag: u16, kind: u16, count: u32, value: u32) -> [u8; 12] {
+    let mut out = [0u8; 12];
+    out[0..2].copy_from_slice(&tag.to_le_bytes());
+    out[2..4].copy_from_slice(&kind.to_le_bytes());
+    out[4..8].copy_from_slice(&count.to_le_bytes());
+    out[8..12].copy_from_slice(&value.to_le_bytes());
+    out
+}
+
+/// Uncompressed RGB pages. `orientation` is the camera tag for that page.
+fn rgb_tiff(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
+    let entry_count = 10u16;
+    let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+    let mut cursor = 8usize;
+    let mut layout = Vec::new();
+    for (width, height, rgb, _) in pages {
+        assert_eq!(rgb.len(), (*width as usize) * (*height as usize) * 3);
+        let ifd = cursor;
+        let bits = ifd + ifd_len;
+        let pixels = bits + 6;
+        cursor = pixels + rgb.len();
+        layout.push((ifd, bits, pixels));
+    }
+    let mut out = vec![0u8; cursor];
+    out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+    out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+    for (index, (width, height, rgb, orientation)) in pages.iter().enumerate() {
+        let (ifd, bits, pixels) = layout[index];
+        let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+        out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+        let entries = [
+            tiff_entry(256, 4, 1, *width),
+            tiff_entry(257, 4, 1, *height),
+            tiff_entry(258, 3, 3, bits as u32),
+            tiff_entry(259, 3, 1, 1),
+            tiff_entry(262, 3, 1, 2),
+            tiff_entry(273, 4, 1, pixels as u32),
+            tiff_entry(274, 3, 1, u32::from(*orientation)),
+            tiff_entry(277, 3, 1, 3),
+            tiff_entry(278, 4, 1, *height),
+            tiff_entry(279, 4, 1, rgb.len() as u32),
+        ];
+        let mut at = ifd + 2;
+        for entry in entries {
+            out[at..at + 12].copy_from_slice(&entry);
+            at += 12;
+        }
+        out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+        out[bits..bits + 6].copy_from_slice(&[8, 0, 8, 0, 8, 0]);
+        out[pixels..pixels + rgb.len()].copy_from_slice(rgb);
+    }
+    out
+}
+
+#[test]
+fn a_tiff_with_camera_orientation_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("side.tif");
+    fs::write(&side, rgb_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 6)])).unwrap();
+    let raw = dir.path().join("raw.tif");
+    fs::write(&raw, rgb_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 1)])).unwrap();
+    let blank = RgbImage::from_raw(8, 8, vec![0; 8 * 8 * 3]).unwrap();
+    let pages = dir.path().join("pages.tif");
+    fs::write(
+        &pages,
+        rgb_tiff(&[
+            (blank.width(), blank.height(), blank.as_raw(), 1),
+            (scene.image.width(), scene.image.height(), scene.image.as_raw(), 1),
+        ]),
+    )
+    .unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf, coverage: Coverage| {
+        let out_dir = dir.path().join(format!(
+            "out-{}-{}",
+            input.file_name().unwrap().to_string_lossy(),
+            match coverage {
+                Coverage::Complete => "complete",
+                Coverage::Measured => "measured",
+            }
+        ));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&side).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    assert!(!probed.video);
+    let turned = scan(side, Coverage::Complete);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let sideways = scan(raw, Coverage::Complete);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
+    let sequence = openworld_core::decode::probe(&pages).unwrap();
+    assert!(sequence.video);
+    assert_eq!(sequence.frames, 2);
+    assert_eq!(sequence.fps, 1.0);
+    let later = scan(pages.clone(), Coverage::Complete);
+    assert_eq!(later.status, "complete", "{}", later.message);
+    assert_eq!(later.summary, POSSIBLE_CANDIDATE);
+    assert_eq!(later.frames_decoded, 2);
+    assert!(later.candidates.iter().any(|item| item.frame_index == 1));
+    assert!(later.candidates.iter().all(|item| item.frame_index == 1));
+    let measured = scan(pages, Coverage::Measured);
+    assert_eq!(measured.status, "complete", "{}", measured.message);
+    assert_eq!(measured.summary, POSSIBLE_CANDIDATE);
+    assert_eq!(measured.frames_decoded, 2);
+    assert!(measured.candidates.iter().all(|item| item.frame_index == 1));
+}
+
 #[test]
 fn a_jpeg_with_camera_orientation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();

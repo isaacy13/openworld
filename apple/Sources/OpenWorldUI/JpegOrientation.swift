@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// Camera orientation for a JPEG, a still WebP, or a PNG. The tag says how the stored pixels are shown.
+/// Camera orientation for a JPEG, a still WebP, a PNG, or a TIFF. The tag says how the stored pixels are shown.
 /// Values match the image crate: 6 is a quarter turn clockwise, 8 is three
 /// quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
 public enum JpegOrientation {
@@ -10,7 +10,50 @@ public enum JpegOrientation {
         return tag(data)
     }
 
+    /// One orientation tag per TIFF page, in order. Nil when the file is not a TIFF.
+    public static func tiffPageTags(_ data: Data) -> [Int]? {
+        if data.count < 8 { return nil }
+        let little: Bool
+        if data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00 {
+            little = true
+        } else if data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A {
+            little = false
+        } else {
+            return nil
+        }
+        var pages: [Int] = []
+        var seen = Set<Int>()
+        var ifd = int32(data, 4, little)
+        while ifd != 0 && pages.count < 64 {
+            if ifd < 8 || !seen.insert(ifd).inserted { return pages.isEmpty ? nil : pages }
+            if ifd + 2 > data.count { return pages.isEmpty ? nil : pages }
+            var cursor = ifd
+            let entries = int16(data, cursor, little)
+            cursor += 2
+            if entries < 0 || entries > 64 { return pages.isEmpty ? nil : pages }
+            var orientation = 1
+            for _ in 0..<entries {
+                if cursor + 12 > data.count { return pages.isEmpty ? nil : pages }
+                let tag = int16(data, cursor, little)
+                let format = int16(data, cursor + 2, little)
+                let count = int32(data, cursor + 4, little)
+                if tag == 0x0112 && format == 3 && count == 1 {
+                    let value = int16(data, cursor + 8, little)
+                    orientation = (1...8).contains(value) ? value : 1
+                }
+                cursor += 12
+            }
+            if cursor + 4 > data.count { return pages.isEmpty ? nil : pages }
+            pages.append(orientation)
+            ifd = int32(data, cursor, little)
+        }
+        return pages.isEmpty ? nil : pages
+    }
+
     public static func tag(_ data: Data) -> Int {
+        if let pages = tiffPageTags(data), let first = pages.first {
+            return first
+        }
         if isWebp(data) { return webpTag(data) }
         if isPng(data) { return pngTag(data) }
         if data.count < 4 || data[0] != 0xFF || data[1] != 0xD8 { return 1 }

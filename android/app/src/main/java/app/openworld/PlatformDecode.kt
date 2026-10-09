@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
  * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
  * because BitmapFactory keeps only the first one. A JPEG, a still WebP, or a PNG is turned
  * to match its camera orientation tag, because BitmapFactory keeps the stored pixels.
- * The Rust library does the scan. Audio is ignored. FFmpeg is not used.
+ * A TIFF is refused. The Rust library does the scan. Audio is ignored. FFmpeg is not used.
  */
 object PlatformDecode {
     data class Facts(
@@ -46,6 +46,11 @@ object PlatformDecode {
     }
 
     fun facts(file: File): Facts {
+        when (tiffPageCount(file)) {
+            null -> Unit
+            0, 1 -> throw IOException("Bad codec or unreadable file. Refusing.")
+            else -> throw IOException("The file was not fully decoded. Refusing.")
+        }
         pngSize(file)?.let { (width, height) ->
             if (StillMotion.animatedPng(file)) {
                 throw IOException("The file was not fully decoded. Refusing.")
@@ -174,6 +179,19 @@ object PlatformDecode {
     }
 
 
+
+    /** Classic TIFF page count. Null when the file is not a TIFF. */
+    private fun tiffPageCount(file: File): Int? {
+        val header = ByteArray(4)
+        val read = file.inputStream().use { it.read(header) }
+        if (read < 4) return null
+        val little = header[0] == 0x49.toByte() && header[1] == 0x49.toByte() &&
+            header[2] == 0x2A.toByte() && header[3] == 0.toByte()
+        val big = header[0] == 0x4D.toByte() && header[1] == 0x4D.toByte() &&
+            header[2] == 0.toByte() && header[3] == 0x2A.toByte()
+        if (!little && !big) return null
+        return JpegOrientation.tiffPageTags(file.readBytes())?.size ?: 1
+    }
 
     /** JPEG, GIF, WebP, BMP, or HEIF. A text file has none of these headers. */
     private fun hasImageHeader(file: File): Boolean {

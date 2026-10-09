@@ -273,6 +273,26 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(JpegOrientation.tag(webp), 6)
         XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(6, prefix: true))), 6)
         XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(1, prefix: false))), 1)
+        let pages = rgbTiff([(1, 1, [1, 2, 3], 6), (1, 1, [4, 5, 6], 8)])
+        XCTAssertEqual(JpegOrientation.tiffPageTags(Data(pages)), [6, 8])
+        XCTAssertEqual(JpegOrientation.tag(Data(pages)), 6)
+        let tiff = FileManager.default.temporaryDirectory.appendingPathComponent("ow-tif-\(UUID().uuidString)")
+        try Data(pages).write(to: tiff)
+        XCTAssertEqual(JpegOrientation.tag(tiff), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(rgbTiff([(1, 1, [9, 9, 9], 1)]))), 1)
+        let big = Data([
+            0x4D, 0x4D, 0x00, 0x2A,
+            0x00, 0x00, 0x00, 0x08,
+            0x00, 0x01,
+            0x01, 0x12,
+            0x00, 0x03,
+            0x00, 0x00, 0x00, 0x01,
+            0x00, 0x06,
+            0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ])
+        XCTAssertEqual(JpegOrientation.tiffPageTags(big), [6])
+        XCTAssertNil(JpegOrientation.tiffPageTags(Data([0x89, 0x50, 0x4E, 0x47])))
     }
 
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
@@ -646,6 +666,70 @@ private func be32(_ value: Int) -> [UInt8] {
         UInt8((value >> 8) & 0xFF),
         UInt8(value & 0xFF),
     ]
+}
+
+private func rgbTiff(_ pages: [(Int, Int, [UInt8], UInt8)]) -> [UInt8] {
+    let entryCount = 10
+    let ifdLen = 2 + entryCount * 12 + 4
+    var cursor = 8
+    var layout: [(Int, Int, Int)] = []
+    for (width, height, rgb, _) in pages {
+        if rgb.count != width * height * 3 { return [] }
+        let ifd = cursor
+        let bits = ifd + ifdLen
+        let pixels = bits + 6
+        cursor = pixels + rgb.count
+        layout.append((ifd, bits, pixels))
+    }
+    var out = [UInt8](repeating: 0, count: cursor)
+    out[0] = 0x49
+    out[1] = 0x49
+    out[2] = 0x2A
+    out[4] = 8
+    for index in pages.indices {
+        let (width, height, rgb, tag) = pages[index]
+        let (ifd, bits, pixels) = layout[index]
+        let next = index + 1 < layout.count ? layout[index + 1].0 : 0
+        put16(&out, ifd, entryCount)
+        let entries: [(Int, Int, Int, Int)] = [
+            (256, 4, 1, width),
+            (257, 4, 1, height),
+            (258, 3, 3, bits),
+            (259, 3, 1, 1),
+            (262, 3, 1, 2),
+            (273, 4, 1, pixels),
+            (274, 3, 1, Int(tag)),
+            (277, 3, 1, 3),
+            (278, 4, 1, height),
+            (279, 4, 1, rgb.count),
+        ]
+        var at = ifd + 2
+        for (entryTag, kind, count, value) in entries {
+            put16(&out, at, entryTag)
+            put16(&out, at + 2, kind)
+            put32(&out, at + 4, count)
+            put32(&out, at + 8, value)
+            at += 12
+        }
+        put32(&out, at, next)
+        put16(&out, bits, 8)
+        put16(&out, bits + 2, 8)
+        put16(&out, bits + 4, 8)
+        for (offset, byte) in rgb.enumerated() {
+            out[pixels + offset] = byte
+        }
+    }
+    return out
+}
+
+private func put16(_ out: inout [UInt8], _ offset: Int, _ value: Int) {
+    out[offset] = UInt8(value & 0xFF)
+    out[offset + 1] = UInt8((value >> 8) & 0xFF)
+}
+
+private func put32(_ out: inout [UInt8], _ offset: Int, _ value: Int) {
+    put16(&out, offset, value & 0xFFFF)
+    put16(&out, offset + 2, (value >> 16) & 0xFFFF)
 }
 
 private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {

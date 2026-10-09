@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import java.io.File
 
 /**
- * Camera orientation for a JPEG, a still WebP, or a PNG. BitmapFactory keeps the stored pixels.
+ * Camera orientation for a JPEG, a still WebP, a PNG, or a TIFF. BitmapFactory keeps the stored pixels.
  * The tag says how those pixels are shown. The scan reads the shown pixels.
  * Values match the image crate: 6 is a quarter turn clockwise, 8 is three
  * quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
@@ -17,6 +17,7 @@ object JpegOrientation {
     }
 
     fun tag(bytes: ByteArray): Int {
+        tiffPageTags(bytes)?.firstOrNull()?.let { return it }
         if (isWebp(bytes)) return webpTag(bytes)
         if (isPng(bytes)) return pngTag(bytes)
         if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return 1
@@ -46,6 +47,45 @@ object JpegOrientation {
         180 -> 3
         270 -> 8
         else -> 1
+    }
+
+    /** One orientation tag per TIFF page, in order. Null when the file is not a TIFF. */
+    fun tiffPageTags(bytes: ByteArray): List<Int>? {
+        if (bytes.size < 8) return null
+        val little = when {
+            bytes[0] == 0x49.toByte() && bytes[1] == 0x49.toByte() &&
+                bytes[2] == 0x2A.toByte() && bytes[3] == 0.toByte() -> true
+            bytes[0] == 0x4D.toByte() && bytes[1] == 0x4D.toByte() &&
+                bytes[2] == 0.toByte() && bytes[3] == 0x2A.toByte() -> false
+            else -> return null
+        }
+        val pages = ArrayList<Int>()
+        val seen = HashSet<Int>()
+        var ifd = int32(bytes, 4, little)
+        while (ifd != 0 && pages.size < 64) {
+            if (ifd < 8 || !seen.add(ifd)) return if (pages.isEmpty()) null else pages
+            if (ifd + 2 > bytes.size) return if (pages.isEmpty()) null else pages
+            var cursor = ifd
+            val entries = int16(bytes, cursor, little)
+            cursor += 2
+            if (entries < 0 || entries > 64) return if (pages.isEmpty()) null else pages
+            var orientation = 1
+            repeat(entries) {
+                if (cursor + 12 > bytes.size) return if (pages.isEmpty()) null else pages
+                val tag = int16(bytes, cursor, little)
+                val format = int16(bytes, cursor + 2, little)
+                val count = int32(bytes, cursor + 4, little)
+                if (tag == 0x0112 && format == 3 && count == 1) {
+                    val value = int16(bytes, cursor + 8, little)
+                    orientation = if (value in 1..8) value else 1
+                }
+                cursor += 12
+            }
+            if (cursor + 4 > bytes.size) return if (pages.isEmpty()) null else pages
+            pages.add(orientation)
+            ifd = int32(bytes, cursor, little)
+        }
+        return if (pages.isEmpty()) null else pages
     }
 
     fun displaySize(width: Int, height: Int, tag: Int): Pair<Int, Int> {

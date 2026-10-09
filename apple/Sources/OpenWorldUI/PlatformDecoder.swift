@@ -153,6 +153,23 @@ enum PlatformDecoder {
                 directory: nil
             )
         }
+        if let (source, count) = stillPages(url) {
+            let tags = (try? Data(contentsOf: url)).flatMap { JpegOrientation.tiffPageTags($0) }
+            let tag = pageTag(source: source, index: 0, tags: tags)
+            guard let shown = shownPageSize(source: source, index: 0, tag: tag) else {
+                throw failure("Bad codec or unreadable file. Refusing.")
+            }
+            return Facts(
+                width: shown.0,
+                height: shown.1,
+                fps: 1,
+                frames: count,
+                duration: Double(count),
+                video: true,
+                containerUnix: container,
+                directory: nil
+            )
+        }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = props[kCGImagePropertyPixelWidth] as? Int,
@@ -185,6 +202,9 @@ enum PlatformDecoder {
             var gif = try adopted(reel, containerUnix: containerUnix(url))
             gif.directory = directory
             return gif
+        }
+        if let (source, count) = stillPages(url) {
+            return try writeStillPages(url: url, directory: directory, source: source, count: count)
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var facts = try facts(url: url)
@@ -319,6 +339,73 @@ enum PlatformDecoder {
             return nil
         }
         return Int(created.timeIntervalSince1970)
+    }
+
+    /// More than one still page. A video stays on the track reader.
+    private static func stillPages(_ url: URL) -> (CGImageSource, Int)? {
+        guard !isVideo(url),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil)
+        else { return nil }
+        let count = CGImageSourceGetCount(source)
+        guard count > 1 else { return nil }
+        return (source, count)
+    }
+
+    private static func pageTag(source: CGImageSource, index: Int, tags: [Int]?) -> Int {
+        if let tags, index < tags.count {
+            return tags[index]
+        }
+        let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
+        return exifOrientation(props)
+    }
+
+    private static func shownPageSize(source: CGImageSource, index: Int, tag: Int) -> (Int, Int)? {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int,
+              let height = props[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0
+        else { return nil }
+        return JpegOrientation.displaySize(width: width, height: height, tag: tag)
+    }
+
+    /// Each page is stored pixels. That page's orientation tag is applied when the PNG is written.
+    private static func writeStillPages(url: URL, directory: URL, source: CGImageSource, count: Int) throws -> Facts {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let tags = (try? Data(contentsOf: url)).flatMap { JpegOrientation.tiffPageTags($0) }
+        let firstTag = pageTag(source: source, index: 0, tags: tags)
+        guard let shown = shownPageSize(source: source, index: 0, tag: firstTag) else {
+            throw failure("Bad codec or unreadable file. Refusing.")
+        }
+        for index in 0..<count {
+            guard let cg = CGImageSourceCreateImageAtIndex(source, index, nil) else {
+                throw failure("Bad codec or unreadable file. Refusing.")
+            }
+            let tag = pageTag(source: source, index: index, tags: tags)
+            let image = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
+            if tag <= 1 {
+                try writePNG(cg, to: image)
+            } else {
+                let rgb = rgbBytes(cg)
+                guard rgb.count == cg.width * cg.height * 3 else {
+                    throw failure("Bad codec or unreadable file. Refusing.")
+                }
+                let oriented = JpegOrientation.apply(rgb: rgb, width: cg.width, height: cg.height, tag: tag)
+                guard let out = cgImage(rgb: oriented.rgb, width: oriented.width, height: oriented.height) else {
+                    throw failure("Bad codec or unreadable file. Refusing.")
+                }
+                try writePNG(out, to: image)
+            }
+        }
+        return Facts(
+            width: shown.0,
+            height: shown.1,
+            fps: 1,
+            frames: count,
+            duration: Double(count),
+            video: true,
+            containerUnix: containerUnix(url),
+            directory: directory
+        )
     }
 
     private static func stillOrientation(url: URL, props: [CFString: Any]?) -> Int {

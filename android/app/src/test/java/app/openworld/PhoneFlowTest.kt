@@ -521,6 +521,94 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aTiffOrientationTagIsReadWithoutAnExtension() {
+        val file = File.createTempFile("ow-tif", "")
+        file.writeBytes(
+            rgbTiff(
+                listOf(
+                    TiffPage(1, 1, byteArrayOf(1, 2, 3), 6),
+                    TiffPage(1, 1, byteArrayOf(4, 5, 6), 8),
+                ),
+            ),
+        )
+        assertEquals(6, JpegOrientation.tag(file))
+        assertEquals(listOf(6, 8), JpegOrientation.tiffPageTags(file.readBytes()))
+        assertEquals(640 to 480, JpegOrientation.displaySize(480, 640, 6))
+        assertEquals(1, JpegOrientation.tag(rgbTiff(listOf(TiffPage(1, 1, byteArrayOf(9, 9, 9), 1)))))
+        val big = byteArrayOf(
+            0x4D, 0x4D, 0x00, 0x2A,
+            0x00, 0x00, 0x00, 0x08,
+            0x00, 0x01,
+            0x01, 0x12,
+            0x00, 0x03,
+            0x00, 0x00, 0x00, 0x01,
+            0x00, 0x06,
+            0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        )
+        assertEquals(listOf(6), JpegOrientation.tiffPageTags(big))
+        assertNull(JpegOrientation.tiffPageTags(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)))
+    }
+
+    @Test
+    fun aMultiPageTiffIsRefusedInsteadOfScanningTheFirstPage() {
+        val tiff = File.createTempFile("ow-pages", "")
+        tiff.writeBytes(
+            rgbTiff(
+                listOf(
+                    TiffPage(1, 1, byteArrayOf(0, 0, 0), 1),
+                    TiffPage(1, 1, byteArrayOf(1, 2, 3), 6),
+                ),
+            ),
+        )
+        var refused = false
+        try {
+            PlatformDecode.facts(tiff)
+        } catch (err: java.io.IOException) {
+            refused = true
+            assertTrue(err.message?.contains("not fully decoded") == true)
+            assertTrue(err.message?.contains("Refusing") == true)
+        }
+        assertTrue(refused)
+        val frames = File(tiff.parentFile, "ow-tif-frames-" + System.nanoTime())
+        refused = false
+        try {
+            PlatformDecode.writeFrames(tiff, frames)
+        } catch (err: java.io.IOException) {
+            refused = true
+            assertTrue(err.message?.contains("Refusing") == true)
+        }
+        assertTrue(refused)
+        assertFalse(File(frames, "frame_000000.png").isFile)
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/pages.tif")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, tiff.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+    }
+
+    @Test
+    fun aSinglePageTiffIsRefused() {
+        val tiff = File.createTempFile("ow-one", "")
+        tiff.writeBytes(rgbTiff(listOf(TiffPage(1, 1, byteArrayOf(1, 2, 3), 6))))
+        var refused = false
+        try {
+            PlatformDecode.facts(tiff)
+        } catch (err: java.io.IOException) {
+            refused = true
+            assertTrue(err.message?.contains("Bad codec") == true)
+            assertTrue(err.message?.contains("Refusing") == true)
+        }
+        assertTrue(refused)
+    }
+
+    @Test
     fun aJpegWithCameraOrientationIsScannedAsShown() {
         val scene = still("scene")
         val root = File(scene.parentFile, "ow-orient-" + System.nanoTime())
@@ -957,6 +1045,72 @@ private fun scanPrepared(file: File, reel: PlatformDecode.Facts): JSONObject {
             "--provider", "cpu",
         ) + reel.arguments(reel.directory)
     )
+}
+
+private data class TiffPage(val width: Int, val height: Int, val rgb: ByteArray, val tag: Int)
+
+private fun rgbTiff(pages: List<TiffPage>): ByteArray {
+    val entryCount = 10
+    val ifdLen = 2 + entryCount * 12 + 4
+    var cursor = 8
+    val layout = ArrayList<IntArray>()
+    for (page in pages) {
+        check(page.rgb.size == page.width * page.height * 3)
+        val ifd = cursor
+        val bits = ifd + ifdLen
+        val pixels = bits + 6
+        cursor = pixels + page.rgb.size
+        layout.add(intArrayOf(ifd, bits, pixels))
+    }
+    val out = ByteArray(cursor)
+    out[0] = 0x49
+    out[1] = 0x49
+    out[2] = 0x2A
+    out[4] = 8
+    for (index in pages.indices) {
+        val page = pages[index]
+        val ifd = layout[index][0]
+        val bits = layout[index][1]
+        val pixels = layout[index][2]
+        val next = if (index + 1 < layout.size) layout[index + 1][0] else 0
+        put16(out, ifd, entryCount)
+        val entries = arrayOf(
+            intArrayOf(256, 4, 1, page.width),
+            intArrayOf(257, 4, 1, page.height),
+            intArrayOf(258, 3, 3, bits),
+            intArrayOf(259, 3, 1, 1),
+            intArrayOf(262, 3, 1, 2),
+            intArrayOf(273, 4, 1, pixels),
+            intArrayOf(274, 3, 1, page.tag),
+            intArrayOf(277, 3, 1, 3),
+            intArrayOf(278, 4, 1, page.height),
+            intArrayOf(279, 4, 1, page.rgb.size),
+        )
+        var at = ifd + 2
+        for (entry in entries) {
+            put16(out, at, entry[0])
+            put16(out, at + 2, entry[1])
+            put32(out, at + 4, entry[2])
+            put32(out, at + 8, entry[3])
+            at += 12
+        }
+        put32(out, at, next)
+        put16(out, bits, 8)
+        put16(out, bits + 2, 8)
+        put16(out, bits + 4, 8)
+        page.rgb.copyInto(out, pixels)
+    }
+    return out
+}
+
+private fun put16(out: ByteArray, offset: Int, value: Int) {
+    out[offset] = (value and 0xFF).toByte()
+    out[offset + 1] = ((value shr 8) and 0xFF).toByte()
+}
+
+private fun put32(out: ByteArray, offset: Int, value: Int) {
+    put16(out, offset, value and 0xFFFF)
+    put16(out, offset + 2, (value shr 16) and 0xFFFF)
 }
 
 private fun scanReport(file: File): JSONObject {

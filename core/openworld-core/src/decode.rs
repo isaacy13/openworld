@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
-//! A JPEG, a still WebP, or a PNG is turned to match its camera orientation tag
-//! before the pixels are scanned. Audio is not decoded. Phone, Mac, and Android shells
+//! A JPEG, a still WebP, a PNG, or a TIFF is turned to match its camera orientation
+//! tag before the pixels are scanned. Every page of a TIFF is scanned. Audio is not decoded. Phone, Mac, and Android shells
 //! decode with AVFoundation or MediaCodec and pass the frames through
 //! `load_frame_dir`. That path does not run FFmpeg.
 
@@ -11,7 +11,7 @@ use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -48,6 +48,9 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
     if !path.is_file() {
         return Err(MediaError::BadCodec);
     }
+    if is_tiff(path) {
+        return probe_tiff(path);
+    }
     if let Some(info) = probe_image(path) {
         return Ok(info);
     }
@@ -56,12 +59,130 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
 
 pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
     let info = probe(path)?;
+    if is_tiff(path) {
+        return decode_tiff(path, info, &mut on_frame);
+    }
     if !info.video {
         let image = open_oriented(path).map_err(|_| MediaError::BadCodec)?;
         let keep_going = on_frame(0, &image);
         return Ok(DecodeStats { frames_decoded: 1, clean: keep_going, probe: info });
     }
     decode_video(path, &info, &mut on_frame)
+}
+
+fn is_tiff(path: &Path) -> bool {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut header = [0u8; 4];
+    if file.read_exact(&mut header).is_err() {
+        return false;
+    }
+    matches!(header, [0x49, 0x49, 0x2A, 0x00] | [0x4D, 0x4D, 0x00, 0x2A])
+}
+
+/// Every page, each turned by that page's orientation tag.
+fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
+    let pages = read_tiff_pages(path)?;
+    let (width, height) = pages[0].dimensions();
+    let count = pages.len() as u64;
+    let moving = count > 1;
+    Ok(Probe {
+        width,
+        height,
+        fps: if moving { 1.0 } else { 0.0 },
+        duration_sec: if moving { count as f64 } else { 0.0 },
+        frames: count,
+        frames_exact: true,
+        container_created: None,
+        video: moving,
+        square_pixels: false,
+    })
+}
+
+fn decode_tiff(path: &Path, info: Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
+    let pages = read_tiff_pages(path)?;
+    let mut decoded = 0u64;
+    let mut clean = true;
+    for page in &pages {
+        if !on_frame(decoded, page) {
+            decoded += 1;
+            clean = false;
+            break;
+        }
+        decoded += 1;
+    }
+    Ok(DecodeStats { frames_decoded: decoded, clean, probe: info })
+}
+
+fn read_tiff_pages(path: &Path) -> Result<Vec<RgbImage>, MediaError> {
+    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    let mut decoder = tiff::decoder::Decoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
+    let mut pages = Vec::new();
+    loop {
+        pages.push(read_tiff_page(&mut decoder)?);
+        if !decoder.more_images() {
+            break;
+        }
+        decoder.next_image().map_err(|_| MediaError::BadCodec)?;
+    }
+    Ok(pages)
+}
+
+fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Result<RgbImage, MediaError> {
+    let (width, height) = decoder.dimensions().map_err(|_| MediaError::BadCodec)?;
+    if width == 0 || height == 0 {
+        return Err(MediaError::BadCodec);
+    }
+    let color = decoder.colortype().map_err(|_| MediaError::BadCodec)?;
+    let samples = match color {
+        tiff::ColorType::Gray(8) => 1,
+        tiff::ColorType::RGB(8) => 3,
+        tiff::ColorType::RGBA(8) => 4,
+        _ => return Err(MediaError::BadCodec),
+    };
+    let tag = decoder
+        .find_tag(tiff::tags::Tag::Orientation)
+        .ok()
+        .flatten()
+        .and_then(|value| value.into_u16().ok())
+        .map(|value| value as u8)
+        .filter(|value| (1..=8).contains(value))
+        .unwrap_or(1);
+    let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
+    let tiff::decoder::DecodingResult::U8(bytes) = decoded else {
+        return Err(MediaError::BadCodec);
+    };
+    let mut image = DynamicImage::ImageRgb8(samples_to_rgb(&bytes, width, height, samples)?);
+    if let Some(orientation) = Orientation::from_exif(tag) {
+        image.apply_orientation(orientation);
+    }
+    Ok(image.to_rgb8())
+}
+
+fn samples_to_rgb(bytes: &[u8], width: u32, height: u32, samples: usize) -> Result<RgbImage, MediaError> {
+    let pixels = (width as usize).checked_mul(height as usize).ok_or(MediaError::BadCodec)?;
+    let expected = pixels.checked_mul(samples).ok_or(MediaError::BadCodec)?;
+    if bytes.len() < expected {
+        return Err(MediaError::BadCodec);
+    }
+    let mut rgb = Vec::with_capacity(pixels * 3);
+    match samples {
+        1 => {
+            for &pixel in bytes.iter().take(pixels) {
+                rgb.extend_from_slice(&[pixel, pixel, pixel]);
+            }
+        }
+        3 => rgb.extend_from_slice(&bytes[..expected]),
+        4 => {
+            for pixel in bytes[..expected].chunks_exact(4) {
+                rgb.extend_from_slice(&pixel[..3]);
+            }
+        }
+        _ => return Err(MediaError::BadCodec),
+    }
+    RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
 }
 
 fn probe_image(path: &Path) -> Option<Probe> {
@@ -89,8 +210,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
     })
 }
 
-/// Decodes a still and applies its camera orientation tag.
-/// A PNG has no such tag, so its pixels stay as stored.
+/// Decodes a still and applies its camera orientation tag when the file carries one.
 fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
     let reader = ImageReader::open(path)?.with_guessed_format()?;
     let mut decoder = reader.into_decoder()?;
@@ -742,6 +862,152 @@ mod tests {
         let _ = fs::remove_file(&path);
         assert_eq!(opened.dimensions(), stored.dimensions());
         assert_eq!(opened.as_raw(), stored.as_raw());
+    }
+
+    fn tiff_entry(tag: u16, kind: u16, count: u32, value: u32) -> [u8; 12] {
+        let mut out = [0u8; 12];
+        out[0..2].copy_from_slice(&tag.to_le_bytes());
+        out[2..4].copy_from_slice(&kind.to_le_bytes());
+        out[4..8].copy_from_slice(&count.to_le_bytes());
+        out[8..12].copy_from_slice(&value.to_le_bytes());
+        out
+    }
+
+    /// Uncompressed pages. `samples` is 1, 3, or 4. `orientation` is the camera tag for that page.
+    fn coded_tiff(pages: &[(u32, u32, u16, u16, u16, &[u8])]) -> Vec<u8> {
+        let entry_count = 10u16;
+        let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+        let mut cursor = 8usize;
+        let mut layout = Vec::new();
+        for (width, height, _photometric, samples, _orientation, bytes) in pages {
+            assert_eq!(bytes.len(), (*width as usize) * (*height as usize) * (*samples as usize));
+            let ifd = cursor;
+            let bits = ifd + ifd_len;
+            let pixels = bits + (*samples as usize) * 2;
+            cursor = pixels + bytes.len();
+            layout.push((ifd, bits, pixels));
+        }
+        let mut out = vec![0u8; cursor];
+        out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+        for (index, (width, height, photometric, samples, orientation, bytes)) in pages.iter().enumerate() {
+            let (ifd, bits, pixels) = layout[index];
+            let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+            out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+            let bits_value = if *samples == 1 { 8 } else { bits as u32 };
+            let entries = [
+                tiff_entry(256, 4, 1, *width),
+                tiff_entry(257, 4, 1, *height),
+                tiff_entry(258, 3, u32::from(*samples), bits_value),
+                tiff_entry(259, 3, 1, 1),
+                tiff_entry(262, 3, 1, u32::from(*photometric)),
+                tiff_entry(273, 4, 1, pixels as u32),
+                tiff_entry(274, 3, 1, u32::from(*orientation)),
+                tiff_entry(277, 3, 1, u32::from(*samples)),
+                tiff_entry(278, 4, 1, *height),
+                tiff_entry(279, 4, 1, bytes.len() as u32),
+            ];
+            let mut at = ifd + 2;
+            for entry in entries {
+                out[at..at + 12].copy_from_slice(&entry);
+                at += 12;
+            }
+            out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+            for sample in 0..*samples {
+                let at = bits + usize::from(sample) * 2;
+                out[at..at + 2].copy_from_slice(&8u16.to_le_bytes());
+            }
+            out[pixels..pixels + bytes.len()].copy_from_slice(bytes);
+        }
+        out
+    }
+
+    fn rgb_tiff(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
+        let coded: Vec<_> = pages
+            .iter()
+            .map(|(width, height, rgb, orientation)| (*width, *height, 2u16, 3u16, *orientation, *rgb))
+            .collect();
+        coded_tiff(&coded)
+    }
+
+    #[test]
+    fn a_tiff_orientation_tag_turns_the_stored_pixels() {
+        let shown = RgbImage::from_raw(3, 2, vec![10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0, 50, 0, 0, 60, 0, 0]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        let path = write_bytes("tif6", &rgb_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 6)]));
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].dimensions(), shown.dimensions());
+        assert_eq!(pages[0].as_raw(), shown.as_raw());
+    }
+
+    #[test]
+    fn a_tiff_without_an_orientation_tag_keeps_the_stored_pixels() {
+        let stored = RgbImage::from_raw(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
+        let path = write_bytes("tif1", &rgb_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 1)]));
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), stored.as_raw());
+    }
+
+    #[test]
+    fn every_tiff_page_is_read() {
+        let first = RgbImage::from_raw(2, 2, vec![1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]).unwrap();
+        let second = RgbImage::from_raw(2, 2, vec![9, 9, 9, 8, 8, 8, 7, 7, 7, 6, 6, 6]).unwrap();
+        let path = write_bytes(
+            "tifpages",
+            &rgb_tiff(&[
+                (first.width(), first.height(), first.as_raw(), 1),
+                (second.width(), second.height(), second.as_raw(), 1),
+            ]),
+        );
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let info = super::probe(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0].as_raw(), first.as_raw());
+        assert_eq!(pages[1].as_raw(), second.as_raw());
+        assert!(info.video);
+        assert!(info.frames_exact);
+        assert_eq!(info.frames, 2);
+        assert_eq!(info.fps, 1.0);
+        assert_eq!(info.duration_sec, 2.0);
+    }
+
+    #[test]
+    fn a_gray_tiff_and_an_rgba_tiff_become_rgb() {
+        let gray = coded_tiff(&[(2, 1, 1, 1, 1, &[9, 4])]);
+        let path = write_bytes("tifgray", &gray);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[9, 9, 9, 4, 4, 4]);
+        let rgba = coded_tiff(&[(1, 1, 2, 4, 1, &[1, 2, 3, 255])]);
+        let path = write_bytes("tifrgba", &rgba);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn a_cmyk_tiff_and_a_truncated_tiff_are_refused() {
+        let cmyk = coded_tiff(&[(1, 1, 5, 4, 1, &[0, 0, 0, 0])]);
+        let path = write_bytes("tifcmyk", &cmyk);
+        assert!(super::probe(&path).is_err());
+        let _ = fs::remove_file(&path);
+        let path = write_bytes("tifbad", &[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]);
+        assert!(super::probe(&path).is_err());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_tiff_decode_stops_when_the_scan_stops() {
+        let page = [1u8, 2, 3];
+        let path = write_bytes("tifstop", &rgb_tiff(&[(1, 1, &page, 1), (1, 1, &page, 1)]));
+        let stats = super::for_each_frame(&path, |_, _| false).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(stats.frames_decoded, 1);
+        assert!(!stats.clean);
     }
 
     fn webp_lossless(image: &RgbImage) -> Vec<u8> {
