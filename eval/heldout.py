@@ -539,7 +539,7 @@ def main() -> int:
             fail(proc.stderr or "picture track was not written")
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(pictures),
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=30",
             "-c:v", "copy", "-c:a", "aac", "-map", "0:v", "-map", "1:a",
             str(with_audio),
         ])
@@ -550,6 +550,16 @@ def main() -> int:
             fail(f"audio tail summary {report.get('summary')!r} {report.get('message')}")
         if not report.get("candidates") or not report.get("frames_decoded"):
             fail("audio tail produced no candidate")
+        estimated = run([
+            args.bin, "--json", "--bundles", args.bundles, "estimate",
+            "--input", str(with_audio), "--bundle", "fast", "--long-side", "640",
+            "--coverage", "complete", "--form-factor", "phone", "--provider", "cpu",
+        ])
+        est = require(estimated, "estimate audio tail")
+        decoded = int(report.get("frames_decoded") or 0)
+        analyzed = int(est.get("frames_analyzed") or 0)
+        if analyzed != decoded or est.get("human") != "Less than a second" or est.get("suggest_computer"):
+            fail(f"audio tail estimate {est.get('human')!r} frames {analyzed} decoded {decoded}")
         counts["audio_tail_candidate"] += 1
 
         tone = root / "tone.wav"

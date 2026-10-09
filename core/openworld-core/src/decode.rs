@@ -265,7 +265,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,sample_aspect_ratio,avg_frame_rate,codec_name,nb_frames:stream_side_data=rotation",
+            "stream=width,height,sample_aspect_ratio,avg_frame_rate,codec_name,nb_frames,duration:stream_tags=DURATION:stream_side_data=rotation",
             "-show_entries",
             "format=duration:format_tags=creation_time",
             "-show_frames",
@@ -318,9 +318,13 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     } else {
         (width, height)
     };
+    // The container duration includes audio that continues after the pictures.
+    // Matroska and WebM put the picture length in the track's DURATION tag.
+    // MP4 puts it on the video stream. The frame estimate uses that length.
+    let picture = picture_duration(stream, duration);
     let frames = nb.unwrap_or_else(|| {
-        if duration > 0.0 {
-            (duration * fps).round() as u64
+        if picture > 0.0 {
+            (picture * fps).round() as u64
         } else {
             0
         }
@@ -329,13 +333,46 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         width,
         height,
         fps,
-        duration_sec: duration,
+        duration_sec: if picture > 0.0 { picture } else { duration },
         frames,
         frames_exact: nb.is_some(),
         container_created: created,
         video: true,
         square_pixels,
     })
+}
+
+/// Picture length in seconds. A track clock wins, then the video stream's own duration.
+fn picture_duration(stream: &Value, format_duration: f64) -> f64 {
+    if let Some(clock) = stream
+        .pointer("/tags/DURATION")
+        .and_then(|v| v.as_str())
+        .and_then(parse_clock)
+    {
+        if clock > 0.0 {
+            return clock;
+        }
+    }
+    if let Some(text) = stream.get("duration").and_then(|v| v.as_str()) {
+        if let Ok(stream_duration) = text.parse::<f64>() {
+            if stream_duration > 0.0 {
+                return stream_duration;
+            }
+        }
+    }
+    format_duration
+}
+
+/// `HH:MM:SS.fraction` as written on a Matroska track.
+fn parse_clock(text: &str) -> Option<f64> {
+    let mut parts = text.split(':');
+    let hours: f64 = parts.next()?.parse().ok()?;
+    let minutes: f64 = parts.next()?.parse().ok()?;
+    let seconds: f64 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }
 
 fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
@@ -765,5 +802,18 @@ mod tests {
         assert_eq!(super::sample_aspect(Some("2:1")), (2, 1));
         assert_eq!(super::square_width(320, 2, 1), 640);
         assert_eq!(super::square_width(320, 3, 2), 480);
+    }
+
+    #[test]
+    fn a_track_clock_is_the_picture_length() {
+        assert_eq!(super::parse_clock("00:00:00.800000000"), Some(0.8));
+        assert_eq!(super::parse_clock("00:01:02.5"), Some(62.5));
+        assert_eq!(super::parse_clock("nope"), None);
+        let matroska = serde_json::json!({"duration": "30.023", "tags": {"DURATION": "00:00:00.800000000"}});
+        assert!((super::picture_duration(&matroska, 30.023) - 0.8).abs() < 0.001);
+        let mp4 = serde_json::json!({"duration": "0.800000", "tags": {}});
+        assert!((super::picture_duration(&mp4, 30.0) - 0.8).abs() < 0.001);
+        let bare = serde_json::json!({});
+        assert!((super::picture_duration(&bare, 4.0) - 4.0).abs() < 0.001);
     }
 }

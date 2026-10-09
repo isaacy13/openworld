@@ -1154,7 +1154,7 @@ fn a_video_with_audio_past_the_pictures_stays_complete() {
             "-f",
             "lavfi",
             "-i",
-            "sine=frequency=440:duration=2",
+            "sine=frequency=440:duration=30",
             "-c:v",
             "copy",
             "-c:a",
@@ -1193,12 +1193,30 @@ fn a_video_with_audio_past_the_pictures_stays_complete() {
         },
         &mut |_| {},
     );
-    assert!(
-        probed.frames > report.frames_decoded,
-        "duration estimate {} should exceed the {} decoded pictures",
-        probed.frames,
-        report.frames_decoded
-    );
+    assert!(probed.duration_sec < 2.0, "picture duration {}", probed.duration_sec);
+    assert_eq!(probed.frames, report.frames_decoded);
+    let input = dir.path().join("audio-tail.mkv");
+    let estimate = openworld_core::scan::estimate_for(&ScanRequest {
+        input,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: dir.path().join("posters"),
+        out_dir: dir.path().join("estimate"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Complete,
+        form_factor: FormFactor::Phone,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    })
+    .expect("estimate");
+    assert_eq!(estimate.frames_analyzed, report.frames_decoded);
+    assert_eq!(estimate.human, "Less than a second");
+    assert!(!estimate.suggest_computer);
     assert_eq!(report.status, "complete", "{}", report.message);
     assert_eq!(report.summary, POSSIBLE_CANDIDATE);
     assert!(!report.candidates.is_empty());
