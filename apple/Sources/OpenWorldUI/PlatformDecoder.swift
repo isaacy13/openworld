@@ -40,15 +40,58 @@ enum PlatformDecoder {
     }
 
     #if os(Linux)
+    /// A PNG the user already has is one frame. Copy the bytes. Video stays on AVFoundation.
     static func facts(url: URL) throws -> Facts {
-        _ = url
-        throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+        guard let size = pngSize(url) else {
+            throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+        }
+        return Facts(
+            width: size.0,
+            height: size.1,
+            fps: 0,
+            frames: 1,
+            duration: 0,
+            video: false,
+            containerUnix: containerUnix(url),
+            directory: nil
+        )
     }
 
     static func writeFrames(url: URL, directory: URL) throws -> Facts {
-        _ = url
-        _ = directory
-        throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+        guard pngSize(url) != nil else {
+            throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var facts = try facts(url: url)
+        let image = directory.appendingPathComponent("frame_000000.png")
+        if FileManager.default.fileExists(atPath: image.path) {
+            try FileManager.default.removeItem(at: image)
+        }
+        try FileManager.default.copyItem(at: url, to: image)
+        facts.frames = 1
+        facts.directory = directory
+        return facts
+    }
+
+    private static func pngSize(_ url: URL) -> (Int, Int)? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 24), data.count == 24 else { return nil }
+        let bytes = [UInt8](data)
+        let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        guard Array(bytes.prefix(8)) == signature else { return nil }
+        guard Array(bytes[12..<16]) == [0x49, 0x48, 0x44, 0x52] else { return nil }
+        let width = (Int(bytes[16]) << 24) | (Int(bytes[17]) << 16) | (Int(bytes[18]) << 8) | Int(bytes[19])
+        let height = (Int(bytes[20]) << 24) | (Int(bytes[21]) << 16) | (Int(bytes[22]) << 8) | Int(bytes[23])
+        guard width > 0, height > 0 else { return nil }
+        return (width, height)
+    }
+
+    private static func containerUnix(_ url: URL) -> Int? {
+        guard let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate else {
+            return nil
+        }
+        return Int(created.timeIntervalSince1970)
     }
     #else
     static func facts(url: URL) throws -> Facts {

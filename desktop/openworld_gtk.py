@@ -623,6 +623,26 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail("missing input")
             return False
         self.choose_file(path)
+        aged = time.time() - 40 * 24 * 3600
+        os.utime(path, (aged, aged))
+        self.choose_file(path)
+        if self.warn_label.get_text() != PHRASES["old"]:
+            self._exercise_fail(f"old file warning missing: {self.warn_label.get_text()!r}")
+            return False
+        now = time.time()
+        os.utime(path, (now, now))
+        self.choose_file(path)
+        if self.warn_label.get_text():
+            self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r}")
+            return False
+        self.measured_button.set_active(True)
+        if self.coverage != "measured" or not self.brief_label.get_visible():
+            self._exercise_fail("measured coverage did not show the brief-face warning")
+            return False
+        self.complete_button.set_active(True)
+        if self.coverage != "complete" or self.brief_label.get_visible():
+            self._exercise_fail("complete coverage still shows the brief-face warning")
+            return False
         self.load_bundles()
         self._go("bundle")
         self.long_side = "640"

@@ -32,7 +32,13 @@ enum LinkedCore {
     }
 
     private static func load<T>(_ name: String) -> T? {
-        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else { return nil }
+        // Darwin's RTLD_DEFAULT is -2. On glibc that value is not a handle and dlsym faults.
+        #if canImport(Glibc)
+        let handle: UnsafeMutableRawPointer? = nil
+        #else
+        let handle = UnsafeMutableRawPointer(bitPattern: -2)
+        #endif
+        guard let symbol = dlsym(handle, name) else { return nil }
         return unsafeBitCast(symbol, to: T.self)
     }
 }

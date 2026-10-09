@@ -12,24 +12,24 @@ import UIKit
 #endif
 import Foundation
 
-enum Step {
+public enum Step {
     case choose, device, bundle, size, estimate, results
 }
 
 @MainActor
 public final class FlowModel: ObservableObject {
-    @Published var step: Step = .choose
-    @Published var file: URL?
-    @Published var bundles: [BundleRow] = []
-    @Published var bundleID = "fast"
-    @Published var longSide = "640"
-    @Published var coverage = "complete"
-    @Published var estimate: Estimate?
-    @Published var report: ScanReport?
-    @Published var resultDirectory: URL?
-    @Published var leavingURL: URL?
-    @Published var oldFile = false
-    @Published var error: String?
+    @Published public var step: Step = .choose
+    @Published public var file: URL?
+    @Published public var bundles: [BundleRow] = []
+    @Published public var bundleID = "fast"
+    @Published public var longSide = "640"
+    @Published public var coverage = "complete"
+    @Published public var estimate: Estimate?
+    @Published public var report: ScanReport?
+    @Published public var resultDirectory: URL?
+    @Published public var leavingURL: URL?
+    @Published public var oldFile = false
+    @Published public var error: String?
     let phone: Bool
     private let core = CoreClient()
 
@@ -52,7 +52,7 @@ public final class FlowModel: ObservableObject {
         step = .device
     }
 
-    func loadBundles() {
+    public func loadBundles() {
         bundles = (try? core.bundlesJSON()) ?? []
         if let selected = bundles.first(where: { $0.preselected }) {
             bundleID = selected.id
@@ -60,7 +60,7 @@ public final class FlowModel: ObservableObject {
         step = .bundle
     }
 
-    func loadEstimate() {
+    public func loadEstimate() {
         guard let file else { return }
         do {
             estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
@@ -72,7 +72,7 @@ public final class FlowModel: ObservableObject {
         step = .estimate
     }
 
-    func analyze() {
+    public func analyze() {
         guard let file else { return }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let posters = root.appendingPathComponent("posters")
@@ -280,6 +280,9 @@ public struct FlowView: View {
                 }
                 if let note = model.report?.perceptionNote {
                     Text(note)
+                }
+                ForEach(model.report?.warnings ?? [], id: \.self) { line in
+                    Text(line).foregroundStyle(.orange)
                 }
                 if let items = model.report?.inventory, !items.isEmpty {
                     #if os(Linux)

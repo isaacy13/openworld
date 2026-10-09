@@ -143,6 +143,12 @@ class FlowModel {
             json.present("coverage_banner")?.let(lines::add)
             json.present("bundle_name")?.let { lines.add("Bundle: $it") }
             json.present("perception_note")?.let(lines::add)
+            val warnings = json.optJSONArray("warnings")
+            if (warnings != null) {
+                for (i in 0 until warnings.length()) {
+                    if (!warnings.isNull(i)) lines.add(warnings.getString(i))
+                }
+            }
             val disclosure = json.optJSONArray("disclosure")
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))

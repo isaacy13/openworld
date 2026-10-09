@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-enum Copy {
-    static let possible = "Possible candidate. Not an identification."
-    static let notCompared = "Not compared."
-    static let incomplete = "Incomplete."
-    static let clearance = "No candidate is not a clearance."
-    static let leaving = "You are leaving OpenWorld."
-    static let brief = "A brief face can be missed."
-    static let onDevice = "This file stays on this device."
-    static let oldFile = "This file is older than about 30 days."
-    static let disclosure = [
+public enum Copy {
+    public static let possible = "Possible candidate. Not an identification."
+    public static let notCompared = "Not compared."
+    public static let incomplete = "Incomplete."
+    public static let clearance = "No candidate is not a clearance."
+    public static let leaving = "You are leaving OpenWorld."
+    public static let brief = "A brief face can be missed."
+    public static let onDevice = "This file stays on this device."
+    public static let oldFile = "This file is older than about 30 days."
+    public static let disagree = "The file timestamps disagree."
+    public static let disclosure = [
         "Nothing is uploaded.",
         "Nobody is enrolled.",
         "OpenWorld does not train on this file.",

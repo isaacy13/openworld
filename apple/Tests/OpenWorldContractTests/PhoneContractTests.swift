@@ -77,6 +77,22 @@ final class PhoneContractTests: XCTestCase {
         XCTAssertTrue(report.candidates.isEmpty)
     }
 
+    func testMeasuredCoverageNamesTheBriefFaceBanner() throws {
+        let report = try scan("blank", coverage: "measured")
+        XCTAssertEqual(report.status, "complete")
+        XCTAssertEqual(report.coverageBanner, "A brief face can be missed.")
+        XCTAssertEqual(report.summary, "No candidate is not a clearance.")
+        XCTAssertTrue(report.candidates.isEmpty)
+    }
+
+    func testDisagreeingContainerTimeWarnsAndDoesNotRefuse() throws {
+        let report = try scan("blank", containerUnix: 1_000_000_000)
+        XCTAssertEqual(report.status, "complete")
+        XCTAssertEqual(report.summary, "No candidate is not a clearance.")
+        XCTAssertTrue(report.warnings.contains("The file timestamps disagree."))
+        XCTAssertTrue(report.candidates.isEmpty)
+    }
+
     func testPhoneEstimateNamesCpuHeatAndBattery() throws {
         let file = try still("blank")
         let size = try pngSize(file)
@@ -155,7 +171,7 @@ final class PhoneContractTests: XCTestCase {
         )
     }
 
-    private func scan(_ kind: String) throws -> ScanReport {
+    private func scan(_ kind: String, coverage: String = "complete", containerUnix: Int? = nil) throws -> ScanReport {
         let file = try still(kind)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let posters = root.appendingPathComponent("posters")
@@ -170,12 +186,20 @@ final class PhoneContractTests: XCTestCase {
             input: file.path,
             bundle: "fast",
             longSide: "640",
-            coverage: "complete",
+            coverage: coverage,
             posters: posters.path,
             frames: frames.path,
             out: root.appendingPathComponent("result").path,
             phone: true,
-            media: media
+            media: MediaArguments(
+                width: media.width,
+                height: media.height,
+                fps: media.fps,
+                frames: media.frames,
+                duration: media.duration,
+                video: media.video,
+                containerUnix: containerUnix
+            )
         ))
         return try JSONDecoder().decode(ScanReport.self, from: data)
     }

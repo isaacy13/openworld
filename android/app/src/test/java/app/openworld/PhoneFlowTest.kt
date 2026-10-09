@@ -206,6 +206,33 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun oldFileWarningIsOnTheResult() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/old-blank.png")
+        val file = still("blank")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val cursor = object : RoboCursor() {
+            override fun close() {
+                moveToPosition(-1)
+            }
+        }
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME, "last_modified"))
+        cursor.setResults(
+            arrayOf(arrayOf<Any>("old-blank.png", System.currentTimeMillis() - 40L * 24 * 60 * 60 * 1000))
+        )
+        shadowOf(resolver).setCursor(uri, cursor)
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        model.choose(uri, resolver)
+        assertTrue(model.oldFile)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        assertEquals("No candidate is not a clearance.", model.summary)
+        assertTrue(model.detail.contains("This file is older than about 30 days."))
+        assertFalse(model.detail.contains("Open FBI page"))
+    }
+
+    @Test
     fun aPngStillIsCopiedByteForByte() {
         val file = still("blank")
         val frames = File(file.parentFile, "ow-frames-" + System.nanoTime())

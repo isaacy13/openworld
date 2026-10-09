@@ -4,7 +4,7 @@ import PackageDescription
 
 // The iPhone and Mac app imports SwiftUI. That executable exists only when this
 // package is built on macOS. Linux CI compiles the same screens against
-// OpenSwiftUI, and only the test target depends on it.
+// OpenSwiftUI. The Linux program OpenWorldScreens is that test renderer, not the app.
 let contract = Target.target(name: "OpenWorldContract", path: "Sources/OpenWorldContract")
 let contractTests = Target.testTarget(
     name: "OpenWorldContractTests",
@@ -24,13 +24,31 @@ let package = Package(
     targets: [
         contract,
         contractTests,
-        .testTarget(
-            name: "OpenWorldUITests",
+        .target(
+            name: "OpenWorldUI",
             dependencies: [
                 "OpenWorldContract",
                 .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
             ],
             path: "Sources/OpenWorldUI"
+        ),
+        .testTarget(
+            name: "OpenWorldUITests",
+            dependencies: [
+                "OpenWorldUI",
+                "OpenWorldContract",
+                .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
+            ],
+            path: "Tests/OpenWorldUITests"
+        ),
+        .executableTarget(
+            name: "OpenWorldScreens",
+            dependencies: [
+                "OpenWorldUI",
+                "OpenWorldContract",
+                .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
+            ],
+            path: "Sources/OpenWorldScreens"
         ),
     ]
 )
@@ -47,8 +65,7 @@ let package = Package(
         .target(
             name: "OpenWorldUI",
             dependencies: ["OpenWorldContract"],
-            path: "Sources/OpenWorldUI",
-            exclude: ["LinuxScreenTests.swift"]
+            path: "Sources/OpenWorldUI"
         ),
         .executableTarget(
             name: "OpenWorld",

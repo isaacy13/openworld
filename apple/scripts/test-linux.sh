@@ -17,9 +17,22 @@ export OPENSWIFTUI_COMPATIBILITY_TEST=0
 export OPENSWIFTUI_SWIFT_LOG=1
 export OPENSWIFTUI_SWIFT_CRYPTO=1
 export OPENSWIFTUI_RENDER_GTK=0
+swift test "$@"
 bin="$(swift build --show-bin-path)/OpenWorld"
 if [ -x "$bin" ]; then
     echo "Linux built the app. The app build belongs on a macOS runner." >&2
     exit 1
 fi
-exec swift test "$@"
+swift build --product OpenWorldScreens
+screen="$(swift build --show-bin-path)/OpenWorldScreens"
+out="$(OPENWORLD_SCREEN=choose "$screen")"
+printf '%s\n' "$out" | grep -q "Choose a photo or video" || {
+    echo "The phone screen did not print." >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+}
+printf '%s\n' "$out" | grep -q "OpenSwiftUI backend: stdout" || {
+    echo "OpenSwiftUI stdout renderer did not run." >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+}
