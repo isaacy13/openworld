@@ -63,6 +63,7 @@ class OpenWorld(Gtk.Application):
         self.bundle_id = "fast"
         self.long_side = "640"
         self.coverage = "complete"
+        self.can_analyze = True
         self.rows: list[dict] = []
         self.out_dir: Path | None = None
         self.posters: Path | None = None
@@ -308,6 +309,8 @@ class OpenWorld(Gtk.Application):
             self.warn_label.set_text(PHRASES["old"])
         else:
             self.warn_label.set_text("")
+        self.can_analyze = True
+        self.history = ["choose"]
         self._go("device")
 
     def load_bundles(self) -> None:
@@ -380,9 +383,9 @@ class OpenWorld(Gtk.Application):
         )
         if payload.get("status") == "refused":
             self.estimate_body.set_text(payload.get("message", "Refusing."))
-            self.primary.set_sensitive(False)
+            self.can_analyze = False
             return
-        self.primary.set_sensitive(True)
+        self.can_analyze = True
         lines = [payload.get("human", ""), payload.get("caveat", "")]
         if payload.get("device_note"):
             lines.append(payload["device_note"])
@@ -693,6 +696,7 @@ class OpenWorld(Gtk.Application):
         self.long_side = "640"
         self.size_buttons["640"].set_active(True)
         self.bundle_id = "fast"
+        self.can_analyze = True
         self.primary.set_sensitive(True)
         self.history = ["choose"]
         self._show("choose")
@@ -712,6 +716,12 @@ class OpenWorld(Gtk.Application):
         self.stack.set_visible_child_name(name)
         scanning = self.scan_thread is not None and self.scan_thread.is_alive()
         self.back.set_sensitive(len(self.history) > 1 and not scanning)
+        if scanning:
+            self.primary.set_sensitive(False)
+        elif name == "estimate":
+            self.primary.set_sensitive(self.can_analyze)
+        else:
+            self.primary.set_sensitive(True)
         labels = {
             "choose": "Choose File",
             "device": "Continue",
@@ -768,6 +778,24 @@ class OpenWorld(Gtk.Application):
         self.complete_button.set_active(True)
         if self.coverage != "complete" or self.brief_label.get_visible():
             self._exercise_fail("complete coverage still shows the brief-face warning")
+            return False
+        junk = Path(path).with_name("not-a-photo.txt")
+        junk.write_text("not a photo\n")
+        self.choose_file(str(junk))
+        self.load_bundles()
+        self._go("size")
+        self.refresh_estimate()
+        self._go("estimate")
+        if self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():
+            self._exercise_fail(f"a bad file offered Analyze: {self.estimate_body.get_text()!r}")
+            return False
+        self.go_back()
+        if self.stack.get_visible_child_name() != "size" or not self.primary.get_sensitive():
+            self._exercise_fail("Back left Continue disabled after a refusal")
+            return False
+        self.choose_file(path)
+        if not self.primary.get_sensitive() or self.stack.get_visible_child_name() != "device":
+            self._exercise_fail("the next file kept Continue disabled")
             return False
         self.load_bundles()
         self._go("bundle")
