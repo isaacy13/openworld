@@ -8,7 +8,7 @@ lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
 orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
-orientation tag, a two-page TIFF whose marker is only on the second page,
+orientation tag, a 16-bit TIFF with that tag, a two-page TIFF whose marker is only on the second page,
 a video whose edit list hides the samples a player does not show,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
@@ -55,25 +55,29 @@ def with_orientation(jpeg: bytes, tag: int) -> bytes:
     return bytes([0xFF, 0xD8, 0xFF, 0xE1, (length >> 8) & 0xFF, length & 0xFF]) + payload + jpeg[2:]
 
 
-def rgb_tiff(pages: list[tuple[int, int, bytes, int]]) -> bytes:
-    """Uncompressed RGB pages. The last value is the camera orientation tag."""
+def rgb_tiff(pages: list[tuple[int, int, bytes, int]], depth: int = 8) -> bytes:
+    """Uncompressed RGB pages. The last value is the camera orientation tag.
+
+    Depth 16 stores each 8-bit sample in the high byte.
+    """
     entry_count = 10
     ifd_len = 2 + entry_count * 12 + 4
     cursor = 8
-    layout: list[tuple[int, int, int]] = []
+    layout: list[tuple[int, int, int, int]] = []
     for width, height, rgb, _tag in pages:
         if len(rgb) != width * height * 3:
             fail(f"tiff page {width}x{height} has {len(rgb)} bytes")
+        stored = len(rgb) * (2 if depth == 16 else 1)
         ifd = cursor
         bits = ifd + ifd_len
         pixels = bits + 6
-        cursor = pixels + len(rgb)
-        layout.append((ifd, bits, pixels))
+        cursor = pixels + stored
+        layout.append((ifd, bits, pixels, stored))
     out = bytearray(cursor)
     out[0:4] = b"II*\x00"
     out[4:8] = layout[0][0].to_bytes(4, "little")
     for index, (width, height, rgb, tag) in enumerate(pages):
-        ifd, bits, pixels = layout[index]
+        ifd, bits, pixels, stored = layout[index]
         nxt = layout[index + 1][0] if index + 1 < len(layout) else 0
         out[ifd : ifd + 2] = entry_count.to_bytes(2, "little")
         entries = [
@@ -86,7 +90,7 @@ def rgb_tiff(pages: list[tuple[int, int, bytes, int]]) -> bytes:
             (274, 3, 1, tag),
             (277, 3, 1, 3),
             (278, 4, 1, height),
-            (279, 4, 1, len(rgb)),
+            (279, 4, 1, stored),
         ]
         at = ifd + 2
         for entry_tag, kind, count, value in entries:
@@ -96,8 +100,15 @@ def rgb_tiff(pages: list[tuple[int, int, bytes, int]]) -> bytes:
             out[at + 8 : at + 12] = value.to_bytes(4, "little")
             at += 12
         out[at : at + 4] = nxt.to_bytes(4, "little")
-        out[bits : bits + 6] = b"\x08\x00\x08\x00\x08\x00"
-        out[pixels : pixels + len(rgb)] = rgb
+        sample = (16 if depth == 16 else 8).to_bytes(2, "little")
+        out[bits : bits + 6] = sample + sample + sample
+        if depth == 16:
+            wide = bytearray()
+            for byte in rgb:
+                wide += (byte << 8).to_bytes(2, "little")
+            out[pixels : pixels + stored] = wide
+        else:
+            out[pixels : pixels + stored] = rgb
     return bytes(out)
 
 
@@ -321,6 +332,7 @@ def main() -> int:
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
         "oriented_tiff_candidate": 0,
+        "wide_tiff_candidate": 0,
         "tiff_later_candidate": 0,
         "edit_list_candidate": 0,
         "oriented_video_candidate": 0,
@@ -630,6 +642,14 @@ def main() -> int:
         if not report.get("candidates"):
             fail("oriented tiff produced no candidate")
         counts["oriented_tiff_candidate"] += 1
+        wide_tiff = root / "wide.tif"
+        wide_tiff.write_bytes(rgb_tiff([(side_w, side_h, side_rgb, 6)], depth=16))
+        report = scan(args.bin, args.bundles, posters, wide_tiff, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"16-bit tiff summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("16-bit tiff produced no candidate")
+        counts["wide_tiff_candidate"] += 1
         raw_tiff = root / "raw.tif"
         raw_tiff.write_bytes(rgb_tiff([(side_w, side_h, side_rgb, 1)]))
         report = scan(args.bin, args.bundles, posters, raw_tiff, out, "complete")
@@ -831,6 +851,7 @@ def main() -> int:
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
         or counts["oriented_tiff_candidate"] != 1
+        or counts["wide_tiff_candidate"] != 1
         or counts["tiff_later_candidate"] != 1
         or counts["edit_list_candidate"] != 1
         or counts["oriented_video_candidate"] != 1

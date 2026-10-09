@@ -1046,6 +1046,61 @@ fn rgb_tiff(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
     out
 }
 
+/// Uncompressed 16-bit RGB. Each 8-bit sample is stored in the high byte.
+fn rgb16_tiff(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
+    let widened: Vec<(u32, u32, Vec<u8>, u16)> = pages
+        .iter()
+        .map(|(width, height, rgb, tag)| {
+            assert_eq!(rgb.len(), (*width as usize) * (*height as usize) * 3);
+            let mut wide = Vec::with_capacity(rgb.len() * 2);
+            for byte in *rgb {
+                wide.extend_from_slice(&(u16::from(*byte) << 8).to_le_bytes());
+            }
+            (*width, *height, wide, *tag)
+        })
+        .collect();
+    let entry_count = 10u16;
+    let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+    let mut cursor = 8usize;
+    let mut layout = Vec::new();
+    for (_, _, wide, _) in &widened {
+        let ifd = cursor;
+        let bits = ifd + ifd_len;
+        let pixels = bits + 6;
+        cursor = pixels + wide.len();
+        layout.push((ifd, bits, pixels));
+    }
+    let mut out = vec![0u8; cursor];
+    out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+    out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+    for (index, (width, height, wide, orientation)) in widened.iter().enumerate() {
+        let (ifd, bits, pixels) = layout[index];
+        let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+        out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+        let entries = [
+            tiff_entry(256, 4, 1, *width),
+            tiff_entry(257, 4, 1, *height),
+            tiff_entry(258, 3, 3, bits as u32),
+            tiff_entry(259, 3, 1, 1),
+            tiff_entry(262, 3, 1, 2),
+            tiff_entry(273, 4, 1, pixels as u32),
+            tiff_entry(274, 3, 1, u32::from(*orientation)),
+            tiff_entry(277, 3, 1, 3),
+            tiff_entry(278, 4, 1, *height),
+            tiff_entry(279, 4, 1, wide.len() as u32),
+        ];
+        let mut at = ifd + 2;
+        for entry in entries {
+            out[at..at + 12].copy_from_slice(&entry);
+            at += 12;
+        }
+        out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+        out[bits..bits + 6].copy_from_slice(&[16, 0, 16, 0, 16, 0]);
+        out[pixels..pixels + wide.len()].copy_from_slice(wide);
+    }
+    out
+}
+
 #[test]
 fn a_tiff_with_camera_orientation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();
@@ -1123,6 +1178,50 @@ fn a_tiff_with_camera_orientation_is_scanned_as_shown() {
     assert_eq!(measured.summary, POSSIBLE_CANDIDATE);
     assert_eq!(measured.frames_decoded, 2);
     assert!(measured.candidates.iter().all(|item| item.frame_index == 1));
+}
+
+#[test]
+fn a_sixteen_bit_tiff_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("side16.tif");
+    fs::write(&side, rgb16_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 6)])).unwrap();
+    let raw = dir.path().join("raw16.tif");
+    fs::write(&raw, rgb16_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 1)])).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let turned = scan(side);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let sideways = scan(raw);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
 }
 
 #[test]

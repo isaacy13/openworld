@@ -2,7 +2,8 @@
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
 //! A JPEG, a still WebP, a PNG, or a TIFF is turned to match its camera orientation
-//! tag before the pixels are scanned. Every page of a TIFF is scanned. Audio is not decoded. Phone, Mac, and Android shells
+//! tag before the pixels are scanned. Every page of a TIFF is scanned. A 16-bit
+//! sample contributes its high 8 bits. Audio is not decoded. Phone, Mac, and Android shells
 //! decode with AVFoundation or MediaCodec and pass the frames through
 //! `load_frame_dir`. That path does not run FFmpeg.
 
@@ -136,10 +137,10 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
         return Err(MediaError::BadCodec);
     }
     let color = decoder.colortype().map_err(|_| MediaError::BadCodec)?;
-    let samples = match color {
-        tiff::ColorType::Gray(8) => 1,
-        tiff::ColorType::RGB(8) => 3,
-        tiff::ColorType::RGBA(8) => 4,
+    let (samples, bits) = match color {
+        tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => (1, bits),
+        tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => (3, bits),
+        tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => (4, bits),
         _ => return Err(MediaError::BadCodec),
     };
     let tag = decoder
@@ -151,10 +152,14 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
         .filter(|value| (1..=8).contains(value))
         .unwrap_or(1);
     let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
-    let tiff::decoder::DecodingResult::U8(bytes) = decoded else {
-        return Err(MediaError::BadCodec);
+    let rgb = match decoded {
+        tiff::decoder::DecodingResult::U8(bytes) => samples_to_rgb(&bytes, width, height, samples)?,
+        tiff::decoder::DecodingResult::U16(samples_wide) => {
+            samples_u16_to_rgb(&samples_wide, width, height, samples, bits)?
+        }
+        _ => return Err(MediaError::BadCodec),
     };
-    let mut image = DynamicImage::ImageRgb8(samples_to_rgb(&bytes, width, height, samples)?);
+    let mut image = DynamicImage::ImageRgb8(rgb);
     if let Some(orientation) = Orientation::from_exif(tag) {
         image.apply_orientation(orientation);
     }
@@ -183,6 +188,19 @@ fn samples_to_rgb(bytes: &[u8], width: u32, height: u32, samples: usize) -> Resu
         _ => return Err(MediaError::BadCodec),
     }
     RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
+}
+
+/// The high 8 bits of a 9- to 16-bit sample are the picture that is scanned.
+fn samples_u16_to_rgb(
+    samples_wide: &[u16],
+    width: u32,
+    height: u32,
+    samples: usize,
+    bits: u8,
+) -> Result<RgbImage, MediaError> {
+    let shift = u32::from(bits.saturating_sub(8));
+    let narrow: Vec<u8> = samples_wide.iter().map(|value| (u32::from(*value) >> shift) as u8).collect();
+    samples_to_rgb(&narrow, width, height, samples)
 }
 
 fn probe_image(path: &Path) -> Option<Probe> {
@@ -985,6 +1003,90 @@ mod tests {
         assert_eq!(pages[0].as_raw(), &[9, 9, 9, 4, 4, 4]);
         let rgba = coded_tiff(&[(1, 1, 2, 4, 1, &[1, 2, 3, 255])]);
         let path = write_bytes("tifrgba", &rgba);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[1, 2, 3]);
+    }
+
+    /// 16-bit samples, little-endian, each 8-bit value stored in the high byte.
+    fn wide_tiff(pages: &[(u32, u32, u16, u16, u16, &[u8])]) -> Vec<u8> {
+        let widened: Vec<(u32, u32, u16, u16, u16, Vec<u8>)> = pages
+            .iter()
+            .map(|(width, height, photometric, samples, orientation, bytes)| {
+                assert_eq!(bytes.len(), (*width as usize) * (*height as usize) * (*samples as usize));
+                let mut wide = Vec::with_capacity(bytes.len() * 2);
+                for byte in *bytes {
+                    // The 8-bit sample sits in the high byte.
+                    wide.extend_from_slice(&(u16::from(*byte) << 8).to_le_bytes());
+                }
+                (*width, *height, *photometric, *samples, *orientation, wide)
+            })
+            .collect();
+        let entry_count = 10u16;
+        let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+        let mut cursor = 8usize;
+        let mut layout = Vec::new();
+        for (_, _, _, samples, _, bytes) in &widened {
+            let ifd = cursor;
+            let bits = ifd + ifd_len;
+            let pixels = bits + (*samples as usize) * 2;
+            cursor = pixels + bytes.len();
+            layout.push((ifd, bits, pixels));
+        }
+        let mut out = vec![0u8; cursor];
+        out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+        for (index, (width, height, photometric, samples, orientation, bytes)) in widened.iter().enumerate() {
+            let (ifd, bits, pixels) = layout[index];
+            let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+            out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+            let bits_value = if *samples == 1 { 16 } else { bits as u32 };
+            let entries = [
+                tiff_entry(256, 4, 1, *width),
+                tiff_entry(257, 4, 1, *height),
+                tiff_entry(258, 3, u32::from(*samples), bits_value),
+                tiff_entry(259, 3, 1, 1),
+                tiff_entry(262, 3, 1, u32::from(*photometric)),
+                tiff_entry(273, 4, 1, pixels as u32),
+                tiff_entry(274, 3, 1, u32::from(*orientation)),
+                tiff_entry(277, 3, 1, u32::from(*samples)),
+                tiff_entry(278, 4, 1, *height),
+                tiff_entry(279, 4, 1, bytes.len() as u32),
+            ];
+            let mut at = ifd + 2;
+            for entry in entries {
+                out[at..at + 12].copy_from_slice(&entry);
+                at += 12;
+            }
+            out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+            for sample in 0..*samples {
+                let at = bits + usize::from(sample) * 2;
+                out[at..at + 2].copy_from_slice(&16u16.to_le_bytes());
+            }
+            out[pixels..pixels + bytes.len()].copy_from_slice(bytes);
+        }
+        out
+    }
+
+    #[test]
+    fn a_sixteen_bit_tiff_keeps_the_high_byte_and_the_orientation_tag() {
+        let shown = RgbImage::from_raw(3, 2, vec![10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0, 50, 0, 0, 60, 0, 0]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        let path = write_bytes(
+            "tif16",
+            &wide_tiff(&[(stored.width(), stored.height(), 2, 3, 6, stored.as_raw())]),
+        );
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].dimensions(), shown.dimensions());
+        assert_eq!(pages[0].as_raw(), shown.as_raw());
+        let gray = wide_tiff(&[(2, 1, 1, 1, 1, &[9, 4])]);
+        let path = write_bytes("tif16gray", &gray);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[9, 9, 9, 4, 4, 4]);
+        let rgba = wide_tiff(&[(1, 1, 2, 4, 1, &[1, 2, 3, 255])]);
+        let path = write_bytes("tif16rgba", &rgba);
         let pages = super::read_tiff_pages(&path).unwrap();
         let _ = fs::remove_file(&path);
         assert_eq!(pages[0].as_raw(), &[1, 2, 3]);
