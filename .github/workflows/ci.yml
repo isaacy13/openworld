@@ -8,8 +8,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg g++
-      - run: cargo test --manifest-path core/Cargo.toml
+      - name: unit snapshot and line coverage
+        run: cargo llvm-cov --manifest-path core/Cargo.toml --fail-under-lines 90
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
       - run: python3 eval/measure_fast.py --bin core/target/release/openworld --bundles bundles --out /tmp/fast-curve.json --check eval/curves/fast.json
       - run: python3 tests/words.py

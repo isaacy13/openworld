@@ -73,7 +73,12 @@ pub fn load(bundle: &Bundle) -> Result<FaceModels, String> {
         }
         Err(_) => None,
     };
-    Ok(FaceModels { detector, embedder, plate, execution: Execution::Cpu })
+    Ok(FaceModels {
+        detector,
+        embedder,
+        plate,
+        execution: Execution::Cpu,
+    })
 }
 
 fn weight_path(bundle: &Bundle, role: &str) -> Result<std::path::PathBuf, String> {
@@ -116,11 +121,15 @@ fn run_zeros(session: &mut Session, side: u32) -> Result<Vec<Vec<f32>>, String> 
     let side = side as usize;
     let input = Array4::<f32>::zeros((1, 3, side, side));
     let outputs = session
-        .run(ort::inputs![TensorRef::from_array_view(&input).map_err(|err| err.to_string())?])
+        .run(ort::inputs![
+            TensorRef::from_array_view(&input).map_err(|err| err.to_string())?
+        ])
         .map_err(|err| err.to_string())?;
     let mut planes = Vec::new();
     for (_name, value) in &outputs {
-        let (_shape, data) = value.try_extract_tensor::<f32>().map_err(|err| err.to_string())?;
+        let (_shape, data) = value
+            .try_extract_tensor::<f32>()
+            .map_err(|err| err.to_string())?;
         planes.push(data.to_vec());
     }
     Ok(planes)
@@ -131,14 +140,19 @@ impl FaceModels {
         let (w, h) = image.dimensions();
         let fit = Letterbox::fit(w, h, 640);
         let square = letterbox_image(image, &fit, 640);
-        let input = Array4::from_shape_vec((1, 3, 640, 640), arcface::nchw(&square)).map_err(|err| err.to_string())?;
+        let input = Array4::from_shape_vec((1, 3, 640, 640), arcface::nchw(&square))
+            .map_err(|err| err.to_string())?;
         let outputs = self
             .detector
-            .run(ort::inputs![TensorRef::from_array_view(&input).map_err(|err| err.to_string())?])
+            .run(ort::inputs![
+                TensorRef::from_array_view(&input).map_err(|err| err.to_string())?
+            ])
             .map_err(|err| err.to_string())?;
         let mut planes = Vec::new();
         for (_name, value) in &outputs {
-            let (_shape, data) = value.try_extract_tensor::<f32>().map_err(|err| err.to_string())?;
+            let (_shape, data) = value
+                .try_extract_tensor::<f32>()
+                .map_err(|err| err.to_string())?;
             planes.push(data.to_vec());
         }
         let hits = faces_from_planes(&planes, &fit)?;
@@ -149,23 +163,34 @@ impl FaceModels {
         Ok(all)
     }
 
-    pub fn embed(&mut self, crop: &RgbImage, landmarks: Option<[(f32, f32); 5]>) -> Result<Vec<f32>, String> {
+    pub fn embed(
+        &mut self,
+        crop: &RgbImage,
+        landmarks: Option<[(f32, f32); 5]>,
+    ) -> Result<Vec<f32>, String> {
         let aligned = if let Some(points) = landmarks {
             arcface::warp_112(crop, &points).unwrap_or_else(|| resize_112(crop))
         } else {
             resize_112(crop)
         };
-        let input = Array4::from_shape_vec((1, 3, CROP as usize, CROP as usize), arcface::nchw(&aligned))
-            .map_err(|err| err.to_string())?;
+        let input = Array4::from_shape_vec(
+            (1, 3, CROP as usize, CROP as usize),
+            arcface::nchw(&aligned),
+        )
+        .map_err(|err| err.to_string())?;
         let outputs = self
             .embedder
-            .run(ort::inputs![TensorRef::from_array_view(&input).map_err(|err| err.to_string())?])
+            .run(ort::inputs![
+                TensorRef::from_array_view(&input).map_err(|err| err.to_string())?
+            ])
             .map_err(|err| err.to_string())?;
         let (_name, value) = (&outputs)
             .into_iter()
             .next()
             .ok_or("The embedder returned nothing. Refusing.")?;
-        let (_shape, data) = value.try_extract_tensor::<f32>().map_err(|err| err.to_string())?;
+        let (_shape, data) = value
+            .try_extract_tensor::<f32>()
+            .map_err(|err| err.to_string())?;
         let mut embedding = data.to_vec();
         arcface::l2_normalize(&mut embedding);
         Ok(embedding)
@@ -177,21 +202,35 @@ fn faces_from_planes(planes: &[Vec<f32>], fit: &Letterbox) -> Result<Vec<Hit>, S
         return Err("The detector output was not recognized. Refusing.".into());
     }
     let kps = if planes.len() == 9 {
-        [Some(planes[6].as_slice()), Some(planes[7].as_slice()), Some(planes[8].as_slice())]
+        [
+            Some(planes[6].as_slice()),
+            Some(planes[7].as_slice()),
+            Some(planes[8].as_slice()),
+        ]
     } else {
         [None, None, None]
     };
     let decoded = scrfd::decode(
         640,
         640,
-        [planes[0].as_slice(), planes[1].as_slice(), planes[2].as_slice()],
-        [planes[3].as_slice(), planes[4].as_slice(), planes[5].as_slice()],
+        [
+            planes[0].as_slice(),
+            planes[1].as_slice(),
+            planes[2].as_slice(),
+        ],
+        [
+            planes[3].as_slice(),
+            planes[4].as_slice(),
+            planes[5].as_slice(),
+        ],
         kps,
         0.3,
     );
     let mut hits = Vec::new();
     for face in decoded {
-        let Some(rect) = fit.to_source(face.rect) else { continue };
+        let Some(rect) = fit.to_source(face.rect) else {
+            continue;
+        };
         let landmarks = face.landmarks.map(|points| {
             let mut mapped = [(0.0f32, 0.0f32); 5];
             for (i, (x, y)) in points.iter().enumerate() {
@@ -199,14 +238,21 @@ fn faces_from_planes(planes: &[Vec<f32>], fit: &Letterbox) -> Result<Vec<Hit>, S
             }
             mapped
         });
-        hits.push(Hit { rect, marker: Marker::Face { id: 0 }, score: face.score, landmarks });
+        hits.push(Hit {
+            rect,
+            marker: Marker::Face { id: 0 },
+            score: face.score,
+            landmarks,
+        });
     }
     Ok(hits)
 }
 
 fn plates_from_session(session: &mut Session, input: &Array4<f32>) -> Result<Vec<Hit>, String> {
     let outputs = session
-        .run(ort::inputs![TensorRef::from_array_view(input).map_err(|err| err.to_string())?])
+        .run(ort::inputs![
+            TensorRef::from_array_view(input).map_err(|err| err.to_string())?
+        ])
         .map_err(|err| err.to_string())?;
     let mut planes = Vec::new();
     for (_name, value) in &outputs {
@@ -217,7 +263,10 @@ fn plates_from_session(session: &mut Session, input: &Array4<f32>) -> Result<Vec
     // End-to-end boxes are [N, 6] as x1,y1,x2,y2,score,class when a model exports them that way.
     // A detector that does not is still loaded; it contributes no plate text.
     let mut hits = Vec::new();
-    if let Some(dets) = planes.iter().find(|plane| !plane.is_empty() && plane.len() % 6 == 0 && plane.len() <= 6 * 200) {
+    if let Some(dets) = planes
+        .iter()
+        .find(|plane| !plane.is_empty() && plane.len() % 6 == 0 && plane.len() <= 6 * 200)
+    {
         for chunk in dets.chunks(6) {
             let score = chunk[4];
             if score < 0.3 {
@@ -231,8 +280,17 @@ fn plates_from_session(session: &mut Session, input: &Array4<f32>) -> Result<Vec
                 h: (chunk[3] - chunk[1]).max(1.0) as u32,
             };
             // COCO vehicles are not people. A plate class is whatever the bundle's plate model calls a plate (class 0 when it is a plate-only head).
-            let marker = if class == 0 { Marker::Plate } else { Marker::Vehicle };
-            hits.push(Hit { rect, marker, score, landmarks: None });
+            let marker = if class == 0 {
+                Marker::Plate
+            } else {
+                Marker::Vehicle
+            };
+            hits.push(Hit {
+                rect,
+                marker,
+                score,
+                landmarks: None,
+            });
         }
     }
     Ok(hits)
@@ -267,4 +325,76 @@ fn resize_112(image: &RgbImage) -> RgbImage {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bundle::load_bundle;
+    use crate::posters::sha256_hex;
+    use image::Rgb;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_zero_session_detects_nothing_and_still_embeds_a_crop() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle_dir = dir.path().join("custom");
+        fs::create_dir_all(bundle_dir.join("weights")).unwrap();
+        let models = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/models");
+        let mut manifest = r#"
+schema = "openworld.bundle.v1"
+id = "custom"
+name = "Custom"
+version = "0.0.0"
+official = true
+best_for = "A computer, when the weights are real."
+threshold = 0.55
+estimate_factor = 1.0
+
+[models]
+detector = "SCRFD-0.5GF"
+detector_version = "pinned-test"
+embedder = "ArcFace-MBF"
+embedder_version = "pinned-test"
+plate = "RTMDet-nano"
+plate_version = "pinned-test"
+plate_license = "Apache-2.0"
+"#
+        .to_string();
+        for (file, role, model_name) in [
+            ("detector.onnx", "detector", "SCRFD-0.5GF"),
+            ("embedder.onnx", "embedder", "ArcFace-MBF"),
+            ("plate.onnx", "plate", "RTMDet-nano"),
+        ] {
+            let bytes = fs::read(models.join(file)).unwrap();
+            let sha = sha256_hex(&bytes);
+            fs::write(bundle_dir.join("weights").join(file), &bytes).unwrap();
+            manifest.push_str(&format!(
+                "\n[[files]]\nrole = \"{role}\"\nname = \"{model_name}\"\nversion = \"pinned-test\"\nsha256 = \"{sha}\"\nlicense = \"Apache-2.0\"\npath = \"weights/{file}\"\n"
+            ));
+        }
+        fs::write(bundle_dir.join("manifest.toml"), manifest).unwrap();
+        let bundle = load_bundle(&bundle_dir).unwrap();
+        assert!(bundle.weights_ready);
+        assert!(runtime_linked());
+        assert_eq!(active_execution(), Execution::Cpu);
+        let mut face = load(&bundle).unwrap();
+        let image = RgbImage::from_pixel(48, 36, Rgb([12, 24, 36]));
+        assert!(face.detect(&image).unwrap().is_empty());
+        let crop = RgbImage::from_pixel(40, 40, Rgb([200, 10, 10]));
+        let plain = face.embed(&crop, None).unwrap();
+        assert!(plain.len() >= 128);
+        let points = [
+            (8.0, 10.0),
+            (30.0, 10.0),
+            (18.0, 20.0),
+            (10.0, 32.0),
+            (28.0, 32.0),
+        ];
+        let aligned = face.embed(&crop, Some(points)).unwrap();
+        assert_eq!(aligned.len(), plain.len());
+        let empty = face.embed(&RgbImage::new(0, 0), None).unwrap();
+        assert_eq!(empty.len(), plain.len());
+    }
 }

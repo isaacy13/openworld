@@ -475,6 +475,7 @@ dependencies = [
  "clap",
  "openworld-core",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

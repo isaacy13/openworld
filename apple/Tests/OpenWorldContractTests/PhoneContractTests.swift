@@ -115,6 +115,46 @@ final class PhoneContractTests: XCTestCase {
         XCTAssertTrue(measured.contains("phone"))
     }
 
+    func testScanArgumentsMatchThePhoneContract() {
+        let media = MediaArguments(
+            width: 640, height: 480, fps: 30, frames: 2, duration: 1, video: true, containerUnix: 1000
+        )
+        let args = PhoneArguments.scan(
+            catalog: "/bundles",
+            input: "/in.png",
+            bundle: "fast",
+            longSide: "640",
+            coverage: "measured",
+            posters: "/posters",
+            frames: "/frames",
+            out: "/out",
+            phone: true,
+            media: media
+        )
+        XCTAssertEqual(
+            args,
+            [
+                "--json", "--bundles", "/bundles", "scan",
+                "--input", "/in.png",
+                "--bundle", "fast",
+                "--long-side", "640",
+                "--coverage", "measured",
+                "--posters", "/posters",
+                "--out", "/out",
+                "--form-factor", "phone",
+                "--provider", "cpu",
+                "--width", "640",
+                "--height", "480",
+                "--fps", "30.0",
+                "--frame-count", "2",
+                "--duration", "1.0",
+                "--video",
+                "--container-unix", "1000",
+                "--frames", "/frames",
+            ]
+        )
+    }
+
     private func scan(_ kind: String) throws -> ScanReport {
         let file = try still(kind)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

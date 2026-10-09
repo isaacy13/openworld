@@ -160,5 +160,33 @@ mod tests {
         l2_normalize(&mut v);
         let n = (v[0] * v[0] + v[1] * v[1]).sqrt();
         assert!((n - 1.0).abs() < 1e-5);
+        let mut zero = vec![0.0f32];
+        l2_normalize(&mut zero);
+        assert_eq!(zero, vec![0.0]);
+    }
+
+    #[test]
+    fn a_collapsed_landmark_set_is_not_warped() {
+        let same = [(3.0, 4.0); 5];
+        assert!(similarity(&same, &TEMPLATE_112).is_none());
+    }
+
+    #[test]
+    fn warp_samples_source_pixels_and_pads_outside_the_crop() {
+        let mut image = RgbImage::from_pixel(40, 40, Rgb([10, 20, 30]));
+        image.put_pixel(20, 20, Rgb([255, 0, 0]));
+        let points = [
+            (8.0, 10.0),
+            (30.0, 11.0),
+            (18.0, 22.0),
+            (10.0, 32.0),
+            (28.0, 33.0),
+        ];
+        let warped = warp_112(&image, &points).unwrap();
+        assert_eq!(warped.dimensions(), (CROP, CROP));
+        let values = nchw(&warped);
+        assert_eq!(values.len(), (3 * CROP * CROP) as usize);
+        assert!(values.iter().any(|v| *v < -0.9));
+        assert!(values.iter().any(|v| *v > -0.9));
     }
 }

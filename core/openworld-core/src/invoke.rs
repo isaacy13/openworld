@@ -65,15 +65,20 @@ fn dispatch(args: &[String]) -> Result<Value, String> {
         }
         "posters" => posters(&bundles, &parsed),
         "" => Err("The scan request was empty. Refusing.".into()),
-        other => Err(format!("The command {other} is not available from the library. Refusing.")),
+        other => Err(format!(
+            "The command {other} is not available from the library. Refusing."
+        )),
     }
 }
 
 fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
     match parsed.action.as_deref() {
         Some("write-fixture") => {
-            let out = parsed.flag("out").ok_or("A poster pack directory is required. Refusing.")?;
-            let pack = write_fixture_pack(Path::new(out), SystemTime::now()).map_err(|err| format!("{err}. Refusing."))?;
+            let out = parsed
+                .flag("out")
+                .ok_or("A poster pack directory is required. Refusing.")?;
+            let pack = write_fixture_pack(Path::new(out), SystemTime::now())
+                .map_err(|err| format!("{err}. Refusing."))?;
             Ok(json!({
                 "id": pack.id,
                 "posters": pack.posters.len(),
@@ -88,7 +93,9 @@ fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
                 .map(|bundle| bundle.real_posters_allowed)
                 .unwrap_or(false);
             match update::update_posters(allowed, &mut RefuseTransport) {
-                Ok(pack) => Ok(json!({ "posters": pack.posters.len(), "body_sha256": pack.body_sha256 })),
+                Ok(pack) => {
+                    Ok(json!({ "posters": pack.posters.len(), "body_sha256": pack.body_sha256 }))
+                }
                 Err(_) => Ok(json!({
                     "status": "refused",
                     "summary": "Real FBI photos stay off. Fast does not have a curve that allows them.",
@@ -97,7 +104,9 @@ fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
             }
         }
         Some("check") => {
-            let path = parsed.flag("posters").ok_or("A poster pack directory is required. Refusing.")?;
+            let path = parsed
+                .flag("posters")
+                .ok_or("A poster pack directory is required. Refusing.")?;
             match crate::load_pack(Path::new(path), SystemTime::now()) {
                 Ok(pack) => Ok(json!({
                     "id": pack.id,
@@ -146,7 +155,9 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
         }
         if arg == "--bundles" {
             index += 1;
-            let path = args.get(index).ok_or("A bundle catalog path is required. Refusing.")?;
+            let path = args
+                .get(index)
+                .ok_or("A bundle catalog path is required. Refusing.")?;
             bundles = Some(PathBuf::from(path));
             index += 1;
             continue;
@@ -165,7 +176,13 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
         (None, rest)
     };
     let (flags, bools) = flags_from(&rest)?;
-    Ok(Parsed { bundles, cmd, action, flags, bools })
+    Ok(Parsed {
+        bundles,
+        cmd,
+        action,
+        flags,
+        bools,
+    })
 }
 
 fn flags_from(rest: &[String]) -> Result<(HashMap<String, String>, HashSet<String>), String> {
@@ -183,7 +200,10 @@ fn flags_from(rest: &[String]) -> Result<(HashMap<String, String>, HashSet<Strin
             return Err(format!("Unexpected argument {arg}. Refusing."));
         };
         index += 1;
-        let value = rest.get(index).cloned().ok_or_else(|| format!("Missing value for --{name}. Refusing."))?;
+        let value = rest
+            .get(index)
+            .cloned()
+            .ok_or_else(|| format!("Missing value for --{name}. Refusing."))?;
         flags.insert(name.replace('-', "_"), value);
         index += 1;
     }
@@ -197,7 +217,8 @@ fn scan_request(bundles: &Path, parsed: &Parsed) -> Result<ScanRequest, String> 
     let coverage = parsed.flag("coverage").unwrap_or("complete");
     let form = parsed.flag("form_factor").unwrap_or("computer");
     let provider = parsed.flag("provider").unwrap_or("cpu");
-    let detection = DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
+    let detection =
+        DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
     let coverage = Coverage::parse(coverage).ok_or("Coverage must be complete or measured.")?;
     let form_factor = match form {
         "phone" => FormFactor::Phone,
@@ -208,7 +229,10 @@ fn scan_request(bundles: &Path, parsed: &Parsed) -> Result<ScanRequest, String> 
     let out = PathBuf::from(parsed.flag("out").unwrap_or("."));
     let frames_dir = parsed.flag("frames").map(PathBuf::from);
     let abort_after_frames = match parsed.flag("abort_after_frames") {
-        Some(text) => Some(text.parse::<u64>().map_err(|_| "abort-after-frames must be a number. Refusing.".to_string())?),
+        Some(text) => Some(
+            text.parse::<u64>()
+                .map_err(|_| "abort-after-frames must be a number. Refusing.".to_string())?,
+        ),
         None => None,
     };
     Ok(ScanRequest {
@@ -232,14 +256,29 @@ fn scan_request(bundles: &Path, parsed: &Parsed) -> Result<ScanRequest, String> 
 
 fn media_from(parsed: &Parsed) -> Result<Option<MediaFacts>, String> {
     let touched = parsed.bools.contains("video")
-        || ["width", "height", "fps", "frame_count", "duration", "container_unix"]
-            .iter()
-            .any(|key| parsed.flags.contains_key(*key));
+        || [
+            "width",
+            "height",
+            "fps",
+            "frame_count",
+            "duration",
+            "container_unix",
+        ]
+        .iter()
+        .any(|key| parsed.flags.contains_key(*key));
     if !touched {
         return Ok(None);
     }
-    let width = parsed.flag("width").ok_or("A platform decode needs a width.")?.parse::<u32>().map_err(|_| "A platform decode needs a width.")?;
-    let height = parsed.flag("height").ok_or("A platform decode needs a height.")?.parse::<u32>().map_err(|_| "A platform decode needs a height.")?;
+    let width = parsed
+        .flag("width")
+        .ok_or("A platform decode needs a width.")?
+        .parse::<u32>()
+        .map_err(|_| "A platform decode needs a width.")?;
+    let height = parsed
+        .flag("height")
+        .ok_or("A platform decode needs a height.")?
+        .parse::<u32>()
+        .map_err(|_| "A platform decode needs a height.")?;
     let frames = parsed
         .flag("frame_count")
         .ok_or("A platform decode needs a frame count.")?
@@ -249,15 +288,22 @@ fn media_from(parsed: &Parsed) -> Result<Option<MediaFacts>, String> {
         return Err("Bad codec or unreadable file. Refusing.".into());
     }
     let fps = match parsed.flag("fps") {
-        Some(text) => text.parse::<f64>().map_err(|_| "A platform decode needs a frame rate.".to_string())?,
+        Some(text) => text
+            .parse::<f64>()
+            .map_err(|_| "A platform decode needs a frame rate.".to_string())?,
         None => 0.0,
     };
     let duration_sec = match parsed.flag("duration") {
-        Some(text) => text.parse::<f64>().map_err(|_| "A platform decode needs a duration.".to_string())?,
+        Some(text) => text
+            .parse::<f64>()
+            .map_err(|_| "A platform decode needs a duration.".to_string())?,
         None => 0.0,
     };
     let container_unix = match parsed.flag("container_unix") {
-        Some(text) => Some(text.parse::<u64>().map_err(|_| "container-unix must be a number. Refusing.".to_string())?),
+        Some(text) => Some(
+            text.parse::<u64>()
+                .map_err(|_| "container-unix must be a number. Refusing.".to_string())?,
+        ),
         None => None,
     };
     Ok(Some(MediaFacts {
@@ -292,7 +338,10 @@ mod tests {
     use super::*;
 
     fn repo_bundles() -> String {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bundles").display().to_string()
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../bundles")
+            .display()
+            .to_string()
     }
 
     #[test]
@@ -305,7 +354,12 @@ mod tests {
             "bundles".into(),
         ]))
         .unwrap();
-        let ids: Vec<_> = listed["bundles"].as_array().unwrap().iter().map(|row| row["id"].as_str().unwrap().to_string()).collect();
+        let ids: Vec<_> = listed["bundles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["id"].as_str().unwrap().to_string())
+            .collect();
         assert!(ids.contains(&"fast".to_string()));
         assert!(ids.contains(&"accurate".to_string()));
 
@@ -353,6 +407,111 @@ mod tests {
         let value: Value = serde_json::from_str(&text).unwrap();
         let note = value["device_note"].as_str().unwrap_or("");
         assert!(note.contains("CPU"), "{text}");
-        assert!(value["heat_note"].as_str().unwrap_or("").contains("hot"), "{text}");
+        assert!(
+            value["heat_note"].as_str().unwrap_or("").contains("hot"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_broken_argument_list_refuses_before_a_scan() {
+        let refuse = |args: &[&str]| {
+            let owned: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+            let value: Value = serde_json::from_str(&invoke_argv(&owned)).unwrap();
+            assert_eq!(value["status"], "refused", "{args:?} {value}");
+            assert_ne!(value["summary"], "No candidate is not a clearance.");
+        };
+        refuse(&[]);
+        refuse(&["dance"]);
+        refuse(&["posters"]);
+        refuse(&["posters", "write-fixture"]);
+        refuse(&["--bundles"]);
+        refuse(&["estimate", "--long-side", "100"]);
+        refuse(&["estimate", "--form-factor", "tablet"]);
+        refuse(&["estimate", "--coverage", "sometimes"]);
+        refuse(&["scan", "extra"]);
+        refuse(&["scan", "--input"]);
+        refuse(&[
+            "estimate",
+            "--abort-after-frames",
+            "nope",
+            "--width",
+            "10",
+            "--height",
+            "10",
+            "--frame-count",
+            "1",
+        ]);
+        refuse(&[
+            "estimate",
+            "--width",
+            "0",
+            "--height",
+            "10",
+            "--frame-count",
+            "1",
+        ]);
+        refuse(&["estimate", "--video"]);
+        refuse(&[
+            "estimate",
+            "--width",
+            "8",
+            "--height",
+            "8",
+            "--frame-count",
+            "1",
+            "--fps",
+            "fast",
+        ]);
+        refuse(&[
+            "estimate",
+            "--width",
+            "8",
+            "--height",
+            "8",
+            "--frame-count",
+            "1",
+            "--duration",
+            "fast",
+        ]);
+        refuse(&[
+            "estimate",
+            "--width",
+            "8",
+            "--height",
+            "8",
+            "--frame-count",
+            "1",
+            "--container-unix",
+            "fast",
+        ]);
+        refuse(&[
+            "posters",
+            "check",
+            "--posters",
+            "/tmp/openworld-no-such-pack",
+        ]);
+
+        let dir = tempfile::tempdir().unwrap();
+        let bundles = repo_bundles();
+        let written: Value = serde_json::from_str(&invoke_argv(&[
+            "--bundles".into(),
+            bundles,
+            "posters".into(),
+            "write-fixture".into(),
+            "--out".into(),
+            dir.path().display().to_string(),
+        ]))
+        .unwrap();
+        assert_eq!(written["perception"], "fiducial-v1");
+        let checked: Value = serde_json::from_str(&invoke_argv(&[
+            "posters".into(),
+            "check".into(),
+            "--posters".into(),
+            dir.path().display().to_string(),
+        ]))
+        .unwrap();
+        assert_eq!(checked["id"], "fixture-v0");
+        assert!(checked["posters"].as_u64().unwrap() >= 1);
     }
 }

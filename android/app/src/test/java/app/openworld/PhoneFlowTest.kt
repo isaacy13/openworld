@@ -202,6 +202,17 @@ class PhoneFlowTest {
         assertEquals(Step.Device, model.step)
     }
 
+    @Test
+    fun aPngStillIsCopiedByteForByte() {
+        val file = still("blank")
+        val frames = File(file.parentFile, "ow-frames-" + System.nanoTime())
+        val facts = PlatformDecode.writeFrames(file, frames)
+        val copied = File(frames, "frame_000000.png").readBytes()
+        assertTrue(copied.contentEquals(file.readBytes()))
+        assertEquals(1L, facts.frames)
+        assertFalse(facts.video)
+    }
+
     private fun drive(kind: String): FlowModel {
         val model = FlowModel()
         choose(model, still(kind))

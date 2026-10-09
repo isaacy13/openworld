@@ -880,3 +880,316 @@ fn emit(json_mode: bool, value: serde_json::Value) {
         );
     }
 }
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    fn bundles() -> String {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../bundles")
+            .display()
+            .to_string()
+    }
+
+    fn run_cli(json_mode: bool, args: &[&str]) -> Result<i32, String> {
+        let mut argv = vec!["openworld".to_string()];
+        if json_mode {
+            argv.push("--json".into());
+        }
+        argv.push("--bundles".into());
+        argv.push(bundles());
+        argv.extend(args.iter().map(|item| (*item).to_string()));
+        run(Cli::parse_from(argv))
+    }
+
+    #[test]
+    fn the_cli_runs_the_library_commands() {
+        assert_eq!(run_cli(true, &["copy"]).unwrap(), 0);
+        assert_eq!(run_cli(false, &["copy"]).unwrap(), 0);
+        assert_eq!(run_cli(true, &["bundles"]).unwrap(), 0);
+        assert_eq!(run_cli(false, &["bundles"]).unwrap(), 0);
+
+        let dir = tempfile::tempdir().unwrap();
+        let posters = dir.path().join("posters");
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "posters",
+                    "write-fixture",
+                    "--out",
+                    posters.to_str().unwrap()
+                ]
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(
+                true,
+                &["posters", "check", "--posters", posters.to_str().unwrap()]
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(run_cli(true, &["posters", "update"]).unwrap(), 2);
+        assert_eq!(run_cli(false, &["posters", "update"]).unwrap(), 2);
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "posters",
+                    "check",
+                    "--posters",
+                    "/tmp/openworld-cli-missing-pack"
+                ]
+            )
+            .unwrap(),
+            2
+        );
+
+        let scene = dir.path().join("scene.png");
+        assert_eq!(
+            run_cli(
+                true,
+                &["fixture-still", "--out", scene.to_str().unwrap(), "--scene"]
+            )
+            .unwrap(),
+            0
+        );
+        let blank_path = dir.path().join("blank.png");
+        assert_eq!(
+            run_cli(
+                false,
+                &[
+                    "fixture-still",
+                    "--out",
+                    blank_path.to_str().unwrap(),
+                    "--blank"
+                ]
+            )
+            .unwrap(),
+            0
+        );
+        let face = dir.path().join("face.png");
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "fixture-still",
+                    "--out",
+                    face.to_str().unwrap(),
+                    "--id",
+                    "7",
+                    "--module",
+                    "16",
+                    "--x",
+                    "16",
+                    "--y",
+                    "16"
+                ]
+            )
+            .unwrap(),
+            0
+        );
+        assert!(run_cli(
+            true,
+            &[
+                "fixture-still",
+                "--out",
+                dir.path().join("both.png").to_str().unwrap(),
+                "--scene",
+                "--blank"
+            ]
+        )
+        .is_err());
+        assert!(run_cli(
+            true,
+            &[
+                "fixture-still",
+                "--out",
+                dir.path().join("xy.png").to_str().unwrap(),
+                "--x",
+                "8"
+            ]
+        )
+        .is_err());
+        assert!(run_cli(
+            true,
+            &[
+                "fixture-still",
+                "--out",
+                dir.path().join("below.png").to_str().unwrap(),
+                "--below-cutoff",
+                "--x",
+                "8",
+                "--y",
+                "8"
+            ]
+        )
+        .is_err());
+        assert!(run_cli(
+            true,
+            &[
+                "fixture-still",
+                "--out",
+                dir.path().join("mod.png").to_str().unwrap(),
+                "--module",
+                "0"
+            ]
+        )
+        .is_err());
+        assert!(run_cli(
+            true,
+            &[
+                "fixture-still",
+                "--out",
+                dir.path().join("fit.png").to_str().unwrap(),
+                "--x",
+                "390",
+                "--y",
+                "8"
+            ]
+        )
+        .is_err());
+
+        assert_eq!(
+            run_cli(true, &["leave", "--url", "https://www.fbi.gov/wanted"]).unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(false, &["leave", "--url", "https://fbi.gov/"]).unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(true, &["leave", "--url", "https://example.com"]).unwrap(),
+            2
+        );
+
+        let junk = dir.path().join("notes.txt");
+        std::fs::write(&junk, b"not a photo").unwrap();
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "estimate",
+                    "--input",
+                    junk.to_str().unwrap(),
+                    "--long-side",
+                    "640"
+                ]
+            )
+            .unwrap(),
+            2
+        );
+        assert!(run_cli(
+            true,
+            &[
+                "estimate",
+                "--input",
+                junk.to_str().unwrap(),
+                "--long-side",
+                "100"
+            ]
+        )
+        .is_err());
+        assert_eq!(
+            run_cli(
+                false,
+                &[
+                    "estimate",
+                    "--input",
+                    junk.to_str().unwrap(),
+                    "--form-factor",
+                    "phone",
+                    "--width",
+                    "1920",
+                    "--height",
+                    "1080",
+                    "--fps",
+                    "30",
+                    "--frame-count",
+                    "20000",
+                    "--duration",
+                    "600",
+                    "--video",
+                ],
+            )
+            .unwrap(),
+            0
+        );
+
+        let out = dir.path().join("result");
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "scan",
+                    "--input",
+                    scene.to_str().unwrap(),
+                    "--posters",
+                    posters.to_str().unwrap(),
+                    "--out",
+                    out.to_str().unwrap(),
+                    "--progress",
+                ],
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(true, &["delete", "--out", out.to_str().unwrap()]).unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(false, &["delete", "--out", dir.path().to_str().unwrap()]).unwrap(),
+            2
+        );
+
+        let analyzed = dir.path().join("analyzed");
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "analyze",
+                    "--input",
+                    blank_path.to_str().unwrap(),
+                    "--bundle",
+                    "fast",
+                    "--long-side",
+                    "640",
+                    "--coverage",
+                    "measured",
+                    "--posters",
+                    posters.to_str().unwrap(),
+                    "--out",
+                    analyzed.to_str().unwrap(),
+                    "--form-factor",
+                    "phone",
+                    "--yes",
+                ],
+            )
+            .unwrap(),
+            0
+        );
+        let demo_dir = dir.path().join("demo");
+        assert_eq!(
+            run_cli(true, &["demo", "--out", demo_dir.to_str().unwrap()]).unwrap(),
+            0
+        );
+        assert_eq!(
+            run_cli(
+                false,
+                &["demo", "--out", dir.path().join("demo2").to_str().unwrap()]
+            )
+            .unwrap(),
+            0
+        );
+
+        assert_eq!(run_cli(true, &["measure"]).unwrap(), 0);
+
+        let listed = run(Cli::parse_from(["openworld", "copy"])).unwrap();
+        assert_eq!(listed, 0);
+    }
+}

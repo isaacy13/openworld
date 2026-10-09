@@ -1038,3 +1038,7 @@ fn media_duration(media: &MediaFacts) -> f64 {
         0.0
     }
 }
+
+#[cfg(test)]
+#[path = "scan_critical.rs"]
+mod critical_tests;
