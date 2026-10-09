@@ -401,8 +401,24 @@ class OpenWorld(Gtk.Application):
             lines.append(payload["suggest_computer_text"])
         if self.coverage == "measured":
             lines.append(PHRASES["brief"])
-        lines.append(f"Bundle {self.bundle_id}. Detection {self.long_side}. Coverage {self.coverage}.")
+        lines.append(self.choice_line())
         self.estimate_body.set_text("\n".join(line for line in lines if line))
+
+    def choice_line(self) -> str:
+        name = self.bundle_id
+        for item in self.rows:
+            if item.get("id") == self.bundle_id and item.get("name"):
+                name = item["name"]
+                break
+        if self.long_side == "full":
+            size = "Full resolution"
+        else:
+            size = f"{self.long_side} px on the long side"
+        if self.coverage == "measured":
+            cover = "5 frames a second, plus the tracker."
+        else:
+            cover = "Every decoded frame."
+        return f"{name}. {size}. {cover}"
 
     def start_scan(self) -> None:
         if self.scan_thread is not None and self.scan_thread.is_alive():
@@ -853,6 +869,9 @@ class OpenWorld(Gtk.Application):
         text = self.estimate_body.get_text()
         if "CPU" not in text or "second" not in text.lower() and "Less than" not in text:
             self._exercise_fail(f"estimate missing time or CPU note: {text}")
+            return False
+        if "Fast. 640 px on the long side. Every decoded frame." not in text or "Bundle fast" in text or "Coverage complete" in text:
+            self._exercise_fail(f"estimate did not repeat the choice in plain words: {text}")
             return False
         self.start_scan()
         GLib.timeout_add(200, self._exercise_wait, 0)

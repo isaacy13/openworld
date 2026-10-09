@@ -83,6 +83,14 @@ class FlowModel {
     }
     fun continueFromBundle() { step = Step.Size }
 
+    /** The bundle, size, and coverage in the same words as the choices above. */
+    fun choiceLine(): String {
+        val name = bundleRows.firstOrNull { it.first == bundleId }?.second?.lineSequence()?.firstOrNull() ?: bundleId
+        val size = if (longSide == "full") "Full resolution" else "$longSide px on the long side"
+        val cover = if (coverage == "measured") "5 frames a second, plus the tracker." else "Every decoded frame."
+        return "$name. $size. $cover"
+    }
+
     fun back() {
         leavingUrl = null
         leaveNotice = null
@@ -212,6 +220,7 @@ class FlowModel {
                     json.present("battery_note"),
                     json.present("suggest_computer_text"),
                     if (coverage == "measured") "A brief face can be missed." else null,
+                    choiceLine(),
                 ).joinToString("\n")
                 canAnalyze = true
             }

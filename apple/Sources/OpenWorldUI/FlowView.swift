@@ -84,6 +84,14 @@ public final class FlowModel: ObservableObject {
         step = .estimate
     }
 
+    /// The bundle, size, and coverage in the same words as the choices above.
+    public var choiceLine: String {
+        let name = bundles.first(where: { $0.id == bundleID })?.name ?? bundleID
+        let size = longSide == "full" ? "Full resolution" : "\(longSide) px on the long side"
+        let cover = coverage == "measured" ? "5 frames a second, plus the tracker." : "Every decoded frame."
+        return "\(name). \(size). \(cover)"
+    }
+
     public func goBack() {
         leavingURL = nil
         leaveError = nil
@@ -351,6 +359,7 @@ public struct FlowView: View {
                 if let note = estimate.heatNote { Text(note) }
                 if let note = estimate.batteryNote { Text(note) }
                 if let note = estimate.suggestComputerText { Text(note) }
+                Text(model.choiceLine)
             } else if let error = model.error {
                 Text(error)
             }

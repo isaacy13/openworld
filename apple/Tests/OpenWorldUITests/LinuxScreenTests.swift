@@ -75,6 +75,7 @@ final class OpenWorldUITests: XCTestCase {
             model.step = .size
             _ = FlowView(model: model, importControl: self.control).body
             model.loadEstimate()
+            XCTAssertEqual(model.choiceLine, "Fast. 640 px on the long side. 5 frames a second, plus the tracker.")
             XCTAssertEqual(model.estimate?.deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
             XCTAssertTrue(model.estimate?.heatNote?.contains("This phone may get hot.") == true)
             model.analyze()

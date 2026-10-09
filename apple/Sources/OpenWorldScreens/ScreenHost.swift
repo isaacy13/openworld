@@ -116,6 +116,7 @@ enum ScreenCopy {
                 if let note = estimate.deviceNote { lines.append(note) }
                 if let note = estimate.heatNote { lines.append(note) }
                 if let note = estimate.batteryNote { lines.append(note) }
+                lines.append(model.choiceLine)
             } else if let error = model.error {
                 lines.append(error)
             }

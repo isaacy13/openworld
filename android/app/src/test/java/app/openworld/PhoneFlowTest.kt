@@ -250,6 +250,9 @@ class PhoneFlowTest {
         assertTrue(model.estimateText.contains("A long scan uses a lot of battery."))
         assertFalse(model.estimateText.contains("A computer will finish this sooner."))
         assertFalse(model.estimateText.lineSequence().any { it == "null" })
+        assertTrue(model.estimateText.contains("Fast. 640 px on the long side. Every decoded frame."))
+        assertFalse(model.estimateText.contains("Bundle fast"))
+        assertFalse(model.estimateText.contains("Coverage complete"))
     }
 
     @Test
@@ -257,8 +260,10 @@ class PhoneFlowTest {
         val model = FlowModel()
         choose(model, still("blank"))
         model.coverage = "measured"
+        model.continueFromDevice()
         model.continueFromSize()
         assertTrue(model.estimateText.contains("A brief face can be missed."))
+        assertTrue(model.estimateText.contains("Fast. 640 px on the long side. 5 frames a second, plus the tracker."))
     }
 
     @Test
