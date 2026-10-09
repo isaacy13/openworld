@@ -47,6 +47,7 @@ class PhoneFlowTest {
         assertTrue(model.detail.contains("This file is not authenticated."))
         assertTrue(model.detail.contains("On-device does not mean the file is real."))
         assertTrue(model.detail.contains("Fixture markers were read."))
+        assertFalse(model.detail.lineSequence().any { it == "null" })
         val labels = model.strip.map { it.first }
         assertTrue(labels.contains("Possible candidate. Not an identification."))
         assertTrue(labels.contains("Not compared."))
@@ -67,6 +68,7 @@ class PhoneFlowTest {
     fun blankStillIsAClearance() {
         val model = drive("blank")
         assertEquals("No candidate is not a clearance.", model.summary)
+        assertFalse(model.detail.lineSequence().any { it == "null" })
         assertTrue(model.strip.isEmpty())
         assertNull(model.fbiUrl)
         val report = scanReport(still("blank"))
@@ -157,6 +159,7 @@ class PhoneFlowTest {
         assertTrue(model.estimateText.contains("This phone may get hot."))
         assertTrue(model.estimateText.contains("A long scan uses a lot of battery."))
         assertFalse(model.estimateText.contains("A computer will finish this sooner."))
+        assertFalse(model.estimateText.lineSequence().any { it == "null" })
     }
 
     @Test

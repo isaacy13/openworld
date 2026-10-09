@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
@@ -92,12 +93,12 @@ class FlowModel {
                 canAnalyze = false
             } else {
                 estimateText = listOfNotNull(
-                    json.optString("human").ifBlank { null },
-                    json.optString("caveat").ifBlank { null },
-                    json.optString("device_note").ifBlank { null },
-                    json.optString("heat_note").ifBlank { null },
-                    json.optString("battery_note").ifBlank { null },
-                    json.optString("suggest_computer_text").ifBlank { null },
+                    json.present("human"),
+                    json.present("caveat"),
+                    json.present("device_note"),
+                    json.present("heat_note"),
+                    json.present("battery_note"),
+                    json.present("suggest_computer_text"),
                     if (coverage == "measured") "A brief face can be missed." else null,
                 ).joinToString("\n")
                 canAnalyze = true
@@ -139,9 +140,9 @@ class FlowModel {
             )
             summary = json.optString("summary", "Incomplete.")
             val lines = mutableListOf<String>()
-            json.optString("coverage_banner").takeIf { it.isNotBlank() }?.let(lines::add)
-            json.optString("bundle_name").takeIf { it.isNotBlank() }?.let { lines.add("Bundle: $it") }
-            json.optString("perception_note").takeIf { it.isNotBlank() }?.let(lines::add)
+            json.present("coverage_banner")?.let(lines::add)
+            json.present("bundle_name")?.let { lines.add("Bundle: $it") }
+            json.present("perception_note")?.let(lines::add)
             val disclosure = json.optJSONArray("disclosure")
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))
@@ -150,11 +151,11 @@ class FlowModel {
             if (candidates != null) {
                 for (i in 0 until candidates.length()) {
                     val item = candidates.getJSONObject(i)
-                    lines.add(item.optString("wording"))
-                    lines.add(item.optString("uncertainty"))
-                    lines.add(item.optString("poster_title"))
-                    val page = item.optString("fbi_url")
-                    if (page.isNotBlank()) fbiUrl = page
+                    item.present("wording")?.let(lines::add)
+                    item.present("uncertainty")?.let(lines::add)
+                    item.present("poster_title")?.let(lines::add)
+                    val page = item.present("fbi_url")
+                    if (page != null) fbiUrl = page
                 }
             }
             val pictures = mutableListOf<Pair<String, String>>()
@@ -202,4 +203,9 @@ class FlowModel {
         }
         return null
     }
+}
+
+private fun JSONObject.present(key: String): String? {
+    if (!has(key) || isNull(key)) return null
+    return optString(key).ifBlank { null }
 }
