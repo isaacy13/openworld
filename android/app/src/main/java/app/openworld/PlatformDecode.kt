@@ -13,7 +13,8 @@ import java.io.IOException
 import kotlin.math.roundToInt
 
 /**
- * Decodes with MediaCodec. Stills use BitmapFactory. The Rust library does the scan.
+ * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
+ * because BitmapFactory keeps only the first one. The Rust library does the scan.
  * Audio is ignored. FFmpeg is not used.
  */
 object PlatformDecode {
@@ -47,6 +48,7 @@ object PlatformDecode {
         pngSize(file)?.let { (width, height) ->
             return Facts(width, height, 0.0, 1, 0.0, false)
         }
+        if (GifFrames.isGif(file)) return GifFrames.facts(file)
         if (hasImageHeader(file)) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
@@ -63,6 +65,7 @@ object PlatformDecode {
         if (!directory.mkdirs() && !directory.isDirectory) {
             throw IOException("Bad codec or unreadable file. Refusing.")
         }
+        if (GifFrames.isGif(file)) return GifFrames.write(file, directory)
         val meta = facts(file)
         if (!meta.video) {
             // A PNG the user already has is one frame. Copy the bytes so the scan

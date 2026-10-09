@@ -42,6 +42,9 @@ enum PlatformDecoder {
     #if os(Linux)
     /// A PNG the user already has is one frame. Copy the bytes. Video stays on AVFoundation.
     static func facts(url: URL) throws -> Facts {
+        if GifFrames.isGif(url) {
+            return try adopted(try GifFrames.read(url), containerUnix: containerUnix(url))
+        }
         guard let size = pngSize(url) else {
             throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
         }
@@ -58,6 +61,12 @@ enum PlatformDecoder {
     }
 
     static func writeFrames(url: URL, directory: URL) throws -> Facts {
+        if GifFrames.isGif(url) {
+            let reel = try GifFrames.write(url, directory: directory)
+            var gif = try adopted(reel, containerUnix: containerUnix(url))
+            gif.directory = directory
+            return gif
+        }
         guard pngSize(url) != nil else {
             throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
         }
@@ -96,6 +105,9 @@ enum PlatformDecoder {
     #else
     static func facts(url: URL) throws -> Facts {
         let container = containerUnix(url)
+        if GifFrames.isGif(url) {
+            return try adopted(try GifFrames.read(url), containerUnix: container)
+        }
         if isVideo(url) {
             let asset = AVURLAsset(url: url)
             guard let track = asset.tracks(withMediaType: .video).first else {
@@ -149,6 +161,12 @@ enum PlatformDecoder {
 
     /// Writes one PNG per decoded frame. Evidence for the scan, not a second video file.
     static func writeFrames(url: URL, directory: URL) throws -> Facts {
+        if GifFrames.isGif(url) {
+            let reel = try GifFrames.write(url, directory: directory)
+            var gif = try adopted(reel, containerUnix: containerUnix(url))
+            gif.directory = directory
+            return gif
+        }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var facts = try facts(url: url)
         if !facts.video {
@@ -238,6 +256,26 @@ enum PlatformDecoder {
         }
     }
     #endif
+
+    private static func adopted(_ reel: GifFrames.Reel, containerUnix: Int?) throws -> Facts {
+        if reel.video && reel.fps <= 0 {
+            throw failure("The decoder did not report a frame rate. Refusing.")
+        }
+        let count = reel.frames.count
+        if count <= 0 {
+            throw failure("Bad codec or unreadable file. Refusing.")
+        }
+        return Facts(
+            width: reel.width,
+            height: reel.height,
+            fps: reel.fps,
+            frames: count,
+            duration: reel.duration,
+            video: reel.video,
+            containerUnix: containerUnix,
+            directory: nil
+        )
+    }
 
     private struct Failure: LocalizedError {
         var message: String

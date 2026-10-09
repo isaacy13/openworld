@@ -46,7 +46,7 @@ python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles
 
 A face enters the inventory at 64 px on the short side of the detection image. It is compared only when the crop from the original frame is at least 112 px on the short side. Below that the label is "Not compared." It is not a candidate and it is not a clearance.
 
-`complete` analyzes every decoded frame. `measured` analyzes 5 frames a second, plus the tracker, and shows "A brief face can be missed." There is no maximum duration. The estimate is a planning model, not a thermal table. On a phone it also shows heat and battery. A long phone estimate suggests a computer. You can still run `complete` on the phone. If the job stops, the result is "Incomplete." and the screen says why, such as "The file was not fully decoded."
+`complete` analyzes every decoded frame. An animated GIF is every frame of that file. A face that is not on the first frame is still compared. A one-frame GIF stays one frame. `measured` analyzes 5 frames a second, plus the tracker, and shows "A brief face can be missed." There is no maximum duration. The estimate is a planning model, not a thermal table. On a phone it also shows heat and battery. A long phone estimate suggests a computer. You can still run `complete` on the phone. If the job stops, the result is "Incomplete." and the screen says why, such as "The file was not fully decoded."
 
 A bad hash, a bad codec, or a missing or expired poster pack is a refusal.
 
@@ -62,7 +62,7 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
 
-`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, and a container time that disagrees with the file time is a warning, not a refusal. A one-frame GIF stays one frame and a clearance. An audio file is refused. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
+`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, and a container time that disagrees with the file time is a warning, not a refusal. A one-frame GIF stays one frame and a clearance. A three-frame GIF whose marker is only on the middle frame stays a candidate, and the scan reports three frames. An audio file is refused. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
 
 ## Continuous integration
 

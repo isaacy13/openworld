@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14
+      - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14 ffmpeg
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli -p openworld-core
       # swift-actions/setup-swift does not list 6.3.3. OpenSwiftUI needs
       # tools 6.3, so the job installs that release from swift.org.

@@ -332,6 +332,101 @@ class PhoneFlowTest {
         assertFalse(facts.video)
     }
 
+    @Test
+    fun anAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() {
+        val gif = laterFrameGif()
+        val facts = PlatformDecode.facts(gif)
+        assertTrue(facts.video)
+        assertEquals(3L, facts.frames)
+        assertEquals(5.0, facts.fps, 0.05)
+        val report = scanReport(gif)
+        assertEquals("complete", report.getString("status"))
+        assertEquals("Possible candidate. Not an identification.", report.getString("summary"))
+        assertEquals(3, report.getInt("frames_decoded"))
+        val candidates = report.getJSONArray("candidates")
+        assertTrue(candidates.length() > 0)
+        for (i in 0 until candidates.length()) {
+            assertEquals(1, candidates.getJSONObject(i).getInt("frame_index"))
+        }
+        val frames = File(gif.parentFile, "ow-gif-frames-" + System.nanoTime())
+        val reel = PlatformDecode.writeFrames(gif, frames)
+        val only = File(gif.parentFile, "ow-gif-first-" + System.nanoTime())
+        assertTrue(only.mkdirs())
+        File(frames, "frame_000000.png").copyTo(File(only, "frame_000000.png"))
+        val first = scanPrepared(
+            gif,
+            reel.copy(frames = 1, fps = 0.0, durationSec = 0.0, video = false, directory = only),
+        )
+        assertEquals("complete", first.getString("status"))
+        assertEquals("No candidate is not a clearance.", first.getString("summary"))
+        assertEquals(1, first.getInt("frames_decoded"))
+
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/clip.gif")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, gif.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertTrue(model.canAnalyze)
+        assertFalse(model.estimateText.contains("Refusing"))
+        model.analyze()
+        assertEquals("Possible candidate. Not an identification.", model.summary)
+        assertTrue(model.candidateRows.isNotEmpty())
+    }
+
+    @Test
+    fun aOneFrameGifStaysOneFrame() {
+        val gif = File.createTempFile("ow-one", ".gif")
+        ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=64x64", "-frames:v", "1", gif.absolutePath)
+        val facts = PlatformDecode.facts(gif)
+        assertFalse(facts.video)
+        assertEquals(1L, facts.frames)
+        assertEquals(0.0, facts.fps, 0.0)
+        val report = scanReport(gif)
+        assertEquals("No candidate is not a clearance.", report.getString("summary"))
+        assertEquals(1, report.getInt("frames_decoded"))
+        assertEquals(0, report.getJSONArray("candidates").length())
+    }
+
+    @Test
+    fun aBrokenGifIsRefused() {
+        val gif = File.createTempFile("ow-bad", ".gif")
+        gif.writeBytes("GIF89a".encodeToByteArray() + ByteArray(24))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/broken.gif")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, gif.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertEquals(Step.Estimate, model.step)
+    }
+
+    @Test
+    fun anInterlacedGifKeepsThePixelsOfThatFrame() {
+        val gif = File.createTempFile("ow-inter", ".gif")
+        gif.writeBytes(INTERLACED_GIF)
+        val reel = GifFrames.read(gif)
+        assertEquals(16, reel.width)
+        assertEquals(16, reel.height)
+        assertEquals(1, reel.frames.size)
+        val rgb = reel.frames[0]
+        for (y in 0 until 16) {
+            for (x in 0 until 16) {
+                val pixel = (y * 16 + x) * 3
+                val expected = if (x < 8 && y < 8) 0 else 255
+                assertEquals(expected, rgb[pixel].toInt() and 0xFF)
+                assertEquals(expected, rgb[pixel + 1].toInt() and 0xFF)
+                assertEquals(expected, rgb[pixel + 2].toInt() and 0xFF)
+            }
+        }
+    }
+
     private fun drive(kind: String): FlowModel {
         val model = FlowModel()
         choose(model, still(kind))
@@ -553,6 +648,73 @@ private fun still(kind: String): File {
     val code = process.waitFor()
     if (code != 0) error(text)
     return out
+}
+
+private val INTERLACED_GIF = (
+    "47494638376110001000810000ffffff0000000000000000002c00000000100010004008" +
+        "2f0003081c281080c18308132a3c4890e0c287101b0e7c28b120c48b182356a4b87161c5" +
+        "001c25661c49b2a449830101003b"
+    ).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+private fun laterFrameGif(): File {
+    val root = File(File.createTempFile("ow-later", "").parentFile, "ow-later-" + System.nanoTime())
+    check(root.mkdirs())
+    val scene = still("scene")
+    val blank = still("blank")
+    val header = ByteArray(24)
+    scene.inputStream().use { check(it.read(header) == 24) }
+    val width = ((header[16].toInt() and 0xFF) shl 24) or
+        ((header[17].toInt() and 0xFF) shl 16) or
+        ((header[18].toInt() and 0xFF) shl 8) or
+        (header[19].toInt() and 0xFF)
+    val height = ((header[20].toInt() and 0xFF) shl 24) or
+        ((header[21].toInt() and 0xFF) shl 16) or
+        ((header[22].toInt() and 0xFF) shl 8) or
+        (header[23].toInt() and 0xFF)
+    val wide = File(root, "wide.png")
+    ffmpeg("-i", blank.absolutePath, "-vf", "scale=$width:$height:flags=neighbor", "-frames:v", "1", wide.absolutePath)
+    ffmpeg("-i", wide.absolutePath, "-vf", "drawbox=x=0:y=0:w=1:h=1:color=black:t=fill", File(root, "f0.png").absolutePath)
+    scene.copyTo(File(root, "f1.png"), overwrite = true)
+    ffmpeg("-i", wide.absolutePath, "-vf", "drawbox=x=20:y=20:w=1:h=1:color=black:t=fill", File(root, "f2.png").absolutePath)
+    val palette = File(root, "pal.png")
+    ffmpeg(
+        "-framerate", "5", "-start_number", "0", "-i", File(root, "f%d.png").absolutePath,
+        "-frames:v", "3", "-vf", "palettegen=stats_mode=full:max_colors=8", palette.absolutePath,
+    )
+    val gif = File(root, "later.gif")
+    ffmpeg(
+        "-framerate", "5", "-start_number", "0", "-i", File(root, "f%d.png").absolutePath,
+        "-i", palette.absolutePath, "-frames:v", "3", "-lavfi", "paletteuse=dither=none",
+        "-loop", "0", gif.absolutePath,
+    )
+    return gif
+}
+
+private fun ffmpeg(vararg args: String) {
+    val process = ProcessBuilder(listOf("ffmpeg", "-y", "-v", "error") + args).redirectErrorStream(true).start()
+    val text = process.inputStream.bufferedReader().readText()
+    if (process.waitFor() != 0) error(text.ifBlank { "ffmpeg failed" })
+}
+
+private fun scanPrepared(file: File, reel: PlatformDecode.Facts): JSONObject {
+    val root = File(file.parentFile, "ow-prep-" + System.nanoTime())
+    check(root.mkdirs())
+    val posters = File(root, "posters")
+    val out = File(root, "result")
+    Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
+    return Core.json(
+        listOf(
+            "--json", "--bundles", Core.bundlesDir(), "scan",
+            "--input", file.absolutePath,
+            "--bundle", "fast",
+            "--long-side", "640",
+            "--coverage", "complete",
+            "--posters", posters.absolutePath,
+            "--out", out.absolutePath,
+            "--form-factor", "phone",
+            "--provider", "cpu",
+        ) + reel.arguments(reel.directory)
+    )
 }
 
 private fun scanReport(file: File): JSONObject {

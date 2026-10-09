@@ -125,6 +125,84 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() throws {
+        let gif = try laterFrameGif()
+        let frames = FileManager.default.temporaryDirectory.appendingPathComponent("ow-gif-\(UUID().uuidString)")
+        let reel = try GifFrames.write(gif, directory: frames)
+        XCTAssertEqual(reel.frames.count, 3)
+        XCTAssertTrue(reel.video)
+        XCTAssertEqual(reel.fps, 5, accuracy: 0.05)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "complete"
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            XCTAssertNil(model.error)
+            model.analyze()
+            XCTAssertEqual(model.report?.summary, Copy.possible)
+            XCTAssertFalse(model.report?.candidates.isEmpty == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameIndex == 1 } == true)
+        }
+    }
+
+    func testAOneFrameGifStaysOneFrame() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-one-\(UUID().uuidString).gif")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=64x64", "-frames:v", "1", gif.path])
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.frames.count, 1)
+        XCTAssertFalse(reel.video)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "complete"
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.analyze()
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+        }
+    }
+
+    func testABrokenGifIsRefused() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-bad-\(UUID().uuidString).gif")
+        var bytes = Array("GIF89a".utf8)
+        bytes.append(contentsOf: [UInt8](repeating: 0, count: 24))
+        try Data(bytes).write(to: gif)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
+    }
+
+    func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
+        try Data(interlacedGif).write(to: gif)
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.width, 16)
+        XCTAssertEqual(reel.height, 16)
+        XCTAssertEqual(reel.frames.count, 1)
+        let rgb = reel.frames[0]
+        for y in 0..<16 {
+            for x in 0..<16 {
+                let pixel = (y * 16 + x) * 3
+                let expected: UInt8 = (x < 8 && y < 8) ? 0 : 255
+                XCTAssertEqual(rgb[pixel], expected)
+                XCTAssertEqual(rgb[pixel + 1], expected)
+                XCTAssertEqual(rgb[pixel + 2], expected)
+            }
+        }
+    }
+
     func testANonPngRefusesBeforeAnalyze() throws {
         try MainActor.assumeIsolated {
             let junk = FileManager.default.temporaryDirectory.appendingPathComponent("ow-junk-\(UUID().uuidString).txt")
@@ -280,6 +358,54 @@ final class OpenWorldUITests: XCTestCase {
         return out
     }
 
+    private func laterFrameGif() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-later-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let scene = try still("scene")
+        let blank = try still("blank")
+        let size = try pngSize(scene)
+        let wide = root.appendingPathComponent("wide.png")
+        try ffmpeg(["-i", blank.path, "-vf", "scale=\(size.0):\(size.1):flags=neighbor", "-frames:v", "1", wide.path])
+        try ffmpeg(["-i", wide.path, "-vf", "drawbox=x=0:y=0:w=1:h=1:color=black:t=fill", root.appendingPathComponent("f0.png").path])
+        try FileManager.default.copyItem(at: scene, to: root.appendingPathComponent("f1.png"))
+        try ffmpeg(["-i", wide.path, "-vf", "drawbox=x=20:y=20:w=1:h=1:color=black:t=fill", root.appendingPathComponent("f2.png").path])
+        let palette = root.appendingPathComponent("pal.png")
+        try ffmpeg([
+            "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+            "-frames:v", "3", "-vf", "palettegen=stats_mode=full:max_colors=8", palette.path,
+        ])
+        let gif = root.appendingPathComponent("later.gif")
+        try ffmpeg([
+            "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+            "-i", palette.path, "-frames:v", "3", "-lavfi", "paletteuse=dither=none", "-loop", "0", gif.path,
+        ])
+        return gif
+    }
+
+    private func pngSize(_ url: URL) throws -> (Int, Int) {
+        let data = try Data(contentsOf: url)
+        let bytes = [UInt8](data.prefix(24))
+        XCTAssertEqual(bytes.count, 24)
+        let width = (Int(bytes[16]) << 24) | (Int(bytes[17]) << 16) | (Int(bytes[18]) << 8) | Int(bytes[19])
+        let height = (Int(bytes[20]) << 24) | (Int(bytes[21]) << 16) | (Int(bytes[22]) << 8) | Int(bytes[23])
+        return (width, height)
+    }
+
+    private func ffmpeg(_ args: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ffmpeg")
+        process.arguments = ["-y", "-v", "error"] + args
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            XCTFail(text)
+        }
+    }
+
     private func binary() -> String {
         if let env = ProcessInfo.processInfo.environment["OPENWORLD_BIN"], !env.isEmpty {
             return env
@@ -347,6 +473,21 @@ final class OpenWorldUITests: XCTestCase {
         try JSONDecoder().decode(BundleRow.self, from: Data("""
         {"id":"fast","name":"Fast","best_for":"Phones and long video.","curve_line":"Fixture curve measured. Real FBI photos stay off.","preselected":true}
         """.utf8))
+    }
+}
+
+private let interlacedGif = Data(hex: "47494638376110001000810000ffffff0000000000000000002c000000001000100040082f0003081c281080c18308132a3c4890e0c287101b0e7c28b120c48b182356a4b87161c5001c25661c49b2a449830101003b")
+
+private extension Data {
+    init(hex: String) {
+        var bytes: [UInt8] = []
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let next = hex.index(index, offsetBy: 2)
+            bytes.append(UInt8(hex[index..<next], radix: 16) ?? 0)
+            index = next
+        }
+        self.init(bytes)
     }
 }
 

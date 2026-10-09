@@ -4,7 +4,8 @@
 
 The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
-lossless video of a fixture still, a one-frame GIF, and an audio file.
+lossless video of a fixture still, a one-frame GIF, a three-frame GIF
+whose marker is only on the middle frame, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -130,6 +131,7 @@ def main() -> int:
         "timestamp_disagree": 0,
         "measured_banner": 0,
         "gif_still": 0,
+        "gif_later_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -303,6 +305,56 @@ def main() -> int:
             fail(f"one-frame gif decoded {report.get('frames_decoded')} frames")
         counts["gif_still"] += 1
 
+        # The marker is not on the first frame. Keeping only that frame would be a clearance.
+        scene = root / "scene.png"
+        blank = root / "blank.png"
+        wide = root / "wide.png"
+        still(args.bin, args.bundles, scene, ["--scene"])
+        still(args.bin, args.bundles, blank, ["--blank"])
+        header = scene.read_bytes()[:24]
+        width = int.from_bytes(header[16:20], "big")
+        height = int.from_bytes(header[20:24], "big")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(blank),
+            "-vf", f"scale={width}:{height}:flags=neighbor", "-frames:v", "1", str(wide),
+        ])
+        if proc.returncode != 0:
+            fail(proc.stderr or "blank frame was not scaled")
+        for name, box in (("f0.png", "x=0:y=0"), ("f2.png", "x=20:y=20")):
+            proc = run([
+                "ffmpeg", "-y", "-v", "error", "-i", str(wide),
+                "-vf", f"drawbox={box}:w=1:h=1:color=black:t=fill",
+                str(root / name),
+            ])
+            if proc.returncode != 0:
+                fail(proc.stderr or f"{name} was not written")
+        shutil.copyfile(scene, root / "f1.png")
+        palette = root / "pal.png"
+        later = root / "later.gif"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "5", "-start_number", "0",
+            "-i", str(root / "f%d.png"), "-frames:v", "3",
+            "-vf", "palettegen=stats_mode=full:max_colors=8", str(palette),
+        ])
+        if proc.returncode != 0:
+            fail(proc.stderr or "gif palette was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "5", "-start_number", "0",
+            "-i", str(root / "f%d.png"), "-i", str(palette), "-frames:v", "3",
+            "-lavfi", "paletteuse=dither=none", "-loop", "0", str(later),
+        ])
+        if proc.returncode != 0 or not later.is_file():
+            fail(proc.stderr or "later gif was not written")
+        report = scan(args.bin, args.bundles, posters, later, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"later gif summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 3:
+            fail(f"later gif decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 1 for item in found):
+            fail(f"later gif candidates were not on the middle frame: {found}")
+        counts["gif_later_candidate"] += 1
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -330,7 +382,13 @@ def main() -> int:
 
     print(json.dumps({"ok": True, "counts": counts}, sort_keys=True))
     total = sum(counts.values())
-    if counts["impostor_clearance"] != 80 or counts["gif_still"] != 1 or counts["audio_refusal"] != 1 or total < 90:
+    if (
+        counts["impostor_clearance"] != 80
+        or counts["gif_still"] != 1
+        or counts["gif_later_candidate"] != 1
+        or counts["audio_refusal"] != 1
+        or total < 90
+    ):
         fail(f"held-out counts are short: {counts}")
     return 0
 
