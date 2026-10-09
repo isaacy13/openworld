@@ -408,6 +408,54 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
+        val apng = movingPicture("apng")
+        assertTrue(StillMotion.animatedPng(apng))
+        assertFalse(StillMotion.animatedPng(still("blank")))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/clip.apng")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, apng.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        val frames = File(apng.parentFile, "ow-apng-frames-" + System.nanoTime())
+        var refused = false
+        try {
+            PlatformDecode.writeFrames(apng, frames)
+        } catch (err: java.io.IOException) {
+            refused = true
+            assertTrue(err.message?.contains("Refusing") == true)
+        }
+        assertTrue(refused)
+        assertFalse(File(frames, "frame_000000.png").isFile)
+    }
+
+    @Test
+    fun anAnimatedWebpIsRefusedInsteadOfClearingTheFirstFrame() {
+        val webp = movingPicture("webp")
+        val stillWebp = File.createTempFile("ow-still", ".webp")
+        ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=16x16", "-frames:v", "1", "-c:v", "libwebp", stillWebp.absolutePath)
+        assertTrue(StillMotion.animatedWebp(webp))
+        assertFalse(StillMotion.animatedWebp(stillWebp))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/clip.webp")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, webp.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+    }
+
+    @Test
     fun anInterlacedGifKeepsThePixelsOfThatFrame() {
         val gif = File.createTempFile("ow-inter", ".gif")
         gif.writeBytes(INTERLACED_GIF)
@@ -688,6 +736,28 @@ private fun laterFrameGif(): File {
         "-loop", "0", gif.absolutePath,
     )
     return gif
+}
+
+private fun movingPicture(kind: String): File {
+    val root = File(File.createTempFile("ow-move", "").parentFile, "ow-move-" + System.nanoTime())
+    check(root.mkdirs())
+    ffmpeg(
+        "-f", "lavfi", "-i", "testsrc2=size=32x32:rate=5:duration=0.6",
+        "-start_number", "0", File(root, "f%d.png").absolutePath,
+    )
+    val out = File(root, "move.$kind")
+    if (kind == "apng") {
+        ffmpeg(
+            "-framerate", "5", "-start_number", "0", "-i", File(root, "f%d.png").absolutePath,
+            "-frames:v", "3", "-plays", "1", "-f", "apng", out.absolutePath,
+        )
+    } else {
+        ffmpeg(
+            "-framerate", "5", "-start_number", "0", "-i", File(root, "f%d.png").absolutePath,
+            "-frames:v", "3", "-loop", "0", "-c:v", "libwebp", out.absolutePath,
+        )
+    }
+    return out
 }
 
 private fun ffmpeg(vararg args: String) {

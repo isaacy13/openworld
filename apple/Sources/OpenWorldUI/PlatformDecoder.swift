@@ -42,6 +42,9 @@ enum PlatformDecoder {
     #if os(Linux)
     /// A PNG the user already has is one frame. Copy the bytes. Video stays on AVFoundation.
     static func facts(url: URL) throws -> Facts {
+        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) {
+            throw failure("The file was not fully decoded. Refusing.")
+        }
         if GifFrames.isGif(url) {
             return try adopted(try GifFrames.read(url), containerUnix: containerUnix(url))
         }
@@ -105,6 +108,9 @@ enum PlatformDecoder {
     #else
     static func facts(url: URL) throws -> Facts {
         let container = containerUnix(url)
+        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) {
+            throw failure("The file was not fully decoded. Refusing.")
+        }
         if GifFrames.isGif(url) {
             return try adopted(try GifFrames.read(url), containerUnix: container)
         }

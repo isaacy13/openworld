@@ -184,6 +184,38 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
+        let apng = try movingPicture("apng")
+        XCTAssertTrue(StillMotion.animatedPng(apng))
+        XCTAssertFalse(StillMotion.animatedPng(try still("blank")))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(apng)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
+    }
+
+    func testAnAnimatedWebpIsRefusedInsteadOfClearingTheFirstFrame() throws {
+        let webp = try movingPicture("webp")
+        let stillWebp = FileManager.default.temporaryDirectory.appendingPathComponent("ow-still-\(UUID().uuidString).webp")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=16x16", "-frames:v", "1", "-c:v", "libwebp", stillWebp.path])
+        XCTAssertTrue(StillMotion.animatedWebp(webp))
+        XCTAssertFalse(StillMotion.animatedWebp(stillWebp))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(webp)
+            model.loadEstimate()
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
+    }
+
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
         let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
         try Data(interlacedGif).write(to: gif)
@@ -389,6 +421,28 @@ final class OpenWorldUITests: XCTestCase {
         let width = (Int(bytes[16]) << 24) | (Int(bytes[17]) << 16) | (Int(bytes[18]) << 8) | Int(bytes[19])
         let height = (Int(bytes[20]) << 24) | (Int(bytes[21]) << 16) | (Int(bytes[22]) << 8) | Int(bytes[23])
         return (width, height)
+    }
+
+    private func movingPicture(_ kind: String) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-move-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try ffmpeg([
+            "-f", "lavfi", "-i", "testsrc2=size=32x32:rate=5:duration=0.6",
+            "-start_number", "0", root.appendingPathComponent("f%d.png").path,
+        ])
+        let out = root.appendingPathComponent("move.\(kind)")
+        if kind == "apng" {
+            try ffmpeg([
+                "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+                "-frames:v", "3", "-plays", "1", "-f", "apng", out.path,
+            ])
+        } else {
+            try ffmpeg([
+                "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+                "-frames:v", "3", "-loop", "0", "-c:v", "libwebp", out.path,
+            ])
+        }
+        return out
     }
 
     private func ffmpeg(_ args: [String]) throws {

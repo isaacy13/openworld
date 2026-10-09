@@ -46,7 +46,13 @@ object PlatformDecode {
 
     fun facts(file: File): Facts {
         pngSize(file)?.let { (width, height) ->
+            if (StillMotion.animatedPng(file)) {
+                throw IOException("The file was not fully decoded. Refusing.")
+            }
             return Facts(width, height, 0.0, 1, 0.0, false)
+        }
+        if (StillMotion.animatedWebp(file)) {
+            throw IOException("The file was not fully decoded. Refusing.")
         }
         if (GifFrames.isGif(file)) return GifFrames.facts(file)
         if (hasImageHeader(file)) {

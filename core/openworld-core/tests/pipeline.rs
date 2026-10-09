@@ -488,6 +488,56 @@ fn a_one_frame_gif_is_not_repeated_into_extra_frames() {
 }
 
 #[test]
+fn an_animated_png_keeps_a_face_that_is_not_on_the_first_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    let mut first = blank(width, height);
+    first.put_pixel(0, 0, image::Rgb([0, 0, 0]));
+    let mut third = blank(width, height);
+    third.put_pixel(20, 20, image::Rgb([0, 0, 0]));
+    first.save(dir.path().join("f0.png")).unwrap();
+    scene.image.save(dir.path().join("f1.png")).unwrap();
+    third.save(dir.path().join("f2.png")).unwrap();
+    let apng = dir.path().join("later.apng");
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-framerate", "5", "-start_number", "0", "-i"])
+        .arg(dir.path().join("f%d.png"))
+        .args(["-frames:v", "3", "-plays", "1", "-f", "apng"])
+        .arg(&apng)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: apng,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert_eq!(report.frames_decoded, 3);
+    assert!(!report.candidates.is_empty());
+    assert!(report.candidates.iter().all(|candidate| candidate.frame_index == 1));
+}
+
+#[test]
 fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     let dir = tempfile::tempdir().unwrap();
     let frames = dir.path().join("frames");

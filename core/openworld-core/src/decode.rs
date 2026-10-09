@@ -8,7 +8,8 @@
 use crate::timeutil::parse_rfc3339;
 use image::RgbImage;
 use serde_json::Value;
-use std::io::Read;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -60,6 +61,11 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
 }
 
 fn probe_image(path: &Path) -> Option<Probe> {
+    // An APNG is a moving picture. The still decoder would keep the first frame and
+    // could clear a file it did not finish. FFmpeg decodes every frame.
+    if animated_png(path) {
+        return None;
+    }
     let image = image::open(path).ok()?;
     let rgb = image.to_rgb8();
     let (width, height) = rgb.dimensions();
@@ -76,6 +82,38 @@ fn probe_image(path: &Path) -> Option<Probe> {
         container_created: None,
         video: false,
     })
+}
+
+/// True when a PNG carries an animation control chunk before the first image data.
+fn animated_png(path: &Path) -> bool {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut signature = [0u8; 8];
+    if file.read_exact(&mut signature).is_err() {
+        return false;
+    }
+    if &signature != b"\x89PNG\r\n\x1a\n" {
+        return false;
+    }
+    loop {
+        let mut header = [0u8; 8];
+        if file.read_exact(&mut header).is_err() {
+            return false;
+        }
+        let len = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as u64;
+        let tag = &header[4..8];
+        if tag == b"acTL" {
+            return true;
+        }
+        if tag == b"IDAT" || tag == b"IEND" {
+            return false;
+        }
+        if file.seek(SeekFrom::Current(len as i64 + 4)).is_err() {
+            return false;
+        }
+    }
 }
 
 fn probe_video(path: &Path) -> Result<Probe, MediaError> {

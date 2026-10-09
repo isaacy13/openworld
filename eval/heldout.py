@@ -5,7 +5,8 @@
 The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
-whose marker is only on the middle frame, and an audio file.
+whose marker is only on the middle frame, an animated PNG of that marker,
+and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -132,6 +133,7 @@ def main() -> int:
         "measured_banner": 0,
         "gif_still": 0,
         "gif_later_candidate": 0,
+        "apng_later_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -355,6 +357,23 @@ def main() -> int:
             fail(f"later gif candidates were not on the middle frame: {found}")
         counts["gif_later_candidate"] += 1
 
+        apng = root / "later.apng"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "5", "-start_number", "0",
+            "-i", str(root / "f%d.png"), "-frames:v", "3", "-plays", "1", "-f", "apng", str(apng),
+        ])
+        if proc.returncode != 0 or not apng.is_file():
+            fail(proc.stderr or "later apng was not written")
+        report = scan(args.bin, args.bundles, posters, apng, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"later apng summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 3:
+            fail(f"later apng decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 1 for item in found):
+            fail(f"later apng candidates were not on the middle frame: {found}")
+        counts["apng_later_candidate"] += 1
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -386,6 +405,7 @@ def main() -> int:
         counts["impostor_clearance"] != 80
         or counts["gif_still"] != 1
         or counts["gif_later_candidate"] != 1
+        or counts["apng_later_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90
     ):
