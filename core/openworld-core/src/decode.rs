@@ -3,7 +3,9 @@
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
 //! A JPEG, a still WebP, a PNG, or a TIFF is turned to match its camera orientation
 //! tag before the pixels are scanned. Every page of a TIFF is scanned. A 16-bit
-//! sample contributes its high 8 bits. Audio is not decoded. Phone, Mac, and Android shells
+//! sample contributes its high 8 bits. CMYK and full-resolution YCbCr become RGB.
+//! A one-page palette, bilevel, or subsampled TIFF is read as a player shows that
+//! page. A multi-page TIFF whose pages are not all read is refused. Audio is not decoded. Phone, Mac, and Android shells
 //! decode with AVFoundation or MediaCodec and pass the frames through
 //! `load_frame_dir`. That path does not run FFmpeg.
 
@@ -50,7 +52,10 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         return Err(MediaError::BadCodec);
     }
     if is_tiff(path) {
-        return probe_tiff(path);
+        if let Ok(info) = probe_tiff(path) {
+            return Ok(info);
+        }
+        return probe_tiff_player(path);
     }
     if let Some(info) = probe_image(path) {
         return Ok(info);
@@ -59,10 +64,13 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
 }
 
 pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
-    let info = probe(path)?;
     if is_tiff(path) {
-        return decode_tiff(path, info, &mut on_frame);
+        if let Ok(info) = probe_tiff(path) {
+            return decode_tiff(path, info, &mut on_frame);
+        }
+        return decode_tiff_player(path, &mut on_frame);
     }
+    let info = probe(path)?;
     if !info.video {
         let image = open_oriented(path).map_err(|_| MediaError::BadCodec)?;
         let keep_going = on_frame(0, &image);
@@ -141,6 +149,8 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
         tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => (1, bits),
         tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => (3, bits),
         tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => (4, bits),
+        tiff::ColorType::CMYK(8) => (4, 8),
+        tiff::ColorType::YCbCr(8) => (3, 8),
         _ => return Err(MediaError::BadCodec),
     };
     let tag = decoder
@@ -152,9 +162,11 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
         .filter(|value| (1..=8).contains(value))
         .unwrap_or(1);
     let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
-    let rgb = match decoded {
-        tiff::decoder::DecodingResult::U8(bytes) => samples_to_rgb(&bytes, width, height, samples)?,
-        tiff::decoder::DecodingResult::U16(samples_wide) => {
+    let rgb = match (color, decoded) {
+        (tiff::ColorType::CMYK(8), tiff::decoder::DecodingResult::U8(bytes)) => cmyk_to_rgb(&bytes, width, height)?,
+        (tiff::ColorType::YCbCr(8), tiff::decoder::DecodingResult::U8(bytes)) => ycbcr_to_rgb(&bytes, width, height)?,
+        (_, tiff::decoder::DecodingResult::U8(bytes)) => samples_to_rgb(&bytes, width, height, samples)?,
+        (_, tiff::decoder::DecodingResult::U16(samples_wide)) => {
             samples_u16_to_rgb(&samples_wide, width, height, samples, bits)?
         }
         _ => return Err(MediaError::BadCodec),
@@ -188,6 +200,207 @@ fn samples_to_rgb(bytes: &[u8], width: u32, height: u32, samples: usize) -> Resu
         _ => return Err(MediaError::BadCodec),
     }
     RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
+}
+
+/// Ink values use 0 for none and 255 for full. K is the black plate.
+fn cmyk_to_rgb(bytes: &[u8], width: u32, height: u32) -> Result<RgbImage, MediaError> {
+    let pixels = (width as usize).checked_mul(height as usize).ok_or(MediaError::BadCodec)?;
+    let expected = pixels.checked_mul(4).ok_or(MediaError::BadCodec)?;
+    if bytes.len() < expected {
+        return Err(MediaError::BadCodec);
+    }
+    let mut rgb = Vec::with_capacity(pixels * 3);
+    for pixel in bytes[..expected].chunks_exact(4) {
+        let cyan = u32::from(pixel[0]);
+        let magenta = u32::from(pixel[1]);
+        let yellow = u32::from(pixel[2]);
+        let black = u32::from(pixel[3]);
+        let red = (255 - cyan) * (255 - black) / 255;
+        let green = (255 - magenta) * (255 - black) / 255;
+        let blue = (255 - yellow) * (255 - black) / 255;
+        rgb.extend_from_slice(&[red as u8, green as u8, blue as u8]);
+    }
+    RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
+}
+
+/// Studio-range BT.601. Y 16 is black and Y 235 is white. Chroma is centered at 128.
+fn ycbcr_to_rgb(bytes: &[u8], width: u32, height: u32) -> Result<RgbImage, MediaError> {
+    let pixels = (width as usize).checked_mul(height as usize).ok_or(MediaError::BadCodec)?;
+    let expected = pixels.checked_mul(3).ok_or(MediaError::BadCodec)?;
+    if bytes.len() < expected {
+        return Err(MediaError::BadCodec);
+    }
+    let mut rgb = Vec::with_capacity(pixels * 3);
+    for pixel in bytes[..expected].chunks_exact(3) {
+        let y = i32::from(pixel[0]) - 16;
+        let cb = i32::from(pixel[1]) - 128;
+        let cr = i32::from(pixel[2]) - 128;
+        let red = (298 * y + 409 * cr + 128) / 256;
+        let green = (298 * y - 100 * cb - 208 * cr + 128) / 256;
+        let blue = (298 * y + 516 * cb + 128) / 256;
+        rgb.push(red.clamp(0, 255) as u8);
+        rgb.push(green.clamp(0, 255) as u8);
+        rgb.push(blue.clamp(0, 255) as u8);
+    }
+    RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
+}
+
+/// One page, shown the way a player shows it, when the page reader cannot expand the samples.
+fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
+    let bytes = std::fs::read(path).map_err(|_| MediaError::BadCodec)?;
+    if tiff_page_count(&bytes) != Some(1) {
+        return Err(MediaError::BadCodec);
+    }
+    let (width, height) = tiff_stored_size(&bytes).ok_or(MediaError::BadCodec)?;
+    let tag = tiff_orientation_tag(&bytes).unwrap_or(1);
+    let (width, height) = oriented_still_size(width, height, tag);
+    Ok(Probe {
+        width,
+        height,
+        fps: 0.0,
+        duration_sec: 0.0,
+        frames: 1,
+        frames_exact: true,
+        container_created: None,
+        video: false,
+        square_pixels: false,
+    })
+}
+
+fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
+    let bytes = std::fs::read(path).map_err(|_| MediaError::BadCodec)?;
+    if tiff_page_count(&bytes) != Some(1) {
+        return Err(MediaError::BadCodec);
+    }
+    let (width, height) = tiff_stored_size(&bytes).ok_or(MediaError::BadCodec)?;
+    let tag = tiff_orientation_tag(&bytes).unwrap_or(1);
+    let stored = Probe {
+        width,
+        height,
+        fps: 0.0,
+        duration_sec: 0.0,
+        frames: 1,
+        frames_exact: true,
+        container_created: None,
+        video: false,
+        square_pixels: false,
+    };
+    let mut frame = None;
+    let stats = decode_video(path, &stored, &mut |_, image| {
+        frame = Some(image.clone());
+        true
+    })?;
+    if stats.frames_decoded == 0 {
+        return Err(MediaError::BadCodec);
+    }
+    let Some(image) = frame else {
+        return Err(MediaError::BadCodec);
+    };
+    let mut shown = DynamicImage::ImageRgb8(image);
+    if let Some(orientation) = Orientation::from_exif(tag) {
+        shown.apply_orientation(orientation);
+    }
+    let shown = shown.to_rgb8();
+    let (width, height) = shown.dimensions();
+    let keep = on_frame(0, &shown);
+    Ok(DecodeStats {
+        frames_decoded: 1,
+        clean: keep && stats.clean,
+        probe: Probe {
+            width,
+            height,
+            fps: 0.0,
+            duration_sec: 0.0,
+            frames: 1,
+            frames_exact: true,
+            container_created: None,
+            video: false,
+            square_pixels: false,
+        },
+    })
+}
+
+fn oriented_still_size(width: u32, height: u32, tag: u8) -> (u32, u32) {
+    if matches!(tag, 5 | 6 | 7 | 8) {
+        (height, width)
+    } else {
+        (width, height)
+    }
+}
+
+fn tiff_page_count(bytes: &[u8]) -> Option<u32> {
+    let little = tiff_little(bytes)?;
+    let mut ifd = read_u32(bytes, 4, little)? as usize;
+    let mut seen = [0usize; 64];
+    let mut count = 0u32;
+    while ifd != 0 {
+        if count as usize >= seen.len() || seen[..count as usize].contains(&ifd) {
+            return None;
+        }
+        seen[count as usize] = ifd;
+        if ifd + 2 > bytes.len() {
+            return None;
+        }
+        let entries = read_u16(bytes, ifd, little)? as usize;
+        if entries > 64 {
+            return None;
+        }
+        let next = ifd.checked_add(2)?.checked_add(entries.checked_mul(12)?)?;
+        if next + 4 > bytes.len() {
+            return None;
+        }
+        ifd = read_u32(bytes, next, little)? as usize;
+        count += 1;
+    }
+    if count == 0 { None } else { Some(count) }
+}
+
+fn tiff_stored_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let little = tiff_little(bytes)?;
+    let ifd = read_u32(bytes, 4, little)? as usize;
+    let width = tiff_ifd_value(bytes, ifd, little, 256)?;
+    let height = tiff_ifd_value(bytes, ifd, little, 257)?;
+    if width == 0 || height == 0 {
+        None
+    } else {
+        Some((width, height))
+    }
+}
+
+fn tiff_ifd_value(bytes: &[u8], ifd: usize, little: bool, wanted: u16) -> Option<u32> {
+    if ifd + 2 > bytes.len() {
+        return None;
+    }
+    let entries = read_u16(bytes, ifd, little)? as usize;
+    if entries > 64 {
+        return None;
+    }
+    let mut cursor = ifd + 2;
+    for _ in 0..entries {
+        if cursor + 12 > bytes.len() {
+            return None;
+        }
+        let tag = read_u16(bytes, cursor, little)?;
+        let format = read_u16(bytes, cursor + 2, little)?;
+        let count = read_u32(bytes, cursor + 4, little)?;
+        if tag == wanted && count == 1 && (format == 3 || format == 4) {
+            return if format == 3 {
+                Some(u32::from(read_u16(bytes, cursor + 8, little)?))
+            } else {
+                read_u32(bytes, cursor + 8, little)
+            };
+        }
+        cursor += 12;
+    }
+    None
+}
+
+fn tiff_little(bytes: &[u8]) -> Option<bool> {
+    match bytes.get(0..4)? {
+        [0x49, 0x49, 0x2A, 0x00] => Some(true),
+        [0x4D, 0x4D, 0x00, 0x2A] => Some(false),
+        _ => None,
+    }
 }
 
 /// The high 8 bits of a 9- to 16-bit sample are the picture that is scanned.
@@ -1093,12 +1306,187 @@ mod tests {
     }
 
     #[test]
-    fn a_cmyk_tiff_and_a_truncated_tiff_are_refused() {
-        let cmyk = coded_tiff(&[(1, 1, 5, 4, 1, &[0, 0, 0, 0])]);
-        let path = write_bytes("tifcmyk", &cmyk);
+    fn a_truncated_tiff_is_refused() {
+        let path = write_bytes("tifbad", &[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]);
         assert!(super::probe(&path).is_err());
         let _ = fs::remove_file(&path);
-        let path = write_bytes("tifbad", &[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn cmyk_and_studio_ycbcr_become_rgb() {
+        let cmyk = coded_tiff(&[(
+            3,
+            1,
+            5,
+            4,
+            1,
+            &[0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0],
+        )]);
+        let path = write_bytes("tifcmyk", &cmyk);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[255, 255, 255, 0, 0, 0, 0, 255, 255]);
+        let ycbcr = coded_tiff(&[(2, 1, 6, 3, 1, &[235, 128, 128, 16, 128, 128])]);
+        let path = write_bytes("tifycc", &ycbcr);
+        let pages = super::read_tiff_pages(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(pages[0].as_raw(), &[255, 255, 255, 0, 0, 0]);
+    }
+
+    /// Palette page. Index 0 is black and index 1 is white.
+    fn indexed_tiff(width: u32, height: u32, indices: &[u8], orientation: u16) -> Vec<u8> {
+        assert_eq!(indices.len(), width as usize * height as usize);
+        let entry_count = 11u16;
+        let ifd = 8usize;
+        let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+        let map_at = ifd + ifd_len;
+        let pixels = map_at + 256 * 3 * 2;
+        let mut out = vec![0u8; pixels + indices.len()];
+        out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        out[4..8].copy_from_slice(&(ifd as u32).to_le_bytes());
+        out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+        let entries = [
+            tiff_entry(256, 4, 1, width),
+            tiff_entry(257, 4, 1, height),
+            tiff_entry(258, 3, 1, 8),
+            tiff_entry(259, 3, 1, 1),
+            tiff_entry(262, 3, 1, 3),
+            tiff_entry(273, 4, 1, pixels as u32),
+            tiff_entry(274, 3, 1, u32::from(orientation)),
+            tiff_entry(277, 3, 1, 1),
+            tiff_entry(278, 4, 1, height),
+            tiff_entry(279, 4, 1, indices.len() as u32),
+            tiff_entry(320, 3, 256 * 3, map_at as u32),
+        ];
+        let mut at = ifd + 2;
+        for entry in entries {
+            out[at..at + 12].copy_from_slice(&entry);
+            at += 12;
+        }
+        for plane in 0..3 {
+            let slot = map_at + plane * 256 * 2 + 2;
+            out[slot..slot + 2].copy_from_slice(&65535u16.to_le_bytes());
+        }
+        out[pixels..pixels + indices.len()].copy_from_slice(indices);
+        out
+    }
+
+    fn bilevel_tiff(width: u32, packed: &[u8], orientation: u16) -> Vec<u8> {
+        let height = 1u32;
+        let entry_count = 10u16;
+        let ifd = 8usize;
+        let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+        let pixels = ifd + ifd_len;
+        let mut out = vec![0u8; pixels + packed.len()];
+        out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        out[4..8].copy_from_slice(&(ifd as u32).to_le_bytes());
+        out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+        let entries = [
+            tiff_entry(256, 4, 1, width),
+            tiff_entry(257, 4, 1, height),
+            tiff_entry(258, 3, 1, 1),
+            tiff_entry(259, 3, 1, 1),
+            tiff_entry(262, 3, 1, 1),
+            tiff_entry(273, 4, 1, pixels as u32),
+            tiff_entry(274, 3, 1, u32::from(orientation)),
+            tiff_entry(277, 3, 1, 1),
+            tiff_entry(278, 4, 1, height),
+            tiff_entry(279, 4, 1, packed.len() as u32),
+        ];
+        let mut at = ifd + 2;
+        for entry in entries {
+            out[at..at + 12].copy_from_slice(&entry);
+            at += 12;
+        }
+        out[pixels..pixels + packed.len()].copy_from_slice(packed);
+        out
+    }
+
+    #[test]
+    fn a_palette_and_a_bilevel_tiff_are_shown_with_the_orientation_tag() {
+        let shown = RgbImage::from_raw(2, 1, vec![0, 0, 0, 255, 255, 255]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        let indices: Vec<u8> = stored.pixels().map(|pixel| if pixel[0] == 0 { 0 } else { 1 }).collect();
+        let path = write_bytes("tifpal", &indexed_tiff(stored.width(), stored.height(), &indices, 6));
+        let mut frames = Vec::new();
+        let stats = super::for_each_frame(&path, |_, frame| {
+            frames.push(frame.clone());
+            true
+        })
+        .unwrap();
+        let info = super::probe(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(stats.frames_decoded, 1);
+        assert!(!info.video);
+        assert_eq!(info.frames, 1);
+        assert_eq!(frames[0].dimensions(), shown.dimensions());
+        assert_eq!(frames[0].as_raw(), shown.as_raw());
+        let path = write_bytes("tifbit", &bilevel_tiff(8, &[0xF0], 1));
+        let mut frames = Vec::new();
+        super::for_each_frame(&path, |_, frame| {
+            frames.push(frame.clone());
+            true
+        })
+        .unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(frames[0].dimensions(), (8, 1));
+        let expected = [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(frames[0].as_raw(), &expected);
+    }
+
+    fn indexed_pages(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
+        let entry_count = 11usize;
+        let ifd_len = 2 + entry_count * 12 + 4;
+        let map_len = 256 * 3 * 2;
+        let mut cursor = 8usize;
+        let mut layout = Vec::new();
+        for (_, _, indices, _) in pages {
+            let ifd = cursor;
+            let map_at = ifd + ifd_len;
+            let pixels = map_at + map_len;
+            cursor = pixels + indices.len();
+            layout.push((ifd, map_at, pixels));
+        }
+        let mut out = vec![0u8; cursor];
+        out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+        for (index, (width, height, indices, orientation)) in pages.iter().enumerate() {
+            let (ifd, map_at, pixels) = layout[index];
+            let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+            out[ifd..ifd + 2].copy_from_slice(&11u16.to_le_bytes());
+            let entries = [
+                tiff_entry(256, 4, 1, *width),
+                tiff_entry(257, 4, 1, *height),
+                tiff_entry(258, 3, 1, 8),
+                tiff_entry(259, 3, 1, 1),
+                tiff_entry(262, 3, 1, 3),
+                tiff_entry(273, 4, 1, pixels as u32),
+                tiff_entry(274, 3, 1, u32::from(*orientation)),
+                tiff_entry(277, 3, 1, 1),
+                tiff_entry(278, 4, 1, *height),
+                tiff_entry(279, 4, 1, indices.len() as u32),
+                tiff_entry(320, 3, 256 * 3, map_at as u32),
+            ];
+            let mut at = ifd + 2;
+            for entry in entries {
+                out[at..at + 12].copy_from_slice(&entry);
+                at += 12;
+            }
+            out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+            for plane in 0..3 {
+                let slot = map_at + plane * 256 * 2 + 2;
+                out[slot..slot + 2].copy_from_slice(&65535u16.to_le_bytes());
+            }
+            out[pixels..pixels + indices.len()].copy_from_slice(indices);
+        }
+        out
+    }
+
+    #[test]
+    fn a_multipage_palette_tiff_is_refused() {
+        let bytes = indexed_pages(&[(2, 2, &[0, 0, 0, 0], 1), (2, 2, &[1, 1, 1, 1], 1)]);
+        let path = write_bytes("tifpal2", &bytes);
+        assert!(super::for_each_frame(&path, |_, _| true).is_err());
         assert!(super::probe(&path).is_err());
         let _ = fs::remove_file(&path);
     }

@@ -8,7 +8,8 @@ lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
 orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
-orientation tag, a 16-bit TIFF with that tag, a two-page TIFF whose marker is only on the second page,
+orientation tag, a 16-bit TIFF with that tag, a palette TIFF, a bilevel TIFF,
+a YCbCr TIFF, a subsampled YCbCr TIFF, a two-page TIFF whose marker is only on the second page,
 a video whose edit list hides the samples a player does not show,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
@@ -333,6 +334,10 @@ def main() -> int:
         "oriented_png_candidate": 0,
         "oriented_tiff_candidate": 0,
         "wide_tiff_candidate": 0,
+        "palette_tiff_candidate": 0,
+        "bilevel_tiff_candidate": 0,
+        "ycbcr_tiff_candidate": 0,
+        "subsampled_tiff_candidate": 0,
         "tiff_later_candidate": 0,
         "edit_list_candidate": 0,
         "oriented_video_candidate": 0,
@@ -650,6 +655,25 @@ def main() -> int:
         if not report.get("candidates"):
             fail("16-bit tiff produced no candidate")
         counts["wide_tiff_candidate"] += 1
+        for (name, pix_fmt, key) in (
+            ("palette.tif", "pal8", "palette_tiff_candidate"),
+            ("bilevel.tif", "monob", "bilevel_tiff_candidate"),
+            ("ycbcr.tif", "yuv444p", "ycbcr_tiff_candidate"),
+            ("subsampled.tif", "yuv420p", "subsampled_tiff_candidate"),
+        ):
+            encoded = root / name
+            proc = run([
+                "ffmpeg", "-y", "-v", "error", "-i", str(scene),
+                "-pix_fmt", pix_fmt, "-compression_algo", "raw", str(encoded),
+            ])
+            if proc.returncode != 0 or not encoded.is_file():
+                fail(proc.stderr or f"{name} was not written")
+            report = scan(args.bin, args.bundles, posters, encoded, out, "complete")
+            if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+                fail(f"{name} summary {report.get('summary')!r} {report.get('message')}")
+            if not report.get("candidates"):
+                fail(f"{name} produced no candidate")
+            counts[key] += 1
         raw_tiff = root / "raw.tif"
         raw_tiff.write_bytes(rgb_tiff([(side_w, side_h, side_rgb, 1)]))
         report = scan(args.bin, args.bundles, posters, raw_tiff, out, "complete")
@@ -852,6 +876,10 @@ def main() -> int:
         or counts["oriented_png_candidate"] != 1
         or counts["oriented_tiff_candidate"] != 1
         or counts["wide_tiff_candidate"] != 1
+        or counts["palette_tiff_candidate"] != 1
+        or counts["bilevel_tiff_candidate"] != 1
+        or counts["ycbcr_tiff_candidate"] != 1
+        or counts["subsampled_tiff_candidate"] != 1
         or counts["tiff_later_candidate"] != 1
         or counts["edit_list_candidate"] != 1
         or counts["oriented_video_candidate"] != 1

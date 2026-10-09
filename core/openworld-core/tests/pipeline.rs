@@ -1180,6 +1180,105 @@ fn a_tiff_with_camera_orientation_is_scanned_as_shown() {
     assert!(measured.candidates.iter().all(|item| item.frame_index == 1));
 }
 
+/// Uncompressed CMYK. Ink is zero for none. The black plate stays empty.
+fn cmyk_tiff(pages: &[(u32, u32, &[u8], u16)]) -> Vec<u8> {
+    let plates: Vec<(u32, u32, Vec<u8>, u16)> = pages
+        .iter()
+        .map(|(width, height, rgb, tag)| {
+            assert_eq!(rgb.len(), (*width as usize) * (*height as usize) * 3);
+            let mut ink = Vec::with_capacity(rgb.len() / 3 * 4);
+            for pixel in rgb.chunks_exact(3) {
+                ink.extend_from_slice(&[255 - pixel[0], 255 - pixel[1], 255 - pixel[2], 0]);
+            }
+            (*width, *height, ink, *tag)
+        })
+        .collect();
+    let entry_count = 10u16;
+    let ifd_len = 2 + usize::from(entry_count) * 12 + 4;
+    let mut cursor = 8usize;
+    let mut layout = Vec::new();
+    for (_, _, ink, _) in &plates {
+        let ifd = cursor;
+        let bits = ifd + ifd_len;
+        let pixels = bits + 8;
+        cursor = pixels + ink.len();
+        layout.push((ifd, bits, pixels));
+    }
+    let mut out = vec![0u8; cursor];
+    out[0..4].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+    out[4..8].copy_from_slice(&(layout[0].0 as u32).to_le_bytes());
+    for (index, (width, height, ink, orientation)) in plates.iter().enumerate() {
+        let (ifd, bits, pixels) = layout[index];
+        let next = if index + 1 < layout.len() { layout[index + 1].0 as u32 } else { 0 };
+        out[ifd..ifd + 2].copy_from_slice(&entry_count.to_le_bytes());
+        let entries = [
+            tiff_entry(256, 4, 1, *width),
+            tiff_entry(257, 4, 1, *height),
+            tiff_entry(258, 3, 4, bits as u32),
+            tiff_entry(259, 3, 1, 1),
+            tiff_entry(262, 3, 1, 5),
+            tiff_entry(273, 4, 1, pixels as u32),
+            tiff_entry(274, 3, 1, u32::from(*orientation)),
+            tiff_entry(277, 3, 1, 4),
+            tiff_entry(278, 4, 1, *height),
+            tiff_entry(279, 4, 1, ink.len() as u32),
+        ];
+        let mut at = ifd + 2;
+        for entry in entries {
+            out[at..at + 12].copy_from_slice(&entry);
+            at += 12;
+        }
+        out[at..at + 4].copy_from_slice(&next.to_le_bytes());
+        out[bits..bits + 8].copy_from_slice(&[8, 0, 8, 0, 8, 0, 8, 0]);
+        out[pixels..pixels + ink.len()].copy_from_slice(ink);
+    }
+    out
+}
+
+#[test]
+fn a_cmyk_tiff_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("cmyk-side.tif");
+    fs::write(&side, cmyk_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 6)])).unwrap();
+    let raw = dir.path().join("cmyk-raw.tif");
+    fs::write(&raw, cmyk_tiff(&[(stored.width(), stored.height(), stored.as_raw(), 1)])).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let turned = scan(side);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let sideways = scan(raw);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
+}
+
 #[test]
 fn a_sixteen_bit_tiff_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();
