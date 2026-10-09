@@ -62,6 +62,12 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
 
+## Continuous integration
+
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on pushes to `main`. The job rebuilds the Rust library, requires 90% line coverage, checks this Fast curve against a fresh run, checks the product sentences, runs the Apple phone contract, and runs the Android phone tests. The desktop window is not launched there.
+
+The crops in those phone tests are synthetic markers drawn for the fixture pack. They are not photographs of people, and they are not a training set. OpenWorld does not train on photos. Face photographs are not committed. InsightFace pretrained weights stay out. A photograph curve is still open, and `real_posters_allowed` stays false until that curve exists.
+
 ## A public release
 
 These are still open. A fixture scan does not close them.

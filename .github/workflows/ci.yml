@@ -1,6 +1,7 @@
 name: ci
 on:
   push:
+    branches: [main]
   pull_request:
 jobs:
   test:
@@ -26,8 +27,18 @@ jobs:
           OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
           OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
         run: swift test --filter PhoneContractTests
-      - uses: android-actions/setup-android@v3
-      - run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Google removed the legacy SDK package named tools. The action's old
+      # default still asks for it and fails the job. platform-tools is enough;
+      # the platform and build-tools are installed on the next step.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: android sdk packages
+        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
       - name: android phone screens
         working-directory: android
         run: ./gradlew testDebugUnitTest --stacktrace
