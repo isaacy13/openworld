@@ -6,7 +6,8 @@ The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
-a JPEG with a camera orientation tag, a video with a quarter-turn
+a JPEG with a camera orientation tag, a still WebP with a camera
+orientation tag, a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
@@ -49,6 +50,60 @@ def with_orientation(jpeg: bytes, tag: int) -> bytes:
     payload = b"Exif\x00\x00" + tiff
     length = len(payload) + 2
     return bytes([0xFF, 0xD8, 0xFF, 0xE1, (length >> 8) & 0xFF, length & 0xFF]) + payload + jpeg[2:]
+
+
+def with_webp_orientation(data: bytes, tag: int) -> bytes:
+    """Insert a big-endian EXIF orientation chunk. The canvas size stays as stored."""
+    if data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        fail("stored webp was not a RIFF WebP")
+    chunks: list[tuple[bytes, bytes]] = []
+    index = 12
+    while index + 8 <= len(data):
+        name = data[index : index + 4]
+        size = int.from_bytes(data[index + 4 : index + 8], "little")
+        start = index + 8
+        end = start + size
+        if end > len(data):
+            fail("stored webp chunk ran past the file")
+        chunks.append((name, data[start:end]))
+        index = end + (size & 1)
+    tiff = bytes([
+        0x4D, 0x4D, 0x00, 0x2A,
+        0x00, 0x00, 0x00, 0x08,
+        0x00, 0x01,
+        0x01, 0x12,
+        0x00, 0x03,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, tag & 0xFF,
+        0x00, 0x00,
+    ])
+    width = height = 0
+    for name, payload in chunks:
+        if name == b"VP8X" and len(payload) >= 10:
+            width = int.from_bytes(payload[4:7], "little") + 1
+            height = int.from_bytes(payload[7:10], "little") + 1
+        elif name == b"VP8L" and len(payload) >= 5 and payload[0] == 0x2F and width == 0:
+            bits = int.from_bytes(payload[1:5], "little")
+            width = (bits & 0x3FFF) + 1
+            height = ((bits >> 14) & 0x3FFF) + 1
+    if width <= 0 or height <= 0:
+        fail("stored webp did not carry a canvas size")
+    vp8x = bytes([
+        0x08, 0, 0, 0,
+        (width - 1) & 0xFF, ((width - 1) >> 8) & 0xFF, ((width - 1) >> 16) & 0xFF,
+        (height - 1) & 0xFF, ((height - 1) >> 8) & 0xFF, ((height - 1) >> 16) & 0xFF,
+    ])
+    chunks = [(name, payload) for name, payload in chunks if name not in (b"VP8X", b"EXIF")]
+    chunks.insert(0, (b"VP8X", vp8x))
+    chunks.append((b"EXIF", tiff))
+    body = bytearray(b"WEBP")
+    for name, payload in chunks:
+        body += name
+        body += len(payload).to_bytes(4, "little")
+        body += payload
+        if len(payload) % 2 == 1:
+            body.append(0)
+    return b"RIFF" + len(body).to_bytes(4, "little") + bytes(body)
 
 
 def fail(message: str) -> None:
@@ -154,6 +209,7 @@ def main() -> int:
         "gif_later_candidate": 0,
         "apng_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
+        "oriented_webp_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
         "audio_tail_candidate": 0,
@@ -415,6 +471,24 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, turned, out, "complete")
         assert_clearance(report, "jpeg without the orientation tag")
 
+        stored_webp = root / "stored.webp"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(scene),
+            "-vf", "transpose=2", "-c:v", "libwebp", "-lossless", "1", str(stored_webp),
+        ])
+        if proc.returncode != 0 or not stored_webp.is_file():
+            fail(proc.stderr or "stored webp was not written")
+        shown_webp = root / "shown.webp"
+        shown_webp.write_bytes(with_webp_orientation(stored_webp.read_bytes(), 6))
+        report = scan(args.bin, args.bundles, posters, shown_webp, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"oriented webp summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("oriented webp produced no candidate")
+        counts["oriented_webp_candidate"] += 1
+        report = scan(args.bin, args.bundles, posters, stored_webp, out, "complete")
+        assert_clearance(report, "webp without the orientation tag")
+
         stored_video = root / "stored.mp4"
         shown_video = root / "shown.mp4"
         proc = run([
@@ -511,6 +585,7 @@ def main() -> int:
         or counts["gif_later_candidate"] != 1
         or counts["apng_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
+        or counts["oriented_webp_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
         or counts["audio_tail_candidate"] != 1

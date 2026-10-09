@@ -497,6 +497,17 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aWebpOrientationTagIsReadWithoutAnExtension() {
+        val direct = File.createTempFile("ow-webp", "")
+        direct.writeBytes(webpWithOrientation(6, prefix = false))
+        assertEquals(6, JpegOrientation.tag(direct))
+        assertEquals(640 to 480, JpegOrientation.displaySize(480, 640, JpegOrientation.tag(direct)))
+        val marked = webpWithOrientation(6, prefix = true)
+        assertEquals(6, JpegOrientation.tag(marked))
+        assertEquals(1, JpegOrientation.tag(webpWithOrientation(1, prefix = false)))
+    }
+
+    @Test
     fun aJpegWithCameraOrientationIsScannedAsShown() {
         val scene = still("scene")
         val root = File(scene.parentFile, "ow-orient-" + System.nanoTime())
@@ -827,6 +838,37 @@ private fun movingPicture(kind: String): File {
         )
     }
     return out
+}
+
+private fun webpWithOrientation(tag: Int, prefix: Boolean): ByteArray {
+    val tiff = byteArrayOf(
+        0x4D, 0x4D, 0x00, 0x2A,
+        0x00, 0x00, 0x00, 0x08,
+        0x00, 0x01,
+        0x01, 0x12,
+        0x00, 0x03,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, tag.toByte(),
+        0x00, 0x00,
+    )
+    val exif = if (prefix) byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00) + tiff else tiff
+    val vp8x = byteArrayOf(0x08, 0, 0, 0, 0xDF.toByte(), 0x01, 0x00, 0x7F, 0x02, 0x00)
+    val body = "WEBP".encodeToByteArray() + riffChunk("VP8X", vp8x) + riffChunk("EXIF", exif)
+    return "RIFF".encodeToByteArray() + le32(body.size) + body
+}
+
+private fun riffChunk(tag: String, payload: ByteArray): ByteArray {
+    val out = tag.encodeToByteArray() + le32(payload.size) + payload
+    return if (payload.size % 2 == 1) out + byteArrayOf(0) else out
+}
+
+private fun le32(value: Int): ByteArray {
+    return byteArrayOf(
+        value.toByte(),
+        (value shr 8).toByte(),
+        (value shr 16).toByte(),
+        (value shr 24).toByte(),
+    )
 }
 
 private fun jpegWithOrientation(tag: Int, jpeg: ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())): ByteArray {

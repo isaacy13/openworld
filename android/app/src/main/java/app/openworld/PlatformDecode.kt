@@ -14,8 +14,8 @@ import kotlin.math.roundToInt
 
 /**
  * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
- * because BitmapFactory keeps only the first one. A JPEG is turned to match its
- * camera orientation tag, because BitmapFactory keeps the stored pixels.
+ * because BitmapFactory keeps only the first one. A JPEG or a still WebP is turned
+ * to match its camera orientation tag, because BitmapFactory keeps the stored pixels.
  * The Rust library does the scan. Audio is ignored. FFmpeg is not used.
  */
 object PlatformDecode {

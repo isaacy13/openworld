@@ -247,6 +247,11 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(size.0, 640)
         XCTAssertEqual(size.1, 480)
         XCTAssertEqual(JpegOrientation.tag(Data([0x89, 0x50, 0x4E, 0x47])), 1)
+        let webp = FileManager.default.temporaryDirectory.appendingPathComponent("ow-webp-\(UUID().uuidString)")
+        try Data(webpWithOrientation(6, prefix: false)).write(to: webp)
+        XCTAssertEqual(JpegOrientation.tag(webp), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(6, prefix: true))), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(1, prefix: false))), 1)
     }
 
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
@@ -561,6 +566,38 @@ final class OpenWorldUITests: XCTestCase {
         {"id":"fast","name":"Fast","best_for":"Phones and long video.","curve_line":"Fixture curve measured. Real FBI photos stay off.","preselected":true}
         """.utf8))
     }
+}
+
+private func webpWithOrientation(_ tag: UInt8, prefix: Bool) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x4D, 0x4D, 0x00, 0x2A,
+        0x00, 0x00, 0x00, 0x08,
+        0x00, 0x01,
+        0x01, 0x12,
+        0x00, 0x03,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, tag,
+        0x00, 0x00,
+    ]
+    let exif = (prefix ? [0x45, 0x78, 0x69, 0x66, 0x00, 0x00] : []) + tiff
+    let vp8x: [UInt8] = [0x08, 0, 0, 0, 0xDF, 0x01, 0x00, 0x7F, 0x02, 0x00]
+    let body = Array("WEBP".utf8) + riffChunk("VP8X", vp8x) + riffChunk("EXIF", exif)
+    return Array("RIFF".utf8) + le32(body.count) + body
+}
+
+private func riffChunk(_ tag: String, _ payload: [UInt8]) -> [UInt8] {
+    var out = Array(tag.utf8) + le32(payload.count) + payload
+    if payload.count % 2 == 1 { out.append(0) }
+    return out
+}
+
+private func le32(_ value: Int) -> [UInt8] {
+    [
+        UInt8(value & 0xFF),
+        UInt8((value >> 8) & 0xFF),
+        UInt8((value >> 16) & 0xFF),
+        UInt8((value >> 24) & 0xFF),
+    ]
 }
 
 private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {

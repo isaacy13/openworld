@@ -843,6 +843,62 @@ fn jpeg_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
     out
 }
 
+fn webp_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut encoded)
+        .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    let mut chunks = Vec::new();
+    let mut index = 12usize;
+    while index + 8 <= encoded.len() {
+        let tag = encoded[index..index + 4].to_vec();
+        let size = u32::from_le_bytes(encoded[index + 4..index + 8].try_into().unwrap()) as usize;
+        let start = index + 8;
+        let end = start + size;
+        chunks.push((tag, encoded[start..end].to_vec()));
+        index = end + (size & 1);
+    }
+    let mut tiff = Vec::new();
+    tiff.extend_from_slice(&[0x4D, 0x4D, 0x00, 0x2A]);
+    tiff.extend_from_slice(&8u32.to_be_bytes());
+    tiff.extend_from_slice(&1u16.to_be_bytes());
+    tiff.extend_from_slice(&0x0112u16.to_be_bytes());
+    tiff.extend_from_slice(&3u16.to_be_bytes());
+    tiff.extend_from_slice(&1u32.to_be_bytes());
+    tiff.extend_from_slice(&u16::from(orientation).to_be_bytes());
+    tiff.extend_from_slice(&0u16.to_be_bytes());
+    let width = image.width() - 1;
+    let height = image.height() - 1;
+    let vp8x = vec![
+        0x08,
+        0,
+        0,
+        0,
+        (width & 0xff) as u8,
+        ((width >> 8) & 0xff) as u8,
+        ((width >> 16) & 0xff) as u8,
+        (height & 0xff) as u8,
+        ((height >> 8) & 0xff) as u8,
+        ((height >> 16) & 0xff) as u8,
+    ];
+    chunks.retain(|(tag, _)| tag.as_slice() != b"VP8X" && tag.as_slice() != b"EXIF");
+    chunks.insert(0, (b"VP8X".to_vec(), vp8x));
+    chunks.push((b"EXIF".to_vec(), tiff));
+    let mut body = b"WEBP".to_vec();
+    for (tag, payload) in chunks {
+        body.extend_from_slice(&tag);
+        body.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        body.extend_from_slice(&payload);
+        if payload.len() % 2 == 1 {
+            body.push(0);
+        }
+    }
+    let mut out = b"RIFF".to_vec();
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&body);
+    out
+}
+
 #[test]
 fn a_jpeg_with_camera_orientation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();
@@ -901,6 +957,57 @@ fn a_jpeg_with_camera_orientation_is_scanned_as_shown() {
     let plain = scan(upright);
     assert_eq!(plain.status, "complete", "{}", plain.message);
     assert_eq!(plain.summary, POSSIBLE_CANDIDATE);
+    let sideways = scan(raw);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
+}
+
+#[test]
+fn a_webp_with_camera_orientation_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("side.webp");
+    fs::write(&side, webp_with_orientation(&stored, 6)).unwrap();
+    let raw = dir.path().join("raw.webp");
+    let mut raw_bytes = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut raw_bytes)
+        .write_image(stored.as_raw(), stored.width(), stored.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    fs::write(&raw, raw_bytes).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&side).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    assert!(!probed.video);
+    let turned = scan(side);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
     let sideways = scan(raw);
     assert_eq!(sideways.status, "complete", "{}", sideways.message);
     assert_eq!(sideways.summary, NO_CLEARANCE);

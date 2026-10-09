@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
-//! A JPEG is turned to match its camera orientation tag before the pixels are
-//! scanned. Audio is not decoded. Phone, Mac, and Android shells decode with
-//! AVFoundation or MediaCodec and pass the frames through `load_frame_dir`.
-//! That path does not run FFmpeg.
+//! A JPEG or a still WebP is turned to match its camera orientation tag before
+//! the pixels are scanned. Audio is not decoded. Phone, Mac, and Android shells
+//! decode with AVFoundation or MediaCodec and pass the frames through
+//! `load_frame_dir`. That path does not run FFmpeg.
 
 use crate::timeutil::parse_rfc3339;
+use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
 use serde_json::Value;
 use std::fs::File;
@@ -64,9 +65,10 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
 }
 
 fn probe_image(path: &Path) -> Option<Probe> {
-    // An APNG is a moving picture. The still decoder would keep the first frame and
-    // could clear a file it did not finish. FFmpeg decodes every frame.
-    if animated_png(path) {
+    // An APNG or an animated WebP is a moving picture. The still decoder would keep
+    // the first frame and could clear a file it did not finish. FFmpeg decodes every
+    // frame it can. A phone that cannot read every frame refuses before this path.
+    if animated_png(path) || animated_webp(path) {
         return None;
     }
     let rgb = open_oriented(path).ok()?;
@@ -90,8 +92,16 @@ fn probe_image(path: &Path) -> Option<Probe> {
 /// Decodes a still and applies its camera orientation tag.
 /// A PNG has no such tag, so its pixels stay as stored.
 fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
-    let mut decoder = ImageReader::open(path)?.into_decoder()?;
-    let orientation = decoder.orientation()?;
+    let reader = ImageReader::open(path)?.with_guessed_format()?;
+    let mut decoder = reader.into_decoder()?;
+    let mut orientation = decoder.orientation()?;
+    // The WebP decoder reads a TIFF header at the start of the EXIF chunk.
+    // Some files put the JPEG "Exif" marker in front of that header.
+    if orientation == Orientation::NoTransforms {
+        if let Some(parsed) = webp_exif_orientation(path) {
+            orientation = parsed;
+        }
+    }
     let mut image = DynamicImage::from_decoder(decoder)?;
     image.apply_orientation(orientation);
     Ok(image.to_rgb8())
@@ -127,6 +137,124 @@ fn animated_png(path: &Path) -> bool {
             return false;
         }
     }
+}
+
+/// True when a WebP carries an animation chunk or the animation flag.
+fn animated_webp(path: &Path) -> bool {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return false;
+    }
+    let mut index = 12usize;
+    while index + 8 <= bytes.len() {
+        let tag = &bytes[index..index + 4];
+        let size = u32::from_le_bytes([bytes[index + 4], bytes[index + 5], bytes[index + 6], bytes[index + 7]]) as usize;
+        let start = index + 8;
+        let end = match start.checked_add(size) {
+            Some(end) if end <= bytes.len() => end,
+            _ => return false,
+        };
+        if tag == b"ANIM" || tag == b"ANMF" {
+            return true;
+        }
+        if tag == b"VP8X" && size >= 1 && bytes[start] & 0x02 != 0 {
+            return true;
+        }
+        index = end + (size & 1);
+    }
+    false
+}
+
+/// Orientation from a WebP EXIF chunk. The payload is a TIFF header, sometimes
+/// behind the six-byte marker a JPEG uses.
+fn webp_exif_orientation(path: &Path) -> Option<Orientation> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return None;
+    }
+    let mut index = 12usize;
+    while index + 8 <= bytes.len() {
+        let tag = &bytes[index..index + 4];
+        let size = u32::from_le_bytes([bytes[index + 4], bytes[index + 5], bytes[index + 6], bytes[index + 7]]) as usize;
+        let start = index + 8;
+        let end = start.checked_add(size)?;
+        if end > bytes.len() {
+            return None;
+        }
+        if tag == b"EXIF" {
+            return orientation_in_exif(&bytes[start..end]);
+        }
+        index = end + (size & 1);
+    }
+    None
+}
+
+fn orientation_in_exif(payload: &[u8]) -> Option<Orientation> {
+    let tiff = if payload.len() >= 6 && &payload[..6] == b"Exif\0\0" {
+        &payload[6..]
+    } else {
+        payload
+    };
+    Orientation::from_exif(tiff_orientation_tag(tiff)?)
+}
+
+fn tiff_orientation_tag(tiff: &[u8]) -> Option<u8> {
+    if tiff.len() < 8 {
+        return None;
+    }
+    let little = match tiff[0..4] {
+        [0x49, 0x49, 0x2A, 0x00] => true,
+        [0x4D, 0x4D, 0x00, 0x2A] => false,
+        _ => return None,
+    };
+    let ifd = read_u32(tiff, 4, little)?;
+    if ifd < 8 {
+        return None;
+    }
+    let mut cursor = ifd as usize;
+    if cursor + 2 > tiff.len() {
+        return None;
+    }
+    let entries = read_u16(tiff, cursor, little)? as usize;
+    cursor += 2;
+    if entries > 64 {
+        return None;
+    }
+    for _ in 0..entries {
+        if cursor + 12 > tiff.len() {
+            return None;
+        }
+        let tag = read_u16(tiff, cursor, little)?;
+        let format = read_u16(tiff, cursor + 2, little)?;
+        let count = read_u32(tiff, cursor + 4, little)?;
+        if tag == 0x0112 && format == 3 && count == 1 {
+            let value = read_u16(tiff, cursor + 8, little)?;
+            return if (1..=8).contains(&value) { Some(value as u8) } else { Some(1) };
+        }
+        cursor += 12;
+    }
+    None
+}
+
+fn read_u16(bytes: &[u8], offset: usize, little: bool) -> Option<u16> {
+    let pair = bytes.get(offset..offset + 2)?;
+    Some(if little {
+        u16::from_le_bytes([pair[0], pair[1]])
+    } else {
+        u16::from_be_bytes([pair[0], pair[1]])
+    })
+}
+
+fn read_u32(bytes: &[u8], offset: usize, little: bool) -> Option<u32> {
+    let quad = bytes.get(offset..offset + 4)?;
+    Some(if little {
+        u32::from_le_bytes([quad[0], quad[1], quad[2], quad[3]])
+    } else {
+        u32::from_be_bytes([quad[0], quad[1], quad[2], quad[3]])
+    })
 }
 
 fn probe_video(path: &Path) -> Result<Probe, MediaError> {
@@ -472,6 +600,149 @@ mod tests {
         let _ = fs::remove_file(&path);
         assert_eq!(opened.dimensions(), raw.dimensions());
         assert_eq!(opened.as_raw(), raw.as_raw());
+    }
+
+    fn webp_lossless(image: &RgbImage) -> Vec<u8> {
+        let mut encoded = Vec::new();
+        image::codecs::webp::WebPEncoder::new_lossless(&mut encoded)
+            .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+            .unwrap();
+        encoded
+    }
+
+    fn tiff_orientation(tag: u8, big_endian: bool) -> Vec<u8> {
+        let mut tiff = Vec::new();
+        if big_endian {
+            tiff.extend_from_slice(&[0x4D, 0x4D, 0x00, 0x2A]);
+            tiff.extend_from_slice(&8u32.to_be_bytes());
+            tiff.extend_from_slice(&1u16.to_be_bytes());
+            tiff.extend_from_slice(&0x0112u16.to_be_bytes());
+            tiff.extend_from_slice(&3u16.to_be_bytes());
+            tiff.extend_from_slice(&1u32.to_be_bytes());
+            tiff.extend_from_slice(&u16::from(tag).to_be_bytes());
+            tiff.extend_from_slice(&0u16.to_be_bytes());
+        } else {
+            tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+            tiff.extend_from_slice(&8u32.to_le_bytes());
+            tiff.extend_from_slice(&1u16.to_le_bytes());
+            tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+            tiff.extend_from_slice(&3u16.to_le_bytes());
+            tiff.extend_from_slice(&1u32.to_le_bytes());
+            tiff.extend_from_slice(&u16::from(tag).to_le_bytes());
+            tiff.extend_from_slice(&0u16.to_le_bytes());
+            tiff.extend_from_slice(&0u32.to_le_bytes());
+        }
+        tiff
+    }
+
+    /// A still WebP with an EXIF chunk. `prefix` writes the JPEG marker in front of the TIFF header.
+    fn webp_with_orientation(image: &RgbImage, orientation: u8, big_endian: bool, prefix: bool) -> Vec<u8> {
+        let encoded = webp_lossless(image);
+        let mut chunks = Vec::new();
+        let mut index = 12usize;
+        while index + 8 <= encoded.len() {
+            let tag = encoded[index..index + 4].to_vec();
+            let size = u32::from_le_bytes(encoded[index + 4..index + 8].try_into().unwrap()) as usize;
+            let start = index + 8;
+            let end = start + size;
+            chunks.push((tag, encoded[start..end].to_vec()));
+            index = end + (size & 1);
+        }
+        let mut exif = Vec::new();
+        if prefix {
+            exif.extend_from_slice(b"Exif\0\0");
+        }
+        exif.extend_from_slice(&tiff_orientation(orientation, big_endian));
+        let mut extended = false;
+        for (tag, payload) in chunks.iter_mut() {
+            if tag == b"VP8X" && !payload.is_empty() {
+                payload[0] |= 0x08;
+                extended = true;
+            }
+        }
+        chunks.retain(|(tag, _)| tag.as_slice() != b"EXIF");
+        if !extended {
+            let width = image.width() - 1;
+            let height = image.height() - 1;
+            let payload = vec![
+                0x08,
+                0,
+                0,
+                0,
+                (width & 0xff) as u8,
+                ((width >> 8) & 0xff) as u8,
+                ((width >> 16) & 0xff) as u8,
+                (height & 0xff) as u8,
+                ((height >> 8) & 0xff) as u8,
+                ((height >> 16) & 0xff) as u8,
+            ];
+            chunks.insert(0, (b"VP8X".to_vec(), payload));
+        }
+        chunks.push((b"EXIF".to_vec(), exif));
+        let mut body = Vec::new();
+        body.extend_from_slice(b"WEBP");
+        for (tag, payload) in chunks {
+            body.extend_from_slice(&tag);
+            body.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            body.extend_from_slice(&payload);
+            if payload.len() % 2 == 1 {
+                body.push(0);
+            }
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(b"RIFF");
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&body);
+        out
+    }
+
+    fn write_bytes(name: &str, bytes: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("ow-{name}-{}", std::process::id()));
+        fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn webp_orientation_six_matches_a_clockwise_quarter_turn() {
+        let shown = RgbImage::from_raw(3, 2, vec![10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0, 50, 0, 0, 60, 0, 0]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        for (big, prefix) in [(true, false), (false, true)] {
+            let path = write_bytes("webp6", &webp_with_orientation(&stored, 6, big, prefix));
+            let opened = open_oriented(&path).unwrap();
+            let _ = fs::remove_file(&path);
+            assert_eq!(opened.dimensions(), shown.dimensions(), "endian {big} prefix {prefix}");
+            assert_eq!(opened.as_raw(), shown.as_raw(), "endian {big} prefix {prefix}");
+        }
+    }
+
+    #[test]
+    fn a_webp_without_an_orientation_tag_keeps_the_stored_pixels() {
+        let stored = RgbImage::from_raw(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
+        let path = write_bytes("webp1", &webp_lossless(&stored));
+        let opened = open_oriented(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(opened.dimensions(), stored.dimensions());
+        assert_eq!(opened.as_raw(), stored.as_raw());
+    }
+
+    #[test]
+    fn an_animated_webp_is_not_a_still() {
+        let stored = RgbImage::from_raw(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
+        let mut bytes = webp_lossless(&stored);
+        let anim = b"ANIM";
+        bytes.extend_from_slice(anim);
+        bytes.extend_from_slice(&6u32.to_le_bytes());
+        bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+        let size = (bytes.len() - 8) as u32;
+        bytes[4..8].copy_from_slice(&size.to_le_bytes());
+        let path = write_bytes("webpanim", &bytes);
+        let probed = super::probe(&path);
+        let _ = fs::remove_file(&path);
+        match probed {
+            Ok(info) => assert!(info.video, "an animated webp was read as one still"),
+            Err(super::MediaError::BadCodec) => {}
+        }
+        assert!(super::animated_webp(&write_bytes("webpanim2", &bytes)));
     }
 
     #[test]

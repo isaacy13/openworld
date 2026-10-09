@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// Camera orientation for a JPEG. The tag says how the stored pixels are shown.
+/// Camera orientation for a JPEG or a still WebP. The tag says how the stored pixels are shown.
 /// Values match the image crate: 6 is a quarter turn clockwise, 8 is three
 /// quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
 public enum JpegOrientation {
@@ -11,6 +11,7 @@ public enum JpegOrientation {
     }
 
     public static func tag(_ data: Data) -> Int {
+        if isWebp(data) { return webpTag(data) }
         if data.count < 4 || data[0] != 0xFF || data[1] != 0xD8 { return 1 }
         var index = 2
         while index + 4 < data.count {
@@ -71,6 +72,43 @@ public enum JpegOrientation {
         case 8: return (y, width - 1 - x)
         default: return (x, y)
         }
+    }
+
+    private static func isWebp(_ data: Data) -> Bool {
+        if data.count < 12 { return false }
+        return Array(data[0..<4]) == Array("RIFF".utf8) && Array(data[8..<12]) == Array("WEBP".utf8)
+    }
+
+    private static func webpTag(_ data: Data) -> Int {
+        var index = 12
+        while index + 8 <= data.count {
+            let tag = Array(data[index..<index + 4])
+            let size = le32(data, index + 4)
+            let start = index + 8
+            if size < 0 || start > data.count || size > data.count - start { return 1 }
+            let end = start + size
+            if tag == Array("EXIF".utf8) {
+                return orientationInExif(data, start: start, end: end) ?? 1
+            }
+            index = end + (size & 1)
+        }
+        return 1
+    }
+
+    private static func le32(_ data: Data, _ offset: Int) -> Int {
+        return Int(data[offset]) | (Int(data[offset + 1]) << 8) | (Int(data[offset + 2]) << 16) | (Int(data[offset + 3]) << 24)
+    }
+
+    private static func orientationInExif(_ data: Data, start: Int, end: Int) -> Int? {
+        let header: [UInt8] = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]
+        if end - start >= header.count + 8 {
+            var marked = true
+            for (offset, byte) in header.enumerated() {
+                if data[start + offset] != byte { marked = false }
+            }
+            if marked { return tiffOrientation(data, start: start + header.count, end: end) }
+        }
+        return tiffOrientation(data, start: start, end: end)
     }
 
     private static func exifOrientation(_ data: Data, start: Int, end: Int) -> Int? {

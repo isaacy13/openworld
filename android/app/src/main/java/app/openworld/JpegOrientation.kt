@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import java.io.File
 
 /**
- * Camera orientation for a JPEG. BitmapFactory keeps the stored pixels.
+ * Camera orientation for a JPEG or a still WebP. BitmapFactory keeps the stored pixels.
  * The tag says how those pixels are shown. The scan reads the shown pixels.
  * Values match the image crate: 6 is a quarter turn clockwise, 8 is three
  * quarter turns clockwise, 3 is a half turn, 2 mirrors left to right.
@@ -17,6 +17,7 @@ object JpegOrientation {
     }
 
     fun tag(bytes: ByteArray): Int {
+        if (isWebp(bytes)) return webpTag(bytes)
         if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return 1
         var index = 2
         while (index + 4 < bytes.size) {
@@ -79,6 +80,43 @@ object JpegOrientation {
             8 -> y to width - 1 - x
             else -> x to y
         }
+    }
+
+    private fun isWebp(bytes: ByteArray): Boolean {
+        return bytes.size >= 12 &&
+            bytes.copyOf(4).contentEquals("RIFF".encodeToByteArray()) &&
+            bytes.copyOfRange(8, 12).contentEquals("WEBP".encodeToByteArray())
+    }
+
+    private fun webpTag(bytes: ByteArray): Int {
+        var index = 12
+        while (index + 8 <= bytes.size) {
+            val tag = bytes.copyOfRange(index, index + 4)
+            val size = le32(bytes, index + 4)
+            val start = index + 8
+            if (size < 0 || start > bytes.size || size > bytes.size - start) return 1
+            val end = start + size
+            if (tag.contentEquals("EXIF".encodeToByteArray())) {
+                return orientationInExif(bytes, start, end) ?: 1
+            }
+            index = end + (size and 1)
+        }
+        return 1
+    }
+
+    private fun le32(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 3].toInt() and 0xFF) shl 24)
+    }
+
+    private fun orientationInExif(bytes: ByteArray, start: Int, end: Int): Int? {
+        val header = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00)
+        if (end - start >= header.size + 8 && header.indices.all { bytes[start + it] == header[it] }) {
+            return tiffOrientation(bytes, start + header.size, end)
+        }
+        return tiffOrientation(bytes, start, end)
     }
 
     private fun exifOrientation(bytes: ByteArray, start: Int, end: Int): Int? {
