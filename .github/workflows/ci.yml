@@ -13,3 +13,17 @@ jobs:
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
       - run: python3 eval/measure_fast.py --bin core/target/release/openworld --bundles bundles --out /tmp/fast-curve.json --check eval/curves/fast.json
       - run: python3 tests/words.py
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.2"
+      - name: apple phone contract
+        working-directory: apple
+        env:
+          OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
+          OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
+        run: swift test --filter PhoneContractTests
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: android phone screens
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --stacktrace

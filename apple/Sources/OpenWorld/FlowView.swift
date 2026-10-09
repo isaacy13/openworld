@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import SwiftUI
+import OpenWorldContract
 #if os(macOS)
 import AppKit
 #else
@@ -98,7 +99,7 @@ final class FlowModel: ObservableObject {
 
 extension CoreClient {
     func runPublic(posters: URL) throws {
-        _ = try run(["posters", "write-fixture", "--out", posters.path])
+        _ = try run(PhoneArguments.writeFixture(out: posters.path))
     }
 }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import AVFoundation
+import OpenWorldContract
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
@@ -16,24 +17,20 @@ enum PlatformDecoder {
         var containerUnix: Int?
         var directory: URL?
 
+        var media: MediaArguments {
+            MediaArguments(
+                width: width,
+                height: height,
+                fps: fps,
+                frames: frames,
+                duration: duration,
+                video: video,
+                containerUnix: containerUnix
+            )
+        }
+
         func arguments(framesDirectory: URL?) -> [String] {
-            var args = [
-                "--width", String(width),
-                "--height", String(height),
-                "--fps", String(fps),
-                "--frame-count", String(frames),
-                "--duration", String(duration),
-            ]
-            if video {
-                args.append("--video")
-            }
-            if let containerUnix {
-                args.append(contentsOf: ["--container-unix", String(containerUnix)])
-            }
-            if let framesDirectory {
-                args.append(contentsOf: ["--frames", framesDirectory.path])
-            }
-            return args
+            media.arguments(framesDirectory: framesDirectory?.path)
         }
     }
 

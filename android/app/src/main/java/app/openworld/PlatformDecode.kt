@@ -44,8 +44,10 @@ object PlatformDecode {
     }
 
     fun facts(file: File): Facts {
-        val video = videoTrack(file)
-        if (video == null) {
+        pngSize(file)?.let { (width, height) ->
+            return Facts(width, height, 0.0, 1, 0.0, false)
+        }
+        if (hasImageHeader(file)) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
@@ -53,7 +55,7 @@ object PlatformDecode {
             }
             return Facts(bounds.outWidth, bounds.outHeight, 0.0, 1, 0.0, false)
         }
-        return video
+        return videoTrack(file) ?: throw IOException("Bad codec or unreadable file. Refusing.")
     }
 
     /** One PNG per decoded frame, in order. Not a second video file. */
@@ -63,6 +65,12 @@ object PlatformDecode {
         }
         val meta = facts(file)
         if (!meta.video) {
+            // A PNG the user already has is one frame. Copy the bytes so the scan
+            // sees the original pixels. The import temp file has no extension.
+            if (pngSize(file) != null) {
+                file.copyTo(File(directory, "frame_000000.png"), overwrite = true)
+                return meta.copy(frames = 1, directory = directory)
+            }
             val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                 ?: throw IOException("Bad codec or unreadable file. Refusing.")
             File(directory, "frame_000000.png").outputStream().use { out ->
@@ -129,6 +137,52 @@ object PlatformDecode {
         }
         if (written == 0) throw IOException("Bad codec or unreadable file. Refusing.")
         return meta.copy(frames = written.toLong(), directory = directory)
+    }
+
+
+
+    /** JPEG, GIF, WebP, BMP, or HEIF. A text file has none of these headers. */
+    private fun hasImageHeader(file: File): Boolean {
+        val header = ByteArray(16)
+        val read = file.inputStream().use { it.read(header) }
+        if (read < 3) return false
+        if (header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()) return true
+        if (read >= 6) {
+            val gif = header.copyOf(6)
+            if (gif.contentEquals("GIF87a".encodeToByteArray()) || gif.contentEquals("GIF89a".encodeToByteArray())) return true
+        }
+        if (read >= 12 &&
+            header.copyOf(4).contentEquals("RIFF".encodeToByteArray()) &&
+            header.copyOfRange(8, 12).contentEquals("WEBP".encodeToByteArray())
+        ) return true
+        if (header[0] == 'B'.code.toByte() && header[1] == 'M'.code.toByte()) return true
+        if (read >= 12 && header.copyOfRange(4, 8).contentEquals("ftyp".encodeToByteArray())) {
+            val brand = String(header, 8, 4, Charsets.US_ASCII)
+            return brand in setOf("heic", "heix", "hevc", "heif", "mif1")
+        }
+        return false
+    }
+
+    /** Width and height from a PNG header, or null when the file is not a PNG. */
+    private fun pngSize(file: File): Pair<Int, Int>? {
+        val header = ByteArray(24)
+        file.inputStream().use { input ->
+            if (input.read(header) != header.size) return null
+        }
+        val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        if (!header.copyOf(8).contentEquals(signature)) return null
+        if (!header.copyOfRange(12, 16).contentEquals(byteArrayOf(0x49, 0x48, 0x44, 0x52))) return null
+        val width = readBeInt(header, 16)
+        val height = readBeInt(header, 20)
+        if (width <= 0 || height <= 0) return null
+        return width to height
+    }
+
+    private fun readBeInt(bytes: ByteArray, offset: Int): Int {
+        return ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
     }
 
     private fun videoTrack(file: File): Facts? {

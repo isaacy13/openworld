@@ -2,10 +2,15 @@
 
 use clap::{Args, Parser, Subcommand};
 use openworld_core::copy::product_copy;
+use openworld_core::embed::fixture_probe;
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
+use openworld_core::fiducial::{self, render_face_module};
+use openworld_core::geom::blank;
 use openworld_core::hardware::resolve_execution;
 use openworld_core::posters::write_fixture_pack;
-use openworld_core::scan::{delete_output, estimate_for, leave_prompt, scan_path, MediaFacts, Progress, ScanRequest};
+use openworld_core::scan::{
+    delete_output, estimate_for, leave_prompt, scan_path, MediaFacts, Progress, ScanRequest,
+};
 use openworld_core::scene::demo_scene;
 use openworld_core::{load_bundles, measure_fast};
 use serde_json::json;
@@ -111,6 +116,29 @@ enum Cmd {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Paint a synthetic still. No photograph of a person.
+    FixtureStill {
+        #[arg(long)]
+        out: PathBuf,
+        /// Compared face, small face, vehicle, and plate.
+        #[arg(long)]
+        scene: bool,
+        /// A canvas with no marker.
+        #[arg(long)]
+        blank: bool,
+        #[arg(long, default_value_t = 7)]
+        id: u16,
+        /// Pixel size of one marker module.
+        #[arg(long, default_value_t = 16)]
+        module: u32,
+        #[arg(long)]
+        x: Option<u32>,
+        #[arg(long)]
+        y: Option<u32>,
+        /// Place the marker where the fixture score is below the Fast cutoff.
+        #[arg(long)]
+        below_cutoff: bool,
+    },
     /// Delete a result directory.
     Delete {
         #[arg(long)]
@@ -181,7 +209,9 @@ impl PlatformMedia {
         }
         let width = self.width.ok_or("A platform decode needs a width.")?;
         let height = self.height.ok_or("A platform decode needs a height.")?;
-        let frames = self.frame_count.ok_or("A platform decode needs a frame count.")?;
+        let frames = self
+            .frame_count
+            .ok_or("A platform decode needs a frame count.")?;
         if width == 0 || height == 0 || frames == 0 {
             return Err("Bad codec or unreadable file. Refusing.".into());
         }
@@ -232,11 +262,37 @@ fn run(cli: Cli) -> Result<i32, String> {
             }
             Ok(0)
         }
-        Cmd::Estimate { input, bundle, long_side, coverage, form_factor, provider, media } => {
-            let req = request(&bundles, &input, &bundle, &long_side, &coverage, &form_factor, &provider, PathBuf::from("."), PathBuf::from("."), true, true, None, None, media.facts()?)?;
+        Cmd::Estimate {
+            input,
+            bundle,
+            long_side,
+            coverage,
+            form_factor,
+            provider,
+            media,
+        } => {
+            let req = request(
+                &bundles,
+                &input,
+                &bundle,
+                &long_side,
+                &coverage,
+                &form_factor,
+                &provider,
+                PathBuf::from("."),
+                PathBuf::from("."),
+                true,
+                true,
+                None,
+                None,
+                media.facts()?,
+            )?;
             match estimate_for(&req) {
                 Ok(est) => {
-                    emit(cli.json, serde_json::to_value(&est).map_err(|e| e.to_string())?);
+                    emit(
+                        cli.json,
+                        serde_json::to_value(&est).map_err(|e| e.to_string())?,
+                    );
                     if !cli.json {
                         println!("{}", est.human);
                         println!("{}", est.caveat);
@@ -256,7 +312,10 @@ fn run(cli: Cli) -> Result<i32, String> {
                     Ok(0)
                 }
                 Err(report) => {
-                    emit(cli.json, serde_json::to_value(&report).map_err(|e| e.to_string())?);
+                    emit(
+                        cli.json,
+                        serde_json::to_value(&report).map_err(|e| e.to_string())?,
+                    );
                     Ok(2)
                 }
             }
@@ -314,8 +373,40 @@ fn run(cli: Cli) -> Result<i32, String> {
             out,
             form_factor,
             yes,
-        } => analyze(cli.json, &bundles, input, bundle, long_side, coverage, posters, out, &form_factor, yes),
+        } => analyze(
+            cli.json,
+            &bundles,
+            input,
+            bundle,
+            long_side,
+            coverage,
+            posters,
+            out,
+            &form_factor,
+            yes,
+        ),
         Cmd::Demo { out } => demo(&bundles, &out, cli.json),
+        Cmd::FixtureStill {
+            out,
+            scene,
+            blank,
+            id,
+            module,
+            x,
+            y,
+            below_cutoff,
+        } => fixture_still(
+            &bundles,
+            &out,
+            scene,
+            blank,
+            id,
+            module,
+            x,
+            y,
+            below_cutoff,
+            cli.json,
+        ),
         Cmd::Delete { out } => match delete_output(&out) {
             Ok(()) => {
                 emit(cli.json, json!({ "deleted": true }));
@@ -328,7 +419,10 @@ fn run(cli: Cli) -> Result<i32, String> {
         },
         Cmd::Leave { url } => match leave_prompt(&url) {
             Ok(prompt) => {
-                emit(cli.json, serde_json::to_value(&prompt).map_err(|e| e.to_string())?);
+                emit(
+                    cli.json,
+                    serde_json::to_value(&prompt).map_err(|e| e.to_string())?,
+                );
                 if !cli.json {
                     println!("{}", prompt.message);
                     println!("{}", prompt.url);
@@ -342,31 +436,44 @@ fn run(cli: Cli) -> Result<i32, String> {
         },
         Cmd::Measure => {
             let all = load_bundles(&bundles).map_err(|e| e.to_string())?;
-            let fast = all.into_iter().find(|b| b.id == "fast").ok_or("Fast bundle is missing.")?;
+            let fast = all
+                .into_iter()
+                .find(|b| b.id == "fast")
+                .ok_or("Fast bundle is missing.")?;
             let measurement = measure_fast(&fast);
-            emit(true, serde_json::to_value(&measurement).map_err(|e| e.to_string())?);
+            emit(
+                true,
+                serde_json::to_value(&measurement).map_err(|e| e.to_string())?,
+            );
             Ok(0)
         }
         Cmd::Posters { action } => match action {
             PosterCmd::Check { posters } => {
                 match openworld_core::load_pack(&posters, SystemTime::now()) {
                     Ok(pack) => {
-                        emit(cli.json, json!({
-                            "id": pack.id,
-                            "posters": pack.posters.len(),
-                            "perception": pack.perception,
-                            "expires_at": pack.expires_at,
-                        }));
+                        emit(
+                            cli.json,
+                            json!({
+                                "id": pack.id,
+                                "posters": pack.posters.len(),
+                                "perception": pack.perception,
+                                "expires_at": pack.expires_at,
+                            }),
+                        );
                         Ok(0)
                     }
                     Err(err) => {
-                        emit(cli.json, json!({ "status": "refused", "message": err.to_string() }));
+                        emit(
+                            cli.json,
+                            json!({ "status": "refused", "message": err.to_string() }),
+                        );
                         Ok(2)
                     }
                 }
             }
             PosterCmd::WriteFixture { out } => {
-                let pack = write_fixture_pack(&out, SystemTime::now()).map_err(|e| e.to_string())?;
+                let pack =
+                    write_fixture_pack(&out, SystemTime::now()).map_err(|e| e.to_string())?;
                 emit(
                     cli.json,
                     json!({
@@ -388,7 +495,10 @@ fn run(cli: Cli) -> Result<i32, String> {
                     Ok(_) => Ok(0),
                     Err(err) => {
                         let message = "Real FBI photos stay off. Fast does not have a curve that allows them.";
-                        emit(cli.json, json!({ "status": "refused", "message": message, "detail": err.to_string() }));
+                        emit(
+                            cli.json,
+                            json!({ "status": "refused", "message": message, "detail": err.to_string() }),
+                        );
                         if !cli.json {
                             eprintln!("{message}");
                         }
@@ -431,29 +541,48 @@ fn analyze(
     if !json_mode {
         println!("Bundles:");
         for item in &all {
-            let mark = if item.preselected() { " (selected)" } else { "" };
-            println!("  {} — {} — {}{mark}", item.id, item.best_for, item.curve_line);
+            let mark = if item.preselected() {
+                " (selected)"
+            } else {
+                ""
+            };
+            println!(
+                "  {} — {} — {}{mark}",
+                item.id, item.best_for, item.curve_line
+            );
         }
     }
     let bundle = match bundle {
         Some(id) => id,
         None => {
             let entered = prompt("Bundle [fast]:")?;
-            if entered.is_empty() { "fast".into() } else { entered }
+            if entered.is_empty() {
+                "fast".into()
+            } else {
+                entered
+            }
         }
     };
     let long_side = match long_side {
         Some(value) => value,
         None => {
             let entered = prompt("Detection long side (320, 480, 640, full) [640]:")?;
-            if entered.is_empty() { "640".into() } else { entered }
+            if entered.is_empty() {
+                "640".into()
+            } else {
+                entered
+            }
         }
     };
     let coverage = match coverage {
         Some(value) => value,
         None => {
             let entered = prompt("Coverage (complete, measured) [complete]:")?;
-            if entered.is_empty() { "complete".into() } else { entered }
+            if entered.is_empty() {
+                "complete".into()
+            } else {
+                entered
+            }
         }
     };
     let posters = match posters {
@@ -464,7 +593,22 @@ fn analyze(
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:")?),
     };
-    let req = request(bundles, &input, &bundle, &long_side, &coverage, form_factor, "cpu", posters, out, true, true, None, None, None)?;
+    let req = request(
+        bundles,
+        &input,
+        &bundle,
+        &long_side,
+        &coverage,
+        form_factor,
+        "cpu",
+        posters,
+        out,
+        true,
+        true,
+        None,
+        None,
+        None,
+    )?;
     match estimate_for(&req) {
         Ok(est) => {
             println!("{}", est.human);
@@ -498,23 +642,144 @@ fn analyze(
     finish_report(json_mode, &report)
 }
 
+fn fixture_still(
+    bundles: &Path,
+    out: &Path,
+    scene: bool,
+    blank_canvas: bool,
+    id: u16,
+    module: u32,
+    x: Option<u32>,
+    y: Option<u32>,
+    below_cutoff: bool,
+    json_mode: bool,
+) -> Result<i32, String> {
+    if scene && blank_canvas {
+        return Err("Choose a scene or a blank still.".into());
+    }
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    if scene {
+        let threshold = fast_threshold(bundles)?;
+        let layout = demo_scene(threshold);
+        layout.image.save(out).map_err(|e| e.to_string())?;
+        emit(
+            json_mode,
+            json!({
+                "path": out,
+                "scene": true,
+                "id": layout.compared_id,
+                "width": layout.image.width(),
+                "height": layout.image.height(),
+            }),
+        );
+        return Ok(0);
+    }
+    if blank_canvas {
+        let image = blank(400, 320);
+        image.save(out).map_err(|e| e.to_string())?;
+        emit(
+            json_mode,
+            json!({ "path": out, "blank": true, "width": 400, "height": 320 }),
+        );
+        return Ok(0);
+    }
+    if module == 0 {
+        return Err("Module size must be at least 1.".into());
+    }
+    let threshold = fast_threshold(bundles)?;
+    let marker = render_face_module(id, module);
+    let (mw, mh) = marker.dimensions();
+    let (px, py) = match (x, y, below_cutoff) {
+        (Some(_), Some(_), true) => {
+            return Err("A below-cutoff still picks its own origin.".into());
+        }
+        (Some(x), Some(y), false) => (x, y),
+        (None, None, below) => find_origin(id, mw, mh, threshold, below)?,
+        _ => return Err("Provide both x and y, or neither.".into()),
+    };
+    if px.saturating_add(mw) > 400 || py.saturating_add(mh) > 320 {
+        return Err("The marker does not fit on the still.".into());
+    }
+    let mut image = blank(400, 320);
+    fiducial::place(&mut image, &marker, px, py);
+    image.save(out).map_err(|e| e.to_string())?;
+    emit(
+        json_mode,
+        json!({
+            "path": out,
+            "id": id,
+            "module": module,
+            "x": px,
+            "y": py,
+            "width": 400,
+            "height": 320,
+            "below_cutoff": below_cutoff,
+        }),
+    );
+    Ok(0)
+}
+
+fn find_origin(id: u16, w: u32, h: u32, threshold: f32, below: bool) -> Result<(u32, u32), String> {
+    for y in (8..80).step_by(2) {
+        for x in (8..80).step_by(2) {
+            let (_probe, score) = fixture_probe(id, x, y, w, h, 0);
+            let hit = if below {
+                score < threshold
+            } else {
+                score >= threshold
+            };
+            if hit {
+                return Ok((x, y));
+            }
+        }
+    }
+    if below {
+        Err("No placement scored below the locked cutoff.".into())
+    } else {
+        Err("No placement scored at or above the locked cutoff.".into())
+    }
+}
+
+fn fast_threshold(bundles: &Path) -> Result<f32, String> {
+    load_bundles(bundles)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|b| b.id == "fast")
+        .map(|b| b.threshold)
+        .ok_or_else(|| "Fast bundle is missing.".into())
+}
+
 fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let posters = out.join("posters");
     let pack = write_fixture_pack(&posters, SystemTime::now()).map_err(|e| e.to_string())?;
-    let fast = load_bundles(bundles).map_err(|e| e.to_string())?.into_iter().find(|b| b.id == "fast").ok_or("Fast bundle is missing.")?;
+    let fast = load_bundles(bundles)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|b| b.id == "fast")
+        .ok_or("Fast bundle is missing.")?;
     let scene = demo_scene(fast.threshold);
     let input = out.join("input.png");
     scene.image.save(&input).map_err(|e| e.to_string())?;
     let result = out.join("result");
-    let req = request(bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true, None, None, None)?;
+    let req = request(
+        bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true,
+        None, None, None,
+    )?;
     let report = scan_path(&req, &mut |_| {});
     let _ = pack;
     finish_report(json_mode, &report)
 }
 
 fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result<i32, String> {
-    emit(json_mode, serde_json::to_value(report).map_err(|e| e.to_string())?);
+    emit(
+        json_mode,
+        serde_json::to_value(report).map_err(|e| e.to_string())?,
+    );
     if !json_mode {
         println!("{}", report.summary);
         if let Some(banner) = &report.coverage_banner {
@@ -525,7 +790,12 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
             println!("{line}");
         }
         for item in &report.inventory {
-            println!("{}  {}  {}", item.kind, item.label, item.crop.as_deref().unwrap_or(""));
+            println!(
+                "{}  {}  {}",
+                item.kind,
+                item.label,
+                item.crop.as_deref().unwrap_or("")
+            );
         }
     }
     Ok(if report.status == "complete" { 0 } else { 2 })
@@ -547,7 +817,8 @@ fn request(
     frames_dir: Option<PathBuf>,
     media: Option<MediaFacts>,
 ) -> Result<ScanRequest, String> {
-    let detection = DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
+    let detection =
+        DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
     let coverage = Coverage::parse(coverage).ok_or("Coverage must be complete or measured.")?;
     let form_factor = match form_factor {
         "phone" => FormFactor::Phone,
@@ -593,13 +864,19 @@ fn prompt(text: &str) -> Result<String, String> {
     print!("{text} ");
     io::stdout().flush().ok();
     let mut line = String::new();
-    io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
+    io::stdin()
+        .lock()
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?;
     Ok(line.trim().to_string())
 }
 
 fn emit(json_mode: bool, value: serde_json::Value) {
-    if json_mode || value.get("schema").and_then(|v| v.as_str()) == Some("openworld.measurement.v1") {
-        println!("{}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into()));
+    if json_mode || value.get("schema").and_then(|v| v.as_str()) == Some("openworld.measurement.v1")
+    {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into())
+        );
     }
 }
-
