@@ -58,7 +58,7 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 
 ## Fast curve
 
-`eval/curves/fast.json` is the fixture measurement on this program's preprocess: false match rate, false non-match rate, counts, a 95% Wilson interval, detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second under both coverage modes. A shorter probe is included so the measured-mode warning has a number behind it.
+`eval/curves/fast.json` is the fixture measurement on this program's preprocess: false match rate, false non-match rate, and the four comparison outcomes at the locked cutoff (true positive, false negative, false positive, true negative), each with a count and a 95% Wilson interval. Genuine trials use 16 fixture identities. Impostor trials use 160 pairs with a different probe identity every time. A face that was not compared is left out of that table. The file also has detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second under both coverage modes. A shorter probe is included so the measured-mode warning has a number behind it.
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
 

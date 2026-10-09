@@ -1,35 +1,78 @@
 {
   "below_64_kept": 0,
   "bundle_id": "fast",
+  "decisions": {
+    "definition": "One trial is one fixture marker large enough to compare, against one poster. True positive: same fixture identity, score at or above the locked cutoff. False negative: same fixture identity, score below the cutoff. False positive: different fixture identity, score at or above the cutoff. True negative: different fixture identity, score below the cutoff. A face that was not compared is not in this table and is not a clearance.",
+    "false_negative": {
+      "ci95": [
+        0.23436254021925293,
+        0.37501627444076
+      ],
+      "count": 48,
+      "rate": 0.3,
+      "trials": 160
+    },
+    "false_positive": {
+      "ci95": [
+        0.0,
+        0.02344703665003271
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 160
+    },
+    "identity_pairs": {
+      "genuine": "16 fixture identities, 10 placements each, probe identity equals the poster.",
+      "impostor": "160 pairs. Each probe identity is different from the poster and from the other probes."
+    },
+    "true_negative": {
+      "ci95": [
+        0.9765529633499672,
+        1.0
+      ],
+      "count": 160,
+      "rate": 1.0,
+      "trials": 160
+    },
+    "true_positive": {
+      "ci95": [
+        0.6249837255592399,
+        0.7656374597807469
+      ],
+      "count": 112,
+      "rate": 0.7,
+      "trials": 160
+    }
+  },
   "detection_recall_64": {
     "ci95": [
-      0.7574992425007574,
-      0.9999999999999998
+      0.9123754607496077,
+      1.0
     ],
-    "count": 12,
+    "count": 40,
     "rate": 1.0,
-    "trials": 12
+    "trials": 40
   },
   "detector_declared": "SCRFD-0.5GF",
   "embedder_declared": "ArcFace-MBF",
-  "faces_seen_not_compared": 4,
+  "faces_seen_not_compared": 20,
   "fmr": {
     "ci95": [
       0.0,
-      0.0458197362645751
+      0.02344703665003271
     ],
     "count": 0,
     "rate": 0.0,
-    "trials": 80
+    "trials": 160
   },
   "fnmr": {
     "ci95": [
-      0.18074670915695296,
-      0.454303106543204
+      0.23436254021925293,
+      0.37501627444076
     ],
-    "count": 12,
+    "count": 48,
     "rate": 0.3,
-    "trials": 40
+    "trials": 160
   },
   "hardware": "cpu",
   "miss_1s": {
@@ -73,25 +116,77 @@
     },
     "note": "A face visible for about a tenth of a second. The required figure is the one-second rate. This probe shows why measured mode warns that a brief face can be missed."
   },
-  "note": "This curve is the fixture-marker pipeline on this build's preprocess and CPU. It is not SCRFD, not ArcFace on photographs, not LFW, and not NIST. It does not turn real FBI photos on.",
+  "note": "This curve is the fixture-marker pipeline on this build's preprocess and CPU. It is not SCRFD, not ArcFace on photographs, not LFW, and not NIST. It does not turn real FBI photos on. The four-way counts are the locked cutoff on these fixture pairs.",
   "perception": "fiducial-v1",
   "picker_line": "Fixture curve measured. Real FBI photos stay off.",
+  "plates": {
+    "match": {
+      "ci95": [
+        0.9123754607496077,
+        1.0
+      ],
+      "count": 40,
+      "rate": 1.0,
+      "trials": 40
+    },
+    "mismatch_candidate": {
+      "ci95": [
+        0.0,
+        0.08762453925039232
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 40
+    },
+    "note": "A match means the crop text equals a plate published on the poster. A mismatch must not become a candidate. An unpublished plate is not read.",
+    "unpublished_candidate": {
+      "ci95": [
+        0.0,
+        0.08762453925039232
+      ],
+      "count": 0,
+      "rate": 0.0,
+      "trials": 40
+    }
+  },
   "preprocess": "integer-nearest-long-side",
   "real_posters_allowed": false,
   "schema": "openworld.curve.v1",
+  "scores": {
+    "genuine": {
+      "max": 0.9857091307640076,
+      "min": 0.19680194556713104,
+      "n": 160,
+      "p50": 0.7219430804252625
+    },
+    "impostor": {
+      "max": 0.12595009803771973,
+      "min": -0.10976163297891617,
+      "n": 160,
+      "p50": 0.005305242724716663
+    },
+    "separation": {
+      "cutoff": 0.550000011920929,
+      "genuine_min": 0.19680194556713104,
+      "impostor_max": 0.12595009803771973,
+      "impostor_max_below_cutoff": 0.42404991388320923,
+      "note": "The highest impostor score is below the lowest genuine score. The locked cutoff is above some genuine scores, which is the false-negative count.",
+      "overlap": false
+    }
+  },
   "sweep": [
     {
-      "fmr": 0.9375,
+      "fmr": 0.525,
       "fnmr": 0.0,
       "threshold": 0.0
     },
     {
-      "fmr": 0.2375,
+      "fmr": 0.13125,
       "fnmr": 0.0,
       "threshold": 0.05
     },
     {
-      "fmr": 0.0,
+      "fmr": 0.025,
       "fnmr": 0.0,
       "threshold": 0.1
     },
@@ -102,27 +197,27 @@
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.025,
+      "fnmr": 0.1,
       "threshold": 0.2
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.05,
+      "fnmr": 0.2,
       "threshold": 0.25
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.125,
+      "fnmr": 0.2,
       "threshold": 0.3
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.15,
+      "fnmr": 0.2,
       "threshold": 0.35
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.15,
+      "fnmr": 0.2,
       "threshold": 0.4
     },
     {
@@ -132,7 +227,7 @@
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.25,
+      "fnmr": 0.2,
       "threshold": 0.5
     },
     {
@@ -147,37 +242,37 @@
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.35,
+      "fnmr": 0.3,
       "threshold": 0.65
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.35,
+      "fnmr": 0.5,
       "threshold": 0.7
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.4,
+      "fnmr": 0.6,
       "threshold": 0.75
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.425,
+      "fnmr": 0.7,
       "threshold": 0.8
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.45,
+      "fnmr": 0.7,
       "threshold": 0.85
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.45,
+      "fnmr": 0.8,
       "threshold": 0.9
     },
     {
       "fmr": 0.0,
-      "fnmr": 0.525,
+      "fnmr": 0.8,
       "threshold": 0.95
     },
     {
