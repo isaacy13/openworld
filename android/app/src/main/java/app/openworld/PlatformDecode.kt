@@ -14,8 +14,9 @@ import kotlin.math.roundToInt
 
 /**
  * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
- * because BitmapFactory keeps only the first one. The Rust library does the scan.
- * Audio is ignored. FFmpeg is not used.
+ * because BitmapFactory keeps only the first one. A JPEG is turned to match its
+ * camera orientation tag, because BitmapFactory keeps the stored pixels.
+ * The Rust library does the scan. Audio is ignored. FFmpeg is not used.
  */
 object PlatformDecode {
     data class Facts(
@@ -61,7 +62,8 @@ object PlatformDecode {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
                 throw IOException("Bad codec or unreadable file. Refusing.")
             }
-            return Facts(bounds.outWidth, bounds.outHeight, 0.0, 1, 0.0, false)
+            val shown = JpegOrientation.displaySize(bounds.outWidth, bounds.outHeight, JpegOrientation.tag(file))
+            return Facts(shown.first, shown.second, 0.0, 1, 0.0, false)
         }
         return videoTrack(file) ?: throw IOException("Bad codec or unreadable file. Refusing.")
     }
@@ -82,12 +84,17 @@ object PlatformDecode {
             }
             val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                 ?: throw IOException("Bad codec or unreadable file. Refusing.")
-            File(directory, "frame_000000.png").outputStream().use { out ->
-                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                    throw IOException("Bad codec or unreadable file. Refusing.")
+            val oriented = JpegOrientation.apply(bitmap, JpegOrientation.tag(file))
+            try {
+                File(directory, "frame_000000.png").outputStream().use { out ->
+                    if (!oriented.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                        throw IOException("Bad codec or unreadable file. Refusing.")
+                    }
                 }
+            } finally {
+                if (oriented !== bitmap) oriented.recycle()
+                bitmap.recycle()
             }
-            bitmap.recycle()
             return meta.copy(frames = 1, directory = directory)
         }
         val extractor = MediaExtractor()

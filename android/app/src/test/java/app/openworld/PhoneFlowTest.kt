@@ -2,6 +2,7 @@
 package app.openworld
 
 import android.content.Intent
+import android.graphics.Bitmap
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -456,6 +457,66 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun orientationSixTurnsTheStoredPixelsUpright() {
+        val colors = intArrayOf(
+            0xFF010000.toInt(), 0xFF020000.toInt(), 0xFF030000.toInt(),
+            0xFF040000.toInt(), 0xFF050000.toInt(), 0xFF060000.toInt(),
+        )
+        val stored = Bitmap.createBitmap(colors, 3, 2, Bitmap.Config.ARGB_8888)
+        val shown = JpegOrientation.apply(stored, 6)
+        assertEquals(2, shown.width)
+        assertEquals(3, shown.height)
+        assertEquals(0xFF040000.toInt(), shown.getPixel(0, 0))
+        assertEquals(0xFF010000.toInt(), shown.getPixel(1, 0))
+        assertEquals(0xFF050000.toInt(), shown.getPixel(0, 1))
+        assertEquals(0xFF020000.toInt(), shown.getPixel(1, 1))
+        assertEquals(0xFF060000.toInt(), shown.getPixel(0, 2))
+        assertEquals(0xFF030000.toInt(), shown.getPixel(1, 2))
+        val same = JpegOrientation.apply(stored, 1)
+        assertTrue(same === stored)
+        val mirrored = JpegOrientation.apply(stored, 2)
+        assertEquals(0xFF030000.toInt(), mirrored.getPixel(0, 0))
+        assertEquals(0xFF010000.toInt(), mirrored.getPixel(2, 0))
+    }
+
+    @Test
+    fun aJpegOrientationTagIsReadWithoutAnExtension() {
+        val file = File.createTempFile("ow-orient", "")
+        file.writeBytes(jpegWithOrientation(6))
+        assertEquals(6, JpegOrientation.tag(file))
+        assertEquals(640 to 480, JpegOrientation.displaySize(480, 640, 6))
+        assertEquals(1, JpegOrientation.tag(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)))
+    }
+
+    @Test
+    fun aJpegWithCameraOrientationIsScannedAsShown() {
+        val scene = still("scene")
+        val root = File(scene.parentFile, "ow-orient-" + System.nanoTime())
+        check(root.mkdirs())
+        val turned = File(root, "turned.jpg")
+        ffmpeg("-i", scene.absolutePath, "-vf", "transpose=2", "-q:v", "2", turned.absolutePath)
+        val side = File(root, "side")
+        side.writeBytes(jpegWithOrientation(6, turned.readBytes()))
+        assertEquals(6, JpegOrientation.tag(side))
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(turned.absolutePath, bounds)
+        val facts = PlatformDecode.facts(side)
+        assertEquals(bounds.outHeight, facts.width)
+        assertEquals(bounds.outWidth, facts.height)
+        val report = scanReport(side)
+        assertEquals("complete", report.getString("status"))
+        assertEquals("Possible candidate. Not an identification.", report.getString("summary"))
+        assertTrue(report.getJSONArray("candidates").length() > 0)
+        val upright = File(root, "upright.jpg")
+        ffmpeg("-i", scene.absolutePath, "-q:v", "2", upright.absolutePath)
+        val plain = scanReport(upright)
+        assertEquals("Possible candidate. Not an identification.", plain.getString("summary"))
+        val raw = scanReport(turned)
+        assertEquals("No candidate is not a clearance.", raw.getString("summary"))
+        assertEquals(0, raw.getJSONArray("candidates").length())
+    }
+
+    @Test
     fun anInterlacedGifKeepsThePixelsOfThatFrame() {
         val gif = File.createTempFile("ow-inter", ".gif")
         gif.writeBytes(INTERLACED_GIF)
@@ -758,6 +819,27 @@ private fun movingPicture(kind: String): File {
         )
     }
     return out
+}
+
+private fun jpegWithOrientation(tag: Int, jpeg: ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())): ByteArray {
+    val tiff = byteArrayOf(
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag.toByte(), 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    )
+    val payload = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00) + tiff
+    val length = payload.size + 2
+    val head = byteArrayOf(
+        0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE1.toByte(),
+        (length shr 8).toByte(), length.toByte(),
+    ) + payload
+    return head + jpeg.copyOfRange(2, jpeg.size)
 }
 
 private fun ffmpeg(vararg args: String) {

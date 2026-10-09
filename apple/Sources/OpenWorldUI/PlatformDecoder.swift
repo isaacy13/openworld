@@ -4,6 +4,7 @@ import Foundation
 import OpenWorldContract
 #else
 import AVFoundation
+import CoreGraphics
 import OpenWorldContract
 import CoreImage
 import ImageIO
@@ -153,9 +154,14 @@ enum PlatformDecoder {
         else {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
-        return Facts(
+        let shown = JpegOrientation.displaySize(
             width: width,
             height: height,
+            tag: stillOrientation(url: url, props: props)
+        )
+        return Facts(
+            width: shown.0,
+            height: shown.1,
             fps: 0,
             frames: 1,
             duration: 0,
@@ -188,7 +194,21 @@ enum PlatformDecoder {
                 else {
                     throw failure("Bad codec or unreadable file. Refusing.")
                 }
-                try writePNG(cg, to: image)
+                let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+                let tag = stillOrientation(url: url, props: props)
+                if tag <= 1 {
+                    try writePNG(cg, to: image)
+                } else {
+                    let rgb = rgbBytes(cg)
+                    guard rgb.count == cg.width * cg.height * 3 else {
+                        throw failure("Bad codec or unreadable file. Refusing.")
+                    }
+                    let oriented = JpegOrientation.apply(rgb: rgb, width: cg.width, height: cg.height, tag: tag)
+                    guard let out = cgImage(rgb: oriented.rgb, width: oriented.width, height: oriented.height) else {
+                        throw failure("Bad codec or unreadable file. Refusing.")
+                    }
+                    try writePNG(out, to: image)
+                }
             }
             facts.frames = 1
             facts.directory = directory
@@ -250,6 +270,81 @@ enum PlatformDecoder {
             return nil
         }
         return Int(created.timeIntervalSince1970)
+    }
+
+    private static func stillOrientation(url: URL, props: [CFString: Any]?) -> Int {
+        let parsed = JpegOrientation.tag(url)
+        if parsed > 1 { return parsed }
+        return exifOrientation(props)
+    }
+
+    private static func exifOrientation(_ props: [CFString: Any]?) -> Int {
+        func number(_ value: Any?) -> Int? {
+            if let int = value as? Int { return int }
+            if let number = value as? NSNumber { return number.intValue }
+            return nil
+        }
+        if let tag = number(props?[kCGImagePropertyOrientation]), (1...8).contains(tag) {
+            return tag
+        }
+        if let tiff = props?[kCGImagePropertyTIFFDictionary] as? [CFString: Any],
+           let tag = number(tiff[kCGImagePropertyOrientation]), (1...8).contains(tag) {
+            return tag
+        }
+        return 1
+    }
+
+    private static func rgbBytes(_ image: CGImage) -> [UInt8] {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0 else { return [] }
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let drew = rgba.withUnsafeMutableBytes { raw -> Bool in
+            guard let context = CGContext(
+                data: raw.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drew else { return [] }
+        var rgb = [UInt8](repeating: 0, count: width * height * 3)
+        for index in 0..<(width * height) {
+            rgb[index * 3] = rgba[index * 4]
+            rgb[index * 3 + 1] = rgba[index * 4 + 1]
+            rgb[index * 3 + 2] = rgba[index * 4 + 2]
+        }
+        return rgb
+    }
+
+    private static func cgImage(rgb: [UInt8], width: Int, height: Int) -> CGImage? {
+        guard width > 0, height > 0, rgb.count == width * height * 3 else { return nil }
+        var rgba = [UInt8](repeating: 255, count: width * height * 4)
+        for index in 0..<(width * height) {
+            rgba[index * 4] = rgb[index * 3]
+            rgba[index * 4 + 1] = rgb[index * 3 + 1]
+            rgba[index * 4 + 2] = rgb[index * 3 + 2]
+        }
+        let data = Data(rgba) as CFData
+        guard let provider = CGDataProvider(data: data) else { return nil }
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
     }
 
     private static func writePNG(_ image: CGImage, to url: URL) throws {

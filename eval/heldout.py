@@ -6,7 +6,7 @@ The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
-and an audio file.
+a JPEG with a camera orientation tag, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -30,6 +30,23 @@ BELOW = "Below the locked cutoff. Not a candidate."
 DISAGREE = "The file timestamps disagree."
 BRIEF = "A brief face can be missed."
 BANNED = ("Identified", "more accurate", "found this person")
+
+
+def with_orientation(jpeg: bytes, tag: int) -> bytes:
+    tiff = bytes([
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag & 0xFF, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ])
+    payload = b"Exif\x00\x00" + tiff
+    length = len(payload) + 2
+    return bytes([0xFF, 0xD8, 0xFF, 0xE1, (length >> 8) & 0xFF, length & 0xFF]) + payload + jpeg[2:]
 
 
 def fail(message: str) -> None:
@@ -134,6 +151,7 @@ def main() -> int:
         "gif_still": 0,
         "gif_later_candidate": 0,
         "apng_later_candidate": 0,
+        "oriented_jpeg_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -374,6 +392,24 @@ def main() -> int:
             fail(f"later apng candidates were not on the middle frame: {found}")
         counts["apng_later_candidate"] += 1
 
+        turned = root / "turned.jpg"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(scene),
+            "-vf", "transpose=2", "-q:v", "2", str(turned),
+        ])
+        if proc.returncode != 0 or not turned.is_file():
+            fail(proc.stderr or "turned jpeg was not written")
+        side = root / "side.jpg"
+        side.write_bytes(with_orientation(turned.read_bytes(), 6))
+        report = scan(args.bin, args.bundles, posters, side, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"oriented jpeg summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("oriented jpeg produced no candidate")
+        counts["oriented_jpeg_candidate"] += 1
+        report = scan(args.bin, args.bundles, posters, turned, out, "complete")
+        assert_clearance(report, "jpeg without the orientation tag")
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -406,6 +442,7 @@ def main() -> int:
         or counts["gif_still"] != 1
         or counts["gif_later_candidate"] != 1
         or counts["apng_later_candidate"] != 1
+        or counts["oriented_jpeg_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90
     ):

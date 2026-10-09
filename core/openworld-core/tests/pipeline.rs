@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use image::RgbImage;
+use image::{ImageEncoder, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
     BRIEF_FACE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
@@ -818,4 +818,91 @@ path = "weights/{file}"
     // The request said GPU. The session loaded CPU, so the note follows the session.
     assert_eq!(report.execution, "cpu");
     assert!(report.device_note.unwrap().contains("CPU"));
+}
+
+fn jpeg_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 100)
+        .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    let mut tiff = Vec::new();
+    tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00]);
+    tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+    tiff.extend_from_slice(&3u16.to_le_bytes());
+    tiff.extend_from_slice(&1u32.to_le_bytes());
+    tiff.extend_from_slice(&(u16::from(orientation)).to_le_bytes());
+    tiff.extend_from_slice(&0u16.to_le_bytes());
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    let mut payload = b"Exif\0\0".to_vec();
+    payload.extend_from_slice(&tiff);
+    let len = (payload.len() + 2) as u16;
+    let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(&payload);
+    out.extend_from_slice(&encoded[2..]);
+    out
+}
+
+#[test]
+fn a_jpeg_with_camera_orientation_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let upright = dir.path().join("upright.jpg");
+    let mut upright_bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut upright_bytes, 100)
+        .write_image(
+            scene.image.as_raw(),
+            scene.image.width(),
+            scene.image.height(),
+            image::ExtendedColorType::Rgb8,
+        )
+        .unwrap();
+    fs::write(&upright, &upright_bytes).unwrap();
+    let stored = image::imageops::rotate270(&scene.image);
+    let side = dir.path().join("side.jpg");
+    fs::write(&side, jpeg_with_orientation(&stored, 6)).unwrap();
+    let raw = dir.path().join("raw.jpg");
+    let mut raw_bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut raw_bytes, 100)
+        .write_image(stored.as_raw(), stored.width(), stored.height(), image::ExtendedColorType::Rgb8)
+        .unwrap();
+    fs::write(&raw, &raw_bytes).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&side).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    let turned = scan(side);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let plain = scan(upright);
+    assert_eq!(plain.status, "complete", "{}", plain.message);
+    assert_eq!(plain.summary, POSSIBLE_CANDIDATE);
+    let sideways = scan(raw);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE);
+    assert!(sideways.candidates.is_empty());
 }

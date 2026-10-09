@@ -216,6 +216,39 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testOrientationSixTurnsTheStoredPixelsUpright() {
+        let rgb: [UInt8] = [
+            1, 0, 0, 2, 0, 0, 3, 0, 0,
+            4, 0, 0, 5, 0, 0, 6, 0, 0,
+        ]
+        let shown = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 6)
+        XCTAssertEqual(shown.width, 2)
+        XCTAssertEqual(shown.height, 3)
+        XCTAssertEqual(shown.rgb, [
+            4, 0, 0, 1, 0, 0,
+            5, 0, 0, 2, 0, 0,
+            6, 0, 0, 3, 0, 0,
+        ])
+        let same = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 1)
+        XCTAssertEqual(same.rgb, rgb)
+        XCTAssertEqual(same.width, 3)
+        let mirrored = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 2)
+        XCTAssertEqual(mirrored.rgb, [
+            3, 0, 0, 2, 0, 0, 1, 0, 0,
+            6, 0, 0, 5, 0, 0, 4, 0, 0,
+        ])
+    }
+
+    func testAJpegOrientationTagIsReadFromTheFile() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-orient-\(UUID().uuidString)")
+        try Data(jpegWithOrientation(6)).write(to: url)
+        XCTAssertEqual(JpegOrientation.tag(url), 6)
+        let size = JpegOrientation.displaySize(width: 480, height: 640, tag: 6)
+        XCTAssertEqual(size.0, 640)
+        XCTAssertEqual(size.1, 480)
+        XCTAssertEqual(JpegOrientation.tag(Data([0x89, 0x50, 0x4E, 0x47])), 1)
+    }
+
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
         let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
         try Data(interlacedGif).write(to: gif)
@@ -528,6 +561,23 @@ final class OpenWorldUITests: XCTestCase {
         {"id":"fast","name":"Fast","best_for":"Phones and long video.","curve_line":"Fixture curve measured. Real FBI photos stay off.","preselected":true}
         """.utf8))
     }
+}
+
+private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ]
+    let payload: [UInt8] = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00] + tiff
+    let length = payload.count + 2
+    return [0xFF, 0xD8, 0xFF, 0xE1, UInt8(length >> 8), UInt8(length & 0xFF)] + payload + [0xFF, 0xD9]
 }
 
 private let interlacedGif = Data(hex: "47494638376110001000810000ffffff0000000000000000002c000000001000100040082f0003081c281080c18308132a3c4890e0c287101b0e7c28b120c48b182356a4b87161c5001c25661c49b2a449830101003b")

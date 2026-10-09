@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
-//! Audio is not decoded. Phone, Mac, and Android shells decode with
+//! A JPEG is turned to match its camera orientation tag before the pixels are
+//! scanned. Audio is not decoded. Phone, Mac, and Android shells decode with
 //! AVFoundation or MediaCodec and pass the frames through `load_frame_dir`.
 //! That path does not run FFmpeg.
 
 use crate::timeutil::parse_rfc3339;
-use image::RgbImage;
+use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
 use serde_json::Value;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -53,7 +54,7 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
 pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
     let info = probe(path)?;
     if !info.video {
-        let image = image::open(path).map_err(|_| MediaError::BadCodec)?.to_rgb8();
+        let image = open_oriented(path).map_err(|_| MediaError::BadCodec)?;
         let keep_going = on_frame(0, &image);
         return Ok(DecodeStats { frames_decoded: 1, clean: keep_going, probe: info });
     }
@@ -66,8 +67,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
     if animated_png(path) {
         return None;
     }
-    let image = image::open(path).ok()?;
-    let rgb = image.to_rgb8();
+    let rgb = open_oriented(path).ok()?;
     let (width, height) = rgb.dimensions();
     if width == 0 || height == 0 {
         return None;
@@ -82,6 +82,16 @@ fn probe_image(path: &Path) -> Option<Probe> {
         container_created: None,
         video: false,
     })
+}
+
+/// Decodes a still and applies its camera orientation tag.
+/// A PNG has no such tag, so its pixels stay as stored.
+fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
+    let mut decoder = ImageReader::open(path)?.into_decoder()?;
+    let orientation = decoder.orientation()?;
+    let mut image = DynamicImage::from_decoder(decoder)?;
+    image.apply_orientation(orientation);
+    Ok(image.to_rgb8())
 }
 
 /// True when a PNG carries an animation control chunk before the first image data.
@@ -304,8 +314,82 @@ pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
     }
     let mut frames = Vec::with_capacity(names.len());
     for path in names {
-        let image = image::open(&path).map_err(|_| MediaError::BadCodec)?.to_rgb8();
+        let image = open_oriented(&path).map_err(|_| MediaError::BadCodec)?;
         frames.push(image);
     }
     Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::open_oriented;
+    use image::{DynamicImage, ImageEncoder, RgbImage};
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn jpeg_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
+        let mut encoded = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 100)
+            .write_image(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+            .unwrap();
+        inject_orientation(&encoded, orientation)
+    }
+
+    fn inject_orientation(jpeg: &[u8], orientation: u8) -> Vec<u8> {
+        let mut tiff = Vec::new();
+        tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+        tiff.extend_from_slice(&8u32.to_le_bytes());
+        tiff.extend_from_slice(&1u16.to_le_bytes());
+        tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+        tiff.extend_from_slice(&3u16.to_le_bytes());
+        tiff.extend_from_slice(&1u32.to_le_bytes());
+        tiff.extend_from_slice(&(u16::from(orientation)).to_le_bytes());
+        tiff.extend_from_slice(&0u16.to_le_bytes());
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"Exif\0\0");
+        payload.extend_from_slice(&tiff);
+        let len = (payload.len() + 2) as u16;
+        let mut out = Vec::with_capacity(2 + 2 + 2 + payload.len() + jpeg.len().saturating_sub(2));
+        out.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xE1]);
+        out.extend_from_slice(&len.to_be_bytes());
+        out.extend_from_slice(&payload);
+        out.extend_from_slice(&jpeg[2..]);
+        out
+    }
+
+    fn write_temp(name: &str, bytes: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("ow-{name}-{}.jpg", std::process::id()));
+        fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn jpeg_orientation_six_matches_a_clockwise_quarter_turn() {
+        let shown = RgbImage::from_raw(3, 2, vec![10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0, 50, 0, 0, 60, 0, 0]).unwrap();
+        let stored = image::imageops::rotate270(&shown);
+        let path = write_temp("orient6", &jpeg_with_orientation(&stored, 6));
+        let opened = open_oriented(&path).unwrap();
+        let raw = image::open(&path).unwrap().to_rgb8();
+        let _ = fs::remove_file(&path);
+        let expected = DynamicImage::ImageRgb8(raw).rotate90().to_rgb8();
+        assert_eq!(opened.dimensions(), expected.dimensions());
+        assert_eq!(opened.as_raw(), expected.as_raw());
+        assert_ne!(opened.dimensions(), stored.dimensions());
+    }
+
+    #[test]
+    fn a_jpeg_without_an_orientation_tag_keeps_the_stored_pixels() {
+        let shown = RgbImage::from_raw(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
+        let mut encoded = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 100)
+            .write_image(shown.as_raw(), shown.width(), shown.height(), image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let path = write_temp("orient1", &encoded);
+        let opened = open_oriented(&path).unwrap();
+        let raw = image::open(&path).unwrap().to_rgb8();
+        let _ = fs::remove_file(&path);
+        assert_eq!(opened.dimensions(), raw.dimensions());
+        assert_eq!(opened.as_raw(), raw.as_raw());
+    }
 }
