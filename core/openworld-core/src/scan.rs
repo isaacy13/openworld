@@ -262,7 +262,15 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
             engine.incomplete_reason = Some("The file was not fully decoded.".into());
         }
     }
-    if req.coverage == Coverage::Complete && probed.video && probed.frames > 0 && stats.frames_decoded < probed.frames {
+    // Only an exact frame count can say a clean decode stopped early. Duration
+    // times the frame rate also counts audio that continues after the pictures,
+    // and that estimate is often higher than the frames the decoder finished.
+    if req.coverage == Coverage::Complete
+        && probed.video
+        && probed.frames_exact
+        && probed.frames > 0
+        && stats.frames_decoded < probed.frames
+    {
         engine.stopped = true;
         engine.incomplete_reason = Some("The file was not fully decoded.".into());
     }

@@ -1024,3 +1024,75 @@ fn a_video_with_non_square_pixels_is_scanned_as_shown() {
     assert_eq!(flat.summary, NO_CLEARANCE);
     assert!(flat.candidates.is_empty());
 }
+
+#[test]
+fn a_video_with_audio_past_the_pictures_stays_complete() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let pictures = dir.path().join("pictures.mkv");
+    let with_audio = dir.path().join("audio-tail.mkv");
+    let encode = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&pictures)
+        .status()
+        .expect("ffmpeg");
+    assert!(encode.success());
+    let mux = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&pictures)
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-map",
+            "0:v",
+            "-map",
+            "1:a",
+        ])
+        .arg(&with_audio)
+        .status()
+        .expect("ffmpeg");
+    assert!(mux.success());
+    let probed = openworld_core::decode::probe(&with_audio).unwrap();
+    assert!(!probed.frames_exact, "the container omitted an exact frame count");
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let out_dir = dir.path().join("out");
+    let report = scan_path(
+        &ScanRequest {
+            input: with_audio,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir,
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert!(
+        probed.frames > report.frames_decoded,
+        "duration estimate {} should exceed the {} decoded pictures",
+        probed.frames,
+        report.frames_decoded
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(!report.candidates.is_empty());
+}

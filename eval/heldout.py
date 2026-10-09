@@ -7,7 +7,8 @@ identities, other placements, a real compressed video with no marker, a
 lossless video of a fixture still, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a video with a quarter-turn
-display rotation, a video with non-square pixels, and an audio file.
+display rotation, a video with non-square pixels, a video whose audio
+continues after the pictures, and an audio file.
 They are not photographs of people, not LFW, and not a reason to turn real
 FBI photos on.
 """
@@ -155,6 +156,7 @@ def main() -> int:
         "oriented_jpeg_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
+        "audio_tail_candidate": 0,
         "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
@@ -452,6 +454,30 @@ def main() -> int:
             fail("anamorphic video produced no candidate")
         counts["anamorphic_video_candidate"] += 1
 
+        pictures = root / "pictures.mkv"
+        with_audio = root / "audio-tail.mkv"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            str(pictures),
+        ])
+        if proc.returncode != 0 or not pictures.is_file():
+            fail(proc.stderr or "picture track was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(pictures),
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+            "-c:v", "copy", "-c:a", "aac", "-map", "0:v", "-map", "1:a",
+            str(with_audio),
+        ])
+        if proc.returncode != 0 or not with_audio.is_file():
+            fail(proc.stderr or "audio tail was not written")
+        report = scan(args.bin, args.bundles, posters, with_audio, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"audio tail summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates") or not report.get("frames_decoded"):
+            fail("audio tail produced no candidate")
+        counts["audio_tail_candidate"] += 1
+
         tone = root / "tone.wav"
         proc = run(
             [
@@ -487,6 +513,7 @@ def main() -> int:
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
+        or counts["audio_tail_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90
     ):
