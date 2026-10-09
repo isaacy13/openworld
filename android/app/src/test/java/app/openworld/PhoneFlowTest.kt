@@ -485,6 +485,10 @@ class PhoneFlowTest {
         assertEquals(6, JpegOrientation.tagForClockwise(-270))
         assertEquals(640 to 480, PlatformDecode.squarePixelSize(320, 480, 2, 1))
         assertEquals(320 to 480, PlatformDecode.squarePixelSize(320, 480, 1, 1))
+        assertEquals(640 to 480, PlatformDecode.displayedVideoSize(480, 320, 1, 2, 90))
+        assertEquals(240 to 320, PlatformDecode.displayedVideoSize(320, 480, 2, 1, 90))
+        assertEquals(640 to 480, PlatformDecode.displayedVideoSize(320, 480, 2, 1, 0))
+        assertEquals(640 to 480, PlatformDecode.displayedVideoSize(480, 640, 1, 1, 90))
     }
 
     @Test

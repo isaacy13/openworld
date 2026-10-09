@@ -132,17 +132,27 @@ object PlatformDecode {
                         val bitmap = imageToBitmap(image)
                         image.close()
                         val aspect = pixelAspect(format)
-                        val scaled = scaleSquare(bitmap, aspect.first, aspect.second)
-                        val turned = JpegOrientation.apply(scaled, JpegOrientation.tagForClockwise(rotationDegrees(format)))
+                        val tag = JpegOrientation.tagForClockwise(rotationDegrees(format))
+                        val quarter = tag in 5..8 && aspect.first != aspect.second
+                        val first = if (quarter) {
+                            JpegOrientation.apply(bitmap, tag)
+                        } else {
+                            scaleSquare(bitmap, aspect.first, aspect.second)
+                        }
+                        val second = if (quarter) {
+                            scaleSquare(first, aspect.second, aspect.first)
+                        } else {
+                            JpegOrientation.apply(first, tag)
+                        }
                         try {
                             File(directory, "frame_%06d.png".format(written)).outputStream().use { out ->
-                                if (!turned.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                                if (!second.compress(Bitmap.CompressFormat.PNG, 100, out)) {
                                     throw IOException("Bad codec or unreadable file. Refusing.")
                                 }
                             }
                         } finally {
-                            if (turned !== scaled) turned.recycle()
-                            if (scaled !== bitmap) scaled.recycle()
+                            if (second !== first) second.recycle()
+                            if (first !== bitmap) first.recycle()
                             bitmap.recycle()
                         }
                         written += 1
@@ -229,14 +239,27 @@ object PlatformDecode {
         val height = if (format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0
         if (width <= 0 || height <= 0) throw IOException("Bad codec or unreadable file. Refusing.")
         val aspect = pixelAspect(format)
-        val squared = squarePixelSize(width, height, aspect.first, aspect.second)
-        val shown = JpegOrientation.displaySize(squared.first, squared.second, JpegOrientation.tagForClockwise(rotationDegrees(format)))
+        val shown = displayedVideoSize(width, height, aspect.first, aspect.second, rotationDegrees(format))
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
         val duration = durationUs / 1_000_000.0
         val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() else 0.0
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
         val frames = if (duration > 0.0) maxOf(1L, (duration * fps).roundToInt().toLong()) else 1L
         return Facts(shown.first, shown.second, fps, frames, duration, true)
+    }
+
+    /**
+     * Display size after a quarter turn and a pixel-aspect stretch.
+     * A quarter turn runs first and inverts the aspect, matching the desktop player.
+     */
+    internal fun displayedVideoSize(width: Int, height: Int, sarWidth: Int, sarHeight: Int, degrees: Int): Pair<Int, Int> {
+        val tag = JpegOrientation.tagForClockwise(degrees)
+        if (tag in 5..8 && sarWidth > 0 && sarHeight > 0 && sarWidth != sarHeight) {
+            val swapped = JpegOrientation.displaySize(width, height, tag)
+            return squarePixelSize(swapped.first, swapped.second, sarHeight, sarWidth)
+        }
+        val squared = squarePixelSize(width, height, sarWidth, sarHeight)
+        return JpegOrientation.displaySize(squared.first, squared.second, tag)
     }
 
     /** Stored width and height, stretched by the pixel aspect a player uses. */

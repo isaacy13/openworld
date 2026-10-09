@@ -1133,6 +1133,87 @@ fn a_video_with_non_square_pixels_is_scanned_as_shown() {
 }
 
 #[test]
+fn a_turned_video_with_non_square_pixels_is_scanned_as_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let stored = dir.path().join("stored.mp4");
+    let shown = dir.path().join("shown.mp4");
+    let squeezed = dir.path().join("squeezed.mp4");
+    let sideways = dir.path().join("sideways.mp4");
+    let encode = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-vf", "scale=320:480,setsar=2/1,transpose=2", "-frames:v", "4", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&stored)
+        .status()
+        .expect("ffmpeg");
+    assert!(encode.success());
+    let tag = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&stored)
+        .args(["-an", "-c:v", "copy", "-bsf:v", "h264_metadata=display_orientation=insert:rotate=-90"])
+        .arg(&shown)
+        .status()
+        .expect("ffmpeg");
+    assert!(tag.success());
+    let squeeze = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-vf", "scale=320:480,setsar=2/1", "-frames:v", "4", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&squeezed)
+        .status()
+        .expect("ffmpeg");
+    assert!(squeeze.success());
+    let extra = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&squeezed)
+        .args(["-an", "-c:v", "copy", "-bsf:v", "h264_metadata=display_orientation=insert:rotate=-90"])
+        .arg(&sideways)
+        .status()
+        .expect("ffmpeg");
+    assert!(extra.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let probed = openworld_core::decode::probe(&shown).unwrap();
+    assert_eq!((probed.width, probed.height), scene.image.dimensions());
+    assert!(probed.square_pixels);
+    let turned = scan(shown);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE);
+    assert!(!turned.candidates.is_empty());
+    let raw = scan(stored);
+    assert_eq!(raw.status, "complete", "{}", raw.message);
+    assert_eq!(raw.summary, NO_CLEARANCE);
+    let flagged = scan(sideways);
+    assert_eq!(flagged.status, "complete", "{}", flagged.message);
+    assert_eq!(flagged.summary, NO_CLEARANCE);
+}
+
+#[test]
 fn a_video_with_audio_past_the_pictures_stays_complete() {
     let dir = tempfile::tempdir().unwrap();
     let scene = demo_scene(fast().threshold);

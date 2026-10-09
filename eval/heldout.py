@@ -212,6 +212,7 @@ def main() -> int:
         "oriented_webp_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
+        "turned_anamorphic_video_candidate": 0,
         "audio_tail_candidate": 0,
         "audio_refusal": 0,
     }
@@ -528,6 +529,28 @@ def main() -> int:
             fail("anamorphic video produced no candidate")
         counts["anamorphic_video_candidate"] += 1
 
+        turned_wide = root / "turned-wide.mp4"
+        turned_stored = root / "turned-stored.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-vf", "scale=320:480,setsar=2/1,transpose=2", "-frames:v", "4", "-r", "10", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(turned_stored),
+        ])
+        if proc.returncode != 0 or not turned_stored.is_file():
+            fail(proc.stderr or "turned anamorphic source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(turned_stored), "-an", "-c:v", "copy",
+            "-bsf:v", "h264_metadata=display_orientation=insert:rotate=-90", str(turned_wide),
+        ])
+        if proc.returncode != 0 or not turned_wide.is_file():
+            fail(proc.stderr or "turned anamorphic video was not written")
+        report = scan(args.bin, args.bundles, posters, turned_wide, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"turned anamorphic summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("candidates"):
+            fail("turned anamorphic video produced no candidate")
+        counts["turned_anamorphic_video_candidate"] += 1
+
         pictures = root / "pictures.mkv"
         with_audio = root / "audio-tail.mkv"
         proc = run([
@@ -598,6 +621,7 @@ def main() -> int:
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
+        or counts["turned_anamorphic_video_candidate"] != 1
         or counts["audio_tail_candidate"] != 1
         or counts["audio_refusal"] != 1
         or total < 90

@@ -305,19 +305,12 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     if width == 0 || height == 0 || fps <= 0.0 {
         return Err(MediaError::BadCodec);
     }
-    // FFmpeg turns the frames to the displayed orientation. A quarter turn swaps
-    // the stored width and height. Non-square pixels are stretched to the width
-    // a player shows. The buffer has to match those displayed pixels.
+    // FFmpeg turns the frames, then stretches non-square pixels. A quarter turn
+    // swaps the axes and inverts the sample aspect. The buffer has to match
+    // those displayed pixels.
     let turned = swaps_axes(display_rotation(&value));
     let (sar_num, sar_den) = sample_aspect(stream.get("sample_aspect_ratio").and_then(|v| v.as_str()));
-    let square_pixels = !turned && sar_num != sar_den;
-    let (width, height) = if turned {
-        (height, width)
-    } else if square_pixels {
-        (square_width(width, sar_num, sar_den), height)
-    } else {
-        (width, height)
-    };
+    let (width, height, square_pixels) = displayed_size(width, height, sar_num, sar_den, turned);
     // The container duration includes audio that continues after the pictures.
     // Matroska and WebM put the picture length in the track's DURATION tag.
     // MP4 puts it on the video stream. The frame estimate uses that length.
@@ -495,6 +488,19 @@ fn sample_aspect(text: Option<&str>) -> (u32, u32) {
         (1, 1)
     } else {
         (num, den)
+    }
+}
+
+/// Display size after a quarter turn and a sample-aspect stretch, in that order.
+fn displayed_size(width: u32, height: u32, sar_num: u32, sar_den: u32, turned: bool) -> (u32, u32, bool) {
+    if turned && sar_num != sar_den {
+        (square_width(height, sar_den, sar_num), width, true)
+    } else if turned {
+        (height, width, false)
+    } else if sar_num != sar_den {
+        (square_width(width, sar_num, sar_den), height, true)
+    } else {
+        (width, height, false)
     }
 }
 
@@ -802,6 +808,10 @@ mod tests {
         assert_eq!(super::sample_aspect(Some("2:1")), (2, 1));
         assert_eq!(super::square_width(320, 2, 1), 640);
         assert_eq!(super::square_width(320, 3, 2), 480);
+        assert_eq!(super::displayed_size(480, 320, 1, 2, true), (640, 480, true));
+        assert_eq!(super::displayed_size(320, 480, 2, 1, true), (240, 320, true));
+        assert_eq!(super::displayed_size(320, 480, 2, 1, false), (640, 480, true));
+        assert_eq!(super::displayed_size(480, 640, 1, 1, true), (640, 480, false));
     }
 
     #[test]
