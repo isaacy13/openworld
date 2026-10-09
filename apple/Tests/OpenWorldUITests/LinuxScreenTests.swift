@@ -126,7 +126,47 @@ final class OpenWorldUITests: XCTestCase {
             model.loadEstimate()
             XCTAssertEqual(model.step, .estimate)
             XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
             XCTAssertTrue(model.error?.contains("AVFoundation decodes on macOS and iOS. Refusing.") == true)
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.file)
+            XCTAssertNil(model.error)
+            XCTAssertTrue(model.canAnalyze)
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
+    func testChooseAnotherClearsACandidate() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.leavingURL)
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.file)
+            XCTAssertEqual(model.coverage, "complete")
+            XCTAssertEqual(model.longSide, "640")
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
+    func testLinuxSizeAndCoverageButtonsChangeTheSelection() {
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.step = .size
+            model.longSide = "640"
+            model.coverage = "complete"
+            _ = FlowView(model: model, importControl: self.control).body
+            model.longSide = "320"
+            model.coverage = "measured"
+            XCTAssertEqual(model.longSide, "320")
+            XCTAssertEqual(model.coverage, "measured")
             _ = FlowView(model: model, importControl: self.control).body
         }
     }

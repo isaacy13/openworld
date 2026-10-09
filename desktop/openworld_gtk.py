@@ -67,7 +67,7 @@ class OpenWorld(Gtk.Application):
 
     def do_activate(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self, title="OpenWorld")
-        self.window.set_default_size(980, 700)
+        self.window.set_default_size(980, 860)
         self._css()
         header = Gtk.HeaderBar()
         self.back = Gtk.Button(label="Back")
@@ -111,6 +111,8 @@ class OpenWorld(Gtk.Application):
         self.window.present()
         if os.environ.get("OPENWORLD_EXERCISE"):
             GLib.idle_add(self._exercise_guard)
+        elif os.environ.get("OPENWORLD_INPUT"):
+            GLib.idle_add(self._open_env_input)
 
     def _css(self) -> None:
         css = Gtk.CssProvider()
@@ -261,9 +263,9 @@ class OpenWorld(Gtk.Application):
         scroll = Gtk.ScrolledWindow()
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
-        inner.append(self.result_note)
         inner.append(self.strip)
         inner.append(self.detail)
+        inner.append(self.result_note)
         scroll.set_child(inner)
         scroll.set_vexpand(True)
         delete = Gtk.Button(label="Delete")
@@ -390,12 +392,14 @@ class OpenWorld(Gtk.Application):
         self.estimate_body.set_text("\n".join(line for line in lines if line))
 
     def start_scan(self) -> None:
-        if self.scan_thread is not None:
+        if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         self._clear_results()
         self.summary.set_text("Scanning")
         self._go("results")
+        self.primary.set_label("Scanning")
         self.primary.set_sensitive(False)
+        self.back.set_sensitive(False)
         self.posters = self.work / "posters"
         self.out_dir = self.work / "result"
         subprocess.check_call(
@@ -470,6 +474,7 @@ class OpenWorld(Gtk.Application):
         return False
 
     def _show_report(self, report: dict) -> bool:
+        self.scan_thread = None
         self.summary.set_text(report.get("summary") or "")
         notes = []
         if report.get("coverage_banner"):
@@ -483,15 +488,51 @@ class OpenWorld(Gtk.Application):
         for line in report.get("disclosure") or []:
             notes.append(line)
         self.result_note.set_text("\n".join(notes))
+        self._fill_strip(report)
         for candidate in report.get("candidates") or []:
             self.detail.append(self._candidate_card(candidate))
         if not report.get("candidates") and report.get("status") == "complete":
             clearance = Gtk.Label(label=PHRASES["clearance"], xalign=0, wrap=True)
             self.detail.append(clearance)
         self.primary.set_sensitive(True)
-        self.primary.set_label("Done")
+        self.primary.set_label("Choose another file")
+        self.back.set_sensitive(len(self.history) > 1)
         self._exercise_report = report
         return False
+
+    def _fill_strip(self, report: dict) -> None:
+        self.strip.remove_all()
+        if self.out_dir is None:
+            return
+        for item in report.get("inventory") or []:
+            rel = item.get("crop")
+            if not rel:
+                continue
+            path = self.out_dir / rel
+            if not path.is_file():
+                continue
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            picture = Gtk.Picture.new_for_filename(str(path))
+            picture.set_size_request(112, 112)
+            picture.set_can_shrink(False)
+            caption = Gtk.Label(label=item.get("label", ""), wrap=True, justify=Gtk.Justification.CENTER)
+            caption.set_max_width_chars(18)
+            box.append(picture)
+            box.append(caption)
+            self.strip.append(box)
+
+    def _strip_labels(self) -> list[str]:
+        labels: list[str] = []
+        child = self.strip.get_first_child()
+        while child is not None:
+            inner = child.get_child()
+            widget = inner.get_first_child() if inner is not None else None
+            while widget is not None:
+                if isinstance(widget, Gtk.Label):
+                    labels.append(widget.get_text())
+                widget = widget.get_next_sibling()
+            child = child.get_next_sibling()
+        return labels
 
     def _candidate_card(self, candidate: dict) -> Gtk.Widget:
         frame = Gtk.Frame()
@@ -577,6 +618,28 @@ class OpenWorld(Gtk.Application):
             self._go("estimate")
         elif name == "estimate":
             self.start_scan()
+        elif name == "results":
+            self.choose_another()
+
+    def choose_another(self) -> None:
+        if self.scan_thread is not None and self.scan_thread.is_alive():
+            return
+        self.input_path = None
+        self.out_dir = None
+        self.scan_thread = None
+        self._clear_results()
+        self.summary.set_text("")
+        self.result_note.set_text("")
+        self.file_label.set_text("")
+        self.warn_label.set_text("")
+        self.coverage = "complete"
+        self.complete_button.set_active(True)
+        self.long_side = "640"
+        self.size_buttons["640"].set_active(True)
+        self.bundle_id = "fast"
+        self.primary.set_sensitive(True)
+        self.history = ["choose"]
+        self._show("choose")
 
     def go_back(self) -> None:
         if len(self.history) <= 1:
@@ -591,14 +654,15 @@ class OpenWorld(Gtk.Application):
 
     def _show(self, name: str) -> None:
         self.stack.set_visible_child_name(name)
-        self.back.set_sensitive(len(self.history) > 1 and name != "results")
+        scanning = self.scan_thread is not None and self.scan_thread.is_alive()
+        self.back.set_sensitive(len(self.history) > 1 and not scanning)
         labels = {
             "choose": "Choose File",
             "device": "Continue",
             "bundle": "Continue",
             "size": "Continue",
             "estimate": "Analyze",
-            "results": "Done",
+            "results": "Choose another file",
         }
         self.primary.set_label(labels.get(name, "Continue"))
         self.primary.set_visible(name != "choose")
@@ -608,6 +672,12 @@ class OpenWorld(Gtk.Application):
         if not proc.stdout.strip():
             return {"status": "refused", "message": proc.stderr.strip() or "No response."}
         return json.loads(proc.stdout)
+
+    def _open_env_input(self) -> bool:
+        path = os.environ.get("OPENWORLD_INPUT")
+        if path:
+            self.choose_file(path)
+        return False
 
     def _exercise_guard(self) -> bool:
         try:
@@ -674,6 +744,21 @@ class OpenWorld(Gtk.Application):
                     return False
         if report.get("status") != "complete":
             self._exercise_fail(report.get("message", "not complete"))
+            return False
+        labels = self._strip_labels()
+        for phrase in (PHRASES["possible"], PHRASES["not_compared"], "A vehicle is not a person."):
+            if phrase not in labels:
+                self._exercise_fail(f"strip missing {phrase}: {labels}")
+                return False
+        if self.scan_thread is not None or not self.back.get_sensitive():
+            self._exercise_fail("results did not return control of the window")
+            return False
+        if self.primary.get_label() != "Choose another file":
+            self._exercise_fail(f"results button is {self.primary.get_label()!r}")
+            return False
+        self.choose_another()
+        if self.stack.get_visible_child_name() != "choose" or self.input_path is not None:
+            self._exercise_fail("choose another did not return to the start")
             return False
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
             json.dumps({"ok": True, "summary": report.get("summary")})

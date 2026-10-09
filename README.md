@@ -29,7 +29,7 @@ That writes a synthetic still, a fixture poster pack, and a result directory. Th
 python3 desktop/openworld_gtk.py
 ```
 
-Drop a photo or video, or use Choose File. Fast is selected. 640 px on the long side is selected. The estimate is shown before Analyze. The scan runs on the CPU in this build and says so.
+Drop a photo or video, or use Choose File. Fast is selected. 640 px on the long side is selected. The estimate is shown before Analyze. The scan runs on the CPU in this build and says so. After a result, Back returns to the estimate, and Choose another file starts over. Delete removes that result. A refused file does not offer Analyze.
 
 `apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. That executable is built on a macOS runner. Linux CI compiles the same screens with OpenSwiftUI. `apple/scripts/show-linux.sh` draws them in a terminal with OpenSwiftUI's stdout renderer, which is how this revision paints on Linux. That program is `OpenWorldScreens`. It is not the app, and the macOS build does not depend on OpenSwiftUI. A PNG still is copied byte for byte there so the phone model can run a fixture scan. Video still refuses without AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both call `ow_command` in the Rust library when that library is linked into the process (`include/openworld.h`). Until a store build links it, they start the `openworld` program with the same arguments. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
 
@@ -61,6 +61,8 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 `eval/curves/fast.json` is the fixture measurement on this program's preprocess: false match rate, false non-match rate, and the four comparison outcomes at the locked cutoff (true positive, false negative, false positive, true negative), each with a count and a 95% Wilson interval. Genuine trials use 16 fixture identities. Impostor trials use 160 pairs with a different probe identity every time. A face that was not compared is left out of that table. The file also has detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second under both coverage modes. A shorter probe is included so the measured-mode warning has a number behind it.
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
+
+`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, and a container time that disagrees with the file time is a warning, not a refusal. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
 
 ## Continuous integration
 

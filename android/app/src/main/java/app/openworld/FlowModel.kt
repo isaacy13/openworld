@@ -22,6 +22,7 @@ class FlowModel {
     var coverage by mutableStateOf("complete")
     var estimateText by mutableStateOf("")
     var summary by mutableStateOf("")
+    var status by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var fbiUrl by mutableStateOf<String?>(null)
@@ -66,6 +67,36 @@ class FlowModel {
         step = Step.Bundle
     }
     fun continueFromBundle() { step = Step.Size }
+
+    fun back() {
+        leavingUrl = null
+        step = when (step) {
+            Step.Choose -> Step.Choose
+            Step.Device -> Step.Choose
+            Step.Bundle -> Step.Device
+            Step.Size -> Step.Bundle
+            Step.Estimate -> Step.Size
+            Step.Results -> Step.Estimate
+        }
+    }
+
+    fun chooseAnother() {
+        step = Step.Choose
+        fileName = ""
+        oldFile = false
+        localCopy = null
+        bundleId = "fast"
+        longSide = "640"
+        coverage = "complete"
+        estimateText = ""
+        summary = ""
+        status = ""
+        detail = ""
+        strip = emptyList()
+        fbiUrl = null
+        leavingUrl = null
+        canAnalyze = true
+    }
 
     fun continueFromSize() {
         val file = localCopy
@@ -138,7 +169,12 @@ class FlowModel {
                     "--provider", "cpu",
                 ) + reel.arguments(reel.directory)
             )
-            summary = json.optString("summary", "Incomplete.")
+            status = json.optString("status")
+            summary = json.present("summary") ?: when (status) {
+                "complete" -> "No candidate is not a clearance."
+                "refused" -> json.present("message") ?: "Refusing."
+                else -> "Incomplete."
+            }
             val lines = mutableListOf<String>()
             json.present("coverage_banner")?.let(lines::add)
             json.present("bundle_name")?.let { lines.add("Bundle: $it") }
@@ -179,6 +215,7 @@ class FlowModel {
             detail = lines.joinToString("\n")
         } catch (err: IOException) {
             val message = err.message ?: "Incomplete."
+            status = if (message.contains("Refusing")) "refused" else "incomplete"
             summary = if (message.contains("Refusing")) message else "Incomplete."
             detail = message
         }

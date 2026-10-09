@@ -84,6 +84,16 @@ def desktop() -> None:
 def main() -> None:
     run(["cargo", "test", "--manifest-path", "core/Cargo.toml"])
     run([sys.executable, str(ROOT / "tests/words.py")])
+    run(
+        [
+            sys.executable,
+            str(ROOT / "eval/heldout.py"),
+            "--bin",
+            str(binary()),
+            "--bundles",
+            str(ROOT / "bundles"),
+        ]
+    )
     bin_path = binary()
     if shutil.which("swift"):
         apple_env = {"OPENWORLD_BIN": str(bin_path), "OPENWORLD_BUNDLES": str(ROOT / "bundles")}

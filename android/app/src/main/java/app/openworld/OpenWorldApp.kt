@@ -57,6 +57,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (model.step != Step.Choose) {
+                    TextButton(onClick = model::back) { Text("Back") }
+                }
                 when (model.step) {
                     Step.Choose -> {
                         Text("Choose a photo or video", style = MaterialTheme.typography.headlineMedium)
@@ -118,7 +121,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Results -> {
                         Text(
                             model.summary.ifBlank {
-                                if (model.fbiUrl != null) ProductCopy.possible else ProductCopy.incomplete
+                                when (model.status) {
+                                    "complete" -> if (model.fbiUrl != null) ProductCopy.possible else ProductCopy.clearance
+                                    else -> ProductCopy.incomplete
+                                }
                             },
                             style = MaterialTheme.typography.headlineMedium,
                         )
@@ -147,6 +153,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (!page.isNullOrBlank()) {
                             Button(onClick = { model.leavingUrl = page }) { Text("Open FBI page") }
                         }
+                        Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
                 }
             }

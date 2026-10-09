@@ -121,7 +121,7 @@ enum ScreenCopy {
             }
             return lines
         case "results", "leaving":
-            var lines = [model.report?.summary ?? model.error ?? Copy.incomplete]
+            var lines = [model.report?.summary ?? model.error ?? Copy.incomplete, "Choose another file", "Back"]
             if let banner = model.report?.coverageBanner { lines.append(banner) }
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
             if let note = model.report?.perceptionNote { lines.append(note) }

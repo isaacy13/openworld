@@ -30,6 +30,7 @@ public final class FlowModel: ObservableObject {
     @Published public var leavingURL: URL?
     @Published public var oldFile = false
     @Published public var error: String?
+    @Published public var canAnalyze = true
     let phone: Bool
     private let core = CoreClient()
 
@@ -61,19 +62,60 @@ public final class FlowModel: ObservableObject {
     }
 
     public func loadEstimate() {
-        guard let file else { return }
+        guard let file else {
+            estimate = nil
+            canAnalyze = false
+            error = "The file could not be read. Refusing."
+            step = .estimate
+            return
+        }
         do {
             estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
             error = nil
+            canAnalyze = true
         } catch {
             estimate = nil
+            canAnalyze = false
             self.error = error.localizedDescription
         }
         step = .estimate
     }
 
+    public func goBack() {
+        leavingURL = nil
+        switch step {
+        case .choose:
+            break
+        case .device:
+            step = .choose
+        case .bundle:
+            step = .device
+        case .size:
+            step = .bundle
+        case .estimate:
+            step = .size
+        case .results:
+            step = .estimate
+        }
+    }
+
+    public func chooseAnother() {
+        file = nil
+        report = nil
+        resultDirectory = nil
+        leavingURL = nil
+        oldFile = false
+        error = nil
+        estimate = nil
+        canAnalyze = true
+        coverage = "complete"
+        longSide = "640"
+        bundleID = "fast"
+        step = .choose
+    }
+
     public func analyze() {
-        guard let file else { return }
+        guard canAnalyze, let file else { return }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let posters = root.appendingPathComponent("posters")
         let frames = root.appendingPathComponent("frames")
@@ -153,6 +195,7 @@ public struct FlowView: View {
 
     private var device: some View {
         VStack(alignment: .leading, spacing: 10) {
+            backControl
             Text(Copy.onDevice).font(model.phone ? .largeTitle : .title)
             if let file = model.file {
                 Text(file.lastPathComponent).font(.headline)
@@ -173,6 +216,7 @@ public struct FlowView: View {
 
     private var bundles: some View {
         VStack(alignment: .leading, spacing: 8) {
+            backControl
             Text("Model bundle").font(model.phone ? .largeTitle : .title)
             Text("Scores are not comparable across bundles. Results name the bundle you pick.")
                 .foregroundStyle(.secondary)
@@ -207,6 +251,7 @@ public struct FlowView: View {
 
     private var size: some View {
         VStack(alignment: .leading, spacing: 12) {
+            backControl
             Text("Detection size").font(model.phone ? .largeTitle : .title)
             Text("Smaller frames are a resize of each decoded frame in memory. Evidence crops come from the original frame. Full resolution is slower.")
                 .foregroundStyle(.secondary)
@@ -222,6 +267,7 @@ public struct FlowView: View {
 
     private var estimate: some View {
         VStack(alignment: .leading, spacing: 10) {
+            backControl
             Text("Estimate").font(model.phone ? .largeTitle : .title)
             if let estimate = model.estimate {
                 Text(estimate.human).font(.headline)
@@ -236,7 +282,9 @@ public struct FlowView: View {
             if model.coverage == "measured" {
                 Text(Copy.brief)
             }
-            prominent("Analyze") { model.analyze() }
+            if model.canAnalyze {
+                prominent("Analyze") { model.analyze() }
+            }
             Spacer()
         }
         .padding()
@@ -270,6 +318,7 @@ public struct FlowView: View {
 
     private var resultsColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
+                backControl
                 Text(model.report?.summary ?? model.error ?? Copy.incomplete)
                     .font(model.phone ? .largeTitle : .title)
                 if let banner = model.report?.coverageBanner {
@@ -332,6 +381,7 @@ public struct FlowView: View {
                 ForEach(model.report?.disclosure ?? [], id: \.self) { line in
                     Text(line).font(.footnote)
                 }
+                prominent("Choose another file") { model.chooseAnother() }
             }
             .padding()
     }
@@ -362,10 +412,10 @@ public struct FlowView: View {
     @ViewBuilder private var sizePicker: some View {
         #if os(Linux)
         VStack(alignment: .leading, spacing: 8) {
-            Text("320 px on the long side")
-            Text("480 px on the long side")
-            Text("640 px on the long side")
-            Text("Full resolution")
+            sizeChoice("320", "320 px on the long side")
+            sizeChoice("480", "480 px on the long side")
+            sizeChoice("640", "640 px on the long side")
+            sizeChoice("full", "Full resolution")
         }
         #elseif os(macOS)
         let picker = Picker("Detection size", selection: $model.longSide) {
@@ -393,8 +443,12 @@ public struct FlowView: View {
     @ViewBuilder private var coveragePicker: some View {
         #if os(Linux)
         VStack(alignment: .leading, spacing: 8) {
-            Text("Complete. Every decoded frame.")
-            Text("Measured. 5 frames a second, plus the tracker.")
+            Button(action: { model.coverage = "complete" }) {
+                Text(model.coverage == "complete" ? "Complete. Every decoded frame. Selected." : "Complete. Every decoded frame.")
+            }
+            Button(action: { model.coverage = "measured" }) {
+                Text(model.coverage == "measured" ? "Measured. 5 frames a second, plus the tracker. Selected." : "Measured. 5 frames a second, plus the tracker.")
+            }
         }
         #elseif os(macOS)
         let picker = Picker("Coverage", selection: $model.coverage) {
@@ -413,6 +467,20 @@ public struct FlowView: View {
         }
         .pickerStyle(.inline)
         #endif
+    }
+
+    #if os(Linux)
+    @ViewBuilder
+    private func sizeChoice(_ value: String, _ title: String) -> some View {
+        Button(action: { model.longSide = value }) {
+            Text(model.longSide == value ? "\(title). Selected." : title)
+        }
+    }
+    #endif
+
+    @ViewBuilder
+    private var backControl: some View {
+        Button(action: { model.goBack() }) { Text("Back") }
     }
 
     @ViewBuilder

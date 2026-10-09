@@ -3,6 +3,11 @@ import Foundation
 import OpenWorldContract
 
 /// Talks to the Rust library when it is linked, and otherwise to the `openworld` program. This file does not detect or compare.
+struct CoreFailure: LocalizedError {
+    var message: String
+    var errorDescription: String? { message }
+}
+
 struct CoreClient {
     var binary: String = CoreClient.findBinary()
     var bundles: String = CoreClient.findBundles()
@@ -60,7 +65,24 @@ struct CoreClient {
             phone: phone,
             media: facts.media
         ))
+        if let message = Self.refusalMessage(data) {
+            throw CoreFailure(message: message)
+        }
         return try JSONDecoder().decode(Estimate.self, from: data)
+    }
+
+    static func refusalMessage(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (object["status"] as? String) == "refused" else {
+            return nil
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let summary = object["summary"] as? String, !summary.isEmpty {
+            return summary
+        }
+        return "Refusing."
     }
 
     func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool) throws -> ScanReport {

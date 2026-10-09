@@ -302,12 +302,49 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
         compose.onNodeWithText("Open FBI page").performClick()
         compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
+        compose.onNodeWithText("Choose another file").assertExists()
         compose.onNodeWithText("Stay").performClick()
         compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
         compose.onNodeWithText("Open FBI page").performClick()
         compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
         assertNotNull(model.fbiUrl)
         assertTrue(model.fbiUrl!!.startsWith("https://www.fbi.gov"))
+    }
+
+    @Test
+    fun backAndChooseAnotherReturnToTheStart() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/back.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        compose.onNodeWithText("Choose another file").performClick()
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+        compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
+        assertEquals(Step.Choose, model.step)
+        assertEquals("", model.summary)
+    }
+
+    @Test
+    fun aFinishedScanWithNoCandidateDoesNotSayIncomplete() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = ""
+        model.detail = "No candidate is not a clearance."
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onAllNodesWithText("Incomplete.").assertCountEquals(0)
+        compose.onAllNodesWithText("Possible candidate. Not an identification.").assertCountEquals(0)
+        compose.onNodeWithText("Choose another file").assertExists()
     }
 
     @Test
