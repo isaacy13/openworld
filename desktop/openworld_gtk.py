@@ -261,18 +261,20 @@ class OpenWorld(Gtk.Application):
         self.strip.set_selection_mode(Gtk.SelectionMode.NONE)
         self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_overlay_scrolling(False)
+        scroll.set_vexpand(True)
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
         inner.append(self.strip)
         inner.append(self.detail)
         inner.append(self.result_note)
-        scroll.set_child(inner)
-        scroll.set_vexpand(True)
         delete = Gtk.Button(label="Delete")
         delete.set_halign(Gtk.Align.START)
         delete.connect("clicked", lambda *_: self.delete_result())
+        inner.append(delete)
+        scroll.set_child(inner)
         outer.append(scroll)
-        outer.append(delete)
         return outer
 
     def pick_file(self) -> None:
@@ -521,6 +523,16 @@ class OpenWorld(Gtk.Application):
             box.append(caption)
             self.strip.append(box)
 
+    def _button_labels(self, root: Gtk.Widget) -> list[str]:
+        labels: list[str] = []
+        if isinstance(root, Gtk.Button):
+            labels.append(root.get_label() or "")
+        child = root.get_first_child()
+        while child is not None:
+            labels.extend(self._button_labels(child))
+            child = child.get_next_sibling()
+        return labels
+
     def _strip_labels(self) -> list[str]:
         labels: list[str] = []
         child = self.strip.get_first_child()
@@ -755,6 +767,11 @@ class OpenWorld(Gtk.Application):
             return False
         if self.primary.get_label() != "Choose another file":
             self._exercise_fail(f"results button is {self.primary.get_label()!r}")
+            return False
+        fbi_buttons = [label for label in self._button_labels(self.detail) if label == "Open FBI page"]
+        expected = len(report.get("candidates") or [])
+        if len(fbi_buttons) != expected or expected < 1:
+            self._exercise_fail(f"expected {expected} FBI buttons, saw {fbi_buttons}")
             return False
         self.choose_another()
         if self.stack.get_visible_child_name() != "choose" or self.input_path is not None:

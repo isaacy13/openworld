@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -300,13 +301,18 @@ class PhoneScreenTest {
         compose.onNodeWithText("A vehicle is not a person.").assertExists()
         assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
         compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
-        compose.onNodeWithText("Open FBI page").performClick()
+        assertTrue(model.candidateRows.size >= 2)
+        compose.onAllNodesWithText("Open FBI page").assertCountEquals(model.candidateRows.size)
+        compose.onNodeWithText("Fixture subject A", substring = true).assertExists()
+        compose.onNodeWithText("Fixture vehicle C", substring = true).assertExists()
+        compose.onAllNodesWithText("Open FBI page")[0].performClick()
         compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
         compose.onNodeWithText("Choose another file").assertExists()
         compose.onNodeWithText("Stay").performClick()
         compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
-        compose.onNodeWithText("Open FBI page").performClick()
+        compose.onAllNodesWithText("Open FBI page")[1].performScrollTo().performClick()
         compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
+        assertEquals(model.candidateRows[1].url, model.leavingUrl)
         assertNotNull(model.fbiUrl)
         assertTrue(model.fbiUrl!!.startsWith("https://www.fbi.gov"))
     }

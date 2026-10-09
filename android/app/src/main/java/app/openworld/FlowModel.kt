@@ -13,6 +13,14 @@ import java.io.IOException
 
 enum class Step { Choose, Device, Bundle, Size, Estimate, Results }
 
+class CandidateRow(
+    val wording: String,
+    val uncertainty: String,
+    val title: String,
+    val posterClass: String,
+    val url: String,
+)
+
 class FlowModel {
     var step by mutableStateOf(Step.Choose)
     var fileName by mutableStateOf("")
@@ -26,6 +34,7 @@ class FlowModel {
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var fbiUrl by mutableStateOf<String?>(null)
+    var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<Pair<String, String>>())
     var canAnalyze by mutableStateOf(true)
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
@@ -94,6 +103,7 @@ class FlowModel {
         detail = ""
         strip = emptyList()
         fbiUrl = null
+        candidateRows = emptyList()
         leavingUrl = null
         canAnalyze = true
     }
@@ -146,6 +156,7 @@ class FlowModel {
         if (!canAnalyze) return
         strip = emptyList()
         fbiUrl = null
+        candidateRows = emptyList()
         leavingUrl = null
         try {
             val parent = File.createTempFile("openworld-out", null).parentFile ?: return
@@ -189,17 +200,25 @@ class FlowModel {
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))
             }
+            val rows = mutableListOf<CandidateRow>()
             val candidates = json.optJSONArray("candidates")
             if (candidates != null) {
                 for (i in 0 until candidates.length()) {
                     val item = candidates.getJSONObject(i)
-                    item.present("wording")?.let(lines::add)
-                    item.present("uncertainty")?.let(lines::add)
-                    item.present("poster_title")?.let(lines::add)
-                    val page = item.present("fbi_url")
-                    if (page != null) fbiUrl = page
+                    val page = item.present("fbi_url") ?: continue
+                    rows.add(
+                        CandidateRow(
+                            wording = item.present("wording") ?: "Possible candidate. Not an identification.",
+                            uncertainty = item.present("uncertainty") ?: "",
+                            title = item.present("poster_title") ?: "",
+                            posterClass = item.present("poster_class") ?: "",
+                            url = page,
+                        )
+                    )
                 }
             }
+            candidateRows = rows
+            fbiUrl = rows.firstOrNull()?.url
             val pictures = mutableListOf<Pair<String, String>>()
             val inventory = json.optJSONArray("inventory")
             if (inventory != null) {

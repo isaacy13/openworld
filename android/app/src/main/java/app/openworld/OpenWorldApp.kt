@@ -149,9 +149,15 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             }
                         }
                         Text(model.detail)
-                        val page = model.fbiUrl
-                        if (!page.isNullOrBlank()) {
-                            Button(onClick = { model.leavingUrl = page }) { Text("Open FBI page") }
+                        model.candidateRows.forEach { row ->
+                            Text(row.wording, style = MaterialTheme.typography.titleMedium)
+                            if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
+                            if (row.title.isNotBlank()) {
+                                Text(if (row.posterClass.isBlank()) row.title else "${row.title} (${row.posterClass})")
+                            }
+                            if (row.url.startsWith("https://www.fbi.gov")) {
+                                Button(onClick = { model.leavingUrl = row.url }) { Text("Open FBI page") }
+                            }
                         }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
