@@ -1,6 +1,6 @@
 # OpenWorld
 
-OpenWorld looks at a photo or video you already have, on the phone or computer where the file is. It compares faces, and plates only in a narrow case, to a small frozen set of public FBI missing-person and wanted-person posters. If a score passes that bundle's locked cutoff, you see the frame, the crop, the poster, and the uncertainty. A tap opens that poster's FBI page. The screen says "You are leaving OpenWorld." The app does not send a report.
+OpenWorld looks at a photo or video you already have, on the phone or computer where the file is. It compares faces, and plates only in a narrow case, to a small frozen set of public FBI missing-person and wanted-person posters. If a score passes that bundle's locked cutoff, you see the frame, the crop, the poster, and the uncertainty. A tap asks to open that poster's FBI page. The screen says "You are leaving OpenWorld." OpenWorld only opens an FBI page. The app does not send a report.
 
 v0 scans a synthetic fixture. Real FBI photos stay off.
 

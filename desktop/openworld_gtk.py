@@ -581,9 +581,27 @@ class OpenWorld(Gtk.Application):
         frame.set_child(box)
         return frame
 
-    def confirm_leave(self, url: str) -> None:
+    def leave_decision(self, url: str) -> tuple[str, str | None]:
         payload = self._run_json(["--json", "leave", "--url", url])
-        message = payload.get("message", PHRASES["leaving"])
+        allowed = payload.get("url") or ""
+        message = payload.get("message") or ""
+        if message != PHRASES["leaving"] or not allowed:
+            return message or "OpenWorld only opens an FBI page.", None
+        return message, allowed
+
+    def confirm_leave(self, url: str) -> None:
+        message, allowed = self.leave_decision(url)
+        if allowed is None:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.CLOSE,
+                text=message,
+            )
+            dialog.connect("response", lambda d, *_: d.destroy())
+            dialog.present()
+            return
         dialog = Gtk.MessageDialog(
             transient_for=self.window,
             modal=True,
@@ -593,13 +611,13 @@ class OpenWorld(Gtk.Application):
         )
         dialog.add_button("Stay", Gtk.ResponseType.CANCEL)
         dialog.add_button("Open", Gtk.ResponseType.ACCEPT)
-        dialog.format_secondary_text(payload.get("url", url))
-        dialog.connect("response", self._leave_response, payload.get("url", url))
+        dialog.format_secondary_text(allowed)
+        dialog.connect("response", self._leave_response, allowed)
         dialog.present()
 
     def _leave_response(self, dialog: Gtk.MessageDialog, response: int, url: str) -> None:
         dialog.destroy()
-        if response == Gtk.ResponseType.ACCEPT and url.startswith("https://"):
+        if response == Gtk.ResponseType.ACCEPT and url:
             Gio.AppInfo.launch_default_for_uri(url, None)
 
     def delete_result(self) -> None:
@@ -772,6 +790,15 @@ class OpenWorld(Gtk.Application):
         expected = len(report.get("candidates") or [])
         if len(fbi_buttons) != expected or expected < 1:
             self._exercise_fail(f"expected {expected} FBI buttons, saw {fbi_buttons}")
+            return False
+        blocked, opened = self.leave_decision("https://www.fbi.gov.evil.com/wanted")
+        if opened is not None or "FBI page" not in blocked:
+            self._exercise_fail(f"lookalike host was allowed: {blocked} {opened}")
+            return False
+        page = (report.get("candidates") or [{}])[0].get("fbi_url") or ""
+        message, allowed = self.leave_decision(page)
+        if message != PHRASES["leaving"] or allowed != page:
+            self._exercise_fail(f"FBI page was blocked: {message} {allowed}")
             return False
         self.choose_another()
         if self.stack.get_visible_child_name() != "choose" or self.input_path is not None:

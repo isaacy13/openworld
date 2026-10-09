@@ -48,6 +48,12 @@ class PhoneFlowTest {
         assertEquals("Possible candidate. Not an identification.", model.summary)
         assertTrue(model.candidateRows.size >= 2)
         assertTrue(model.candidateRows.all { it.url.startsWith("https://www.fbi.gov") })
+        model.prepareLeave("https://www.fbi.gov.evil.com/wanted")
+        assertNull(model.leavingUrl)
+        assertTrue(model.leaveNotice?.contains("FBI page") == true)
+        model.prepareLeave(model.candidateRows[0].url)
+        assertEquals(model.candidateRows[0].url, model.leavingUrl)
+        assertNull(model.leaveNotice)
     }
 
     @Test
@@ -316,6 +322,10 @@ class PhoneScreenTest {
         compose.onNodeWithText("A vehicle is not a person.").assertExists()
         assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
         compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
+        model.prepareLeave("https://www.fbi.gov.evil.com/wanted")
+        compose.onNodeWithText("OpenWorld only opens an FBI page.").assertExists()
+        compose.onAllNodesWithText("You are leaving OpenWorld.").assertCountEquals(0)
+        compose.onAllNodesWithText("Open").assertCountEquals(0)
         assertTrue(model.candidateRows.size >= 2)
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(model.candidateRows.size)
         compose.onNodeWithText("Fixture subject A", substring = true).assertExists()

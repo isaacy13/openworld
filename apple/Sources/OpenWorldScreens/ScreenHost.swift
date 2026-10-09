@@ -76,7 +76,7 @@ enum ScreenCopy {
         guard screen == "results" || screen == "leaving" else { return }
         model.analyze()
         if screen == "leaving", let page = model.report?.candidates.first?.fbiUrl {
-            model.leavingURL = URL(string: page)
+            model.requestLeave(page)
         }
     }
 

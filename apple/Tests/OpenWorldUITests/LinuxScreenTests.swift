@@ -43,11 +43,16 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(disclosure.contains("This file is not authenticated."))
             XCTAssertTrue(disclosure.contains("On-device does not mean the file is real."))
             XCTAssertTrue(model.report?.perceptionNote?.contains("Fixture markers were read.") == true)
+            model.requestLeave("https://www.fbi.gov.evil.com/wanted")
+            XCTAssertNil(model.leavingURL)
+            XCTAssertTrue(model.leaveError?.contains("FBI page") == true)
+            _ = FlowView(model: model, importControl: self.control).body
             if let page = model.report?.candidates.first?.fbiUrl {
-                model.leavingURL = URL(string: page)
+                model.requestLeave(page)
             }
             _ = FlowView(model: model, importControl: self.control).body
             XCTAssertEqual(model.leavingURL?.host, "www.fbi.gov")
+            XCTAssertNil(model.leaveError)
             model.leavingURL = nil
             XCTAssertNil(model.leavingURL)
             _ = FlowView(model: model, importControl: self.control).body
@@ -146,9 +151,11 @@ final class OpenWorldUITests: XCTestCase {
         try MainActor.assumeIsolated {
             let model = try self.scan("scene")
             model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
+            model.leaveError = "OpenWorld only opens an FBI page."
             model.goBack()
             XCTAssertEqual(model.step, .estimate)
             XCTAssertNil(model.leavingURL)
+            XCTAssertNil(model.leaveError)
             model.chooseAnother()
             XCTAssertEqual(model.step, .choose)
             XCTAssertNil(model.report)

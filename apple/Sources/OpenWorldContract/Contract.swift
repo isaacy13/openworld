@@ -80,6 +80,10 @@ public enum PhoneArguments {
     public static func writeFixture(out: String) -> [String] {
         ["posters", "write-fixture", "--out", out]
     }
+
+    public static func leave(url: String) -> [String] {
+        ["--json", "leave", "--url", url]
+    }
 }
 
 public struct BundleList: Decodable {

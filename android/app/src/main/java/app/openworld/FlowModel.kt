@@ -33,6 +33,7 @@ class FlowModel {
     var status by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
+    var leaveNotice by mutableStateOf<String?>(null)
     var fbiUrl by mutableStateOf<String?>(null)
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<Pair<String, String>>())
@@ -79,6 +80,7 @@ class FlowModel {
 
     fun back() {
         leavingUrl = null
+        leaveNotice = null
         step = when (step) {
             Step.Choose -> Step.Choose
             Step.Device -> Step.Choose
@@ -105,7 +107,25 @@ class FlowModel {
         fbiUrl = null
         candidateRows = emptyList()
         leavingUrl = null
+        leaveNotice = null
         canAnalyze = true
+    }
+
+    fun prepareLeave(url: String) {
+        leaveNotice = null
+        leavingUrl = null
+        try {
+            val json = Core.json(listOf("--json", "leave", "--url", url))
+            val message = json.present("message")
+            val allowed = json.present("url")
+            if (message == "You are leaving OpenWorld." && allowed != null) {
+                leavingUrl = allowed
+            } else {
+                leaveNotice = message ?: "OpenWorld only opens an FBI page."
+            }
+        } catch (err: IOException) {
+            leaveNotice = err.message ?: "OpenWorld only opens an FBI page."
+        }
     }
 
     fun continueFromSize() {
@@ -158,6 +178,7 @@ class FlowModel {
         fbiUrl = null
         candidateRows = emptyList()
         leavingUrl = null
+        leaveNotice = null
         try {
             val parent = File.createTempFile("openworld-out", null).parentFile ?: return
             val root = File(parent, "openworld-" + System.nanoTime())

@@ -155,17 +155,16 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             if (row.title.isNotBlank()) {
                                 Text(if (row.posterClass.isBlank()) row.title else "${row.title} (${row.posterClass})")
                             }
-                            if (row.url.startsWith("https://www.fbi.gov")) {
-                                Button(onClick = { model.leavingUrl = row.url }) { Text("Open FBI page") }
-                            }
+                            Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
                         }
+                        model.leaveNotice?.let { Text(it) }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
                 }
             }
         }
         val url = model.leavingUrl
-        if (model.step == Step.Results && url != null && url.startsWith("https://www.fbi.gov")) {
+        if (model.step == Step.Results && url != null) {
             AlertDialog(
                 onDismissRequest = { model.leavingUrl = null },
                 title = { Text(ProductCopy.leaving) },

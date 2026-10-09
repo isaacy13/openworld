@@ -64,6 +64,13 @@ fn dispatch(args: &[String]) -> Result<Value, String> {
             serde_json::to_value(&report).map_err(|err| err.to_string())
         }
         "posters" => posters(&bundles, &parsed),
+        "leave" => {
+            let url = parsed.flag("url").ok_or("OpenWorld only opens an FBI page.")?;
+            match crate::scan::leave_prompt(url) {
+                Ok(prompt) => serde_json::to_value(&prompt).map_err(|err| err.to_string()),
+                Err(err) => Err(err),
+            }
+        }
         "" => Err("The scan request was empty. Refusing.".into()),
         other => Err(format!(
             "The command {other} is not available from the library. Refusing."
@@ -376,6 +383,45 @@ mod tests {
             update["message"],
             "Real FBI photos stay off. Fast does not have a curve that allows them."
         );
+    }
+
+    #[test]
+    fn the_library_opens_an_fbi_page_and_refuses_a_lookalike() {
+        let allowed: Value = serde_json::from_str(&invoke_argv(&[
+            "--json".into(),
+            "leave".into(),
+            "--url".into(),
+            "https://www.fbi.gov/wanted".into(),
+        ]))
+        .unwrap();
+        assert_eq!(allowed["message"], "You are leaving OpenWorld.");
+        assert_eq!(allowed["url"], "https://www.fbi.gov/wanted");
+
+        let exact: Value = serde_json::from_str(&invoke_argv(&[
+            "--json".into(),
+            "leave".into(),
+            "--url".into(),
+            "https://fbi.gov/wanted".into(),
+        ]))
+        .unwrap();
+        assert_eq!(exact["url"], "https://fbi.gov/wanted");
+
+        for blocked in [
+            "https://www.fbi.gov.evil.com/wanted",
+            "http://www.fbi.gov/wanted",
+            "https://www.fbi.gov@evil.com/wanted",
+            "https://evil.com/?next=https://www.fbi.gov/wanted",
+        ] {
+            let lookalike: Value = serde_json::from_str(&invoke_argv(&[
+                "leave".into(),
+                "--url".into(),
+                blocked.into(),
+            ]))
+            .unwrap();
+            assert_eq!(lookalike["status"], "refused", "{blocked}");
+            assert_eq!(lookalike["message"], "OpenWorld only opens an FBI page.");
+            assert!(lookalike.get("url").is_none(), "{blocked}");
+        }
     }
 
     #[test]

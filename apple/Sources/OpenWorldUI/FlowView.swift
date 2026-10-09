@@ -28,6 +28,7 @@ public final class FlowModel: ObservableObject {
     @Published public var report: ScanReport?
     @Published public var resultDirectory: URL?
     @Published public var leavingURL: URL?
+    @Published public var leaveError: String?
     @Published public var oldFile = false
     @Published public var error: String?
     @Published public var canAnalyze = true
@@ -83,6 +84,7 @@ public final class FlowModel: ObservableObject {
 
     public func goBack() {
         leavingURL = nil
+        leaveError = nil
         switch step {
         case .choose:
             break
@@ -104,6 +106,7 @@ public final class FlowModel: ObservableObject {
         report = nil
         resultDirectory = nil
         leavingURL = nil
+        leaveError = nil
         oldFile = false
         error = nil
         estimate = nil
@@ -116,6 +119,8 @@ public final class FlowModel: ObservableObject {
 
     public func analyze() {
         guard canAnalyze, let file else { return }
+        leavingURL = nil
+        leaveError = nil
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let posters = root.appendingPathComponent("posters")
         let frames = root.appendingPathComponent("frames")
@@ -143,6 +148,29 @@ public final class FlowModel: ObservableObject {
             self.error = error.localizedDescription
         }
         step = .results
+    }
+
+    /// Ask the library before any FBI page is shown. A lookalike host stays closed.
+    public func requestLeave(_ urlString: String) {
+        leavingURL = nil
+        leaveError = nil
+        let data: Data
+        do {
+            data = try core.run(PhoneArguments.leave(url: urlString))
+        } catch {
+            leaveError = error.localizedDescription
+            return
+        }
+        let object = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let message = object["message"] as? String
+        let allowed = object["url"] as? String
+        if message == Copy.leaving, let allowed, !allowed.isEmpty, let url = URL(string: allowed) {
+            leavingURL = url
+        } else if let message, !message.isEmpty {
+            leaveError = message
+        } else {
+            leaveError = "OpenWorld only opens an FBI page."
+        }
     }
 }
 
@@ -366,7 +394,7 @@ public struct FlowView: View {
                             Text(candidate.uncertainty)
                             Text("\(candidate.posterTitle) (\(candidate.posterClass))")
                             prominent("Open FBI page") {
-                                model.leavingURL = URL(string: candidate.fbiUrl)
+                                model.requestLeave(candidate.fbiUrl)
                             }
                         }
                         #if !os(Linux)
@@ -380,6 +408,9 @@ public struct FlowView: View {
                 }
                 ForEach(model.report?.disclosure ?? [], id: \.self) { line in
                     Text(line).font(.footnote)
+                }
+                if let notice = model.leaveError {
+                    Text(notice).foregroundStyle(.orange)
                 }
                 prominent("Choose another file") { model.chooseAnother() }
             }
