@@ -62,7 +62,7 @@ Classes are missing and wanted, on or off together as a class. The cutoff is the
 
 It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
 
-`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, and a container time that disagrees with the file time is a warning, not a refusal. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
+`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, and a container time that disagrees with the file time is a warning, not a refusal. A one-frame GIF stays one frame and a clearance. An audio file is refused. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
 
 ## Continuous integration
 

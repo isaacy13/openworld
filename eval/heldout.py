@@ -3,9 +3,10 @@
 """Held-out checks through the shipping scan command.
 
 The published Fast curve is a separate file. These trials use other fixture
-identities, other placements, a real compressed video with no marker, and a
-lossless video of a fixture still. They are not photographs of people, not
-LFW, and not a reason to turn real FBI photos on.
+identities, other placements, a real compressed video with no marker, a
+lossless video of a fixture still, a one-frame GIF, and an audio file.
+They are not photographs of people, not LFW, and not a reason to turn real
+FBI photos on.
 """
 
 from __future__ import annotations
@@ -128,6 +129,8 @@ def main() -> int:
         "lossless_video_candidate": 0,
         "timestamp_disagree": 0,
         "measured_banner": 0,
+        "gif_still": 0,
+        "audio_refusal": 0,
     }
     with tempfile.TemporaryDirectory(prefix="openworld-heldout-") as tmp:
         root = Path(tmp)
@@ -276,9 +279,58 @@ def main() -> int:
         counts["lossless_video_candidate"] += 1
         counts["timestamp_disagree"] += 1
 
+        gif = root / "blue.gif"
+        proc = run(
+            [
+                "ffmpeg",
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=blue:s=64x64",
+                "-frames:v",
+                "1",
+                str(gif),
+            ]
+        )
+        if proc.returncode != 0 or not gif.is_file():
+            fail(proc.stderr or "gif was not written")
+        report = scan(args.bin, args.bundles, posters, gif, out, "complete")
+        assert_clearance(report, "one-frame gif")
+        if report.get("frames_decoded") != 1:
+            fail(f"one-frame gif decoded {report.get('frames_decoded')} frames")
+        counts["gif_still"] += 1
+
+        tone = root / "tone.wav"
+        proc = run(
+            [
+                "ffmpeg",
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=1",
+                "-c:a",
+                "pcm_s16le",
+                str(tone),
+            ]
+        )
+        if proc.returncode != 0 or not tone.is_file():
+            fail(proc.stderr or "audio was not written")
+        report = scan(args.bin, args.bundles, posters, tone, out, "complete")
+        if report.get("status") != "refused" or "Refusing." not in (report.get("summary") or ""):
+            fail(f"audio summary {report.get('summary')!r}")
+        if report.get("candidates") or report.get("frames_decoded"):
+            fail("audio was scanned as pictures")
+        counts["audio_refusal"] += 1
+
     print(json.dumps({"ok": True, "counts": counts}, sort_keys=True))
     total = sum(counts.values())
-    if counts["impostor_clearance"] != 80 or total < 88:
+    if counts["impostor_clearance"] != 80 or counts["gif_still"] != 1 or counts["audio_refusal"] != 1 or total < 90:
         fail(f"held-out counts are short: {counts}")
     return 0
 

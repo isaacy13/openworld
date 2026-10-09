@@ -26,6 +26,8 @@ pub struct Probe {
     pub fps: f64,
     pub duration_sec: f64,
     pub frames: u64,
+    /// True when the container reported a frame count. An estimate from duration is not exact.
+    pub frames_exact: bool,
     pub container_created: Option<SystemTime>,
     pub video: bool,
 }
@@ -70,6 +72,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         fps: 0.0,
         duration_sec: 0.0,
         frames: 1,
+        frames_exact: true,
         container_created: None,
         video: false,
     })
@@ -125,7 +128,16 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             0
         }
     });
-    Ok(Probe { width, height, fps, duration_sec: duration, frames, container_created: created, video: true })
+    Ok(Probe {
+        width,
+        height,
+        fps,
+        duration_sec: duration,
+        frames,
+        frames_exact: nb.is_some(),
+        container_created: created,
+        video: true,
+    })
 }
 
 fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
@@ -146,6 +158,7 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
     }
     let mut decoded = 0u64;
     let mut stopped = false;
+    let mut capped = false;
     loop {
         let mut buf = vec![0u8; frame_bytes];
         let mut filled = 0;
@@ -166,6 +179,12 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
             let _ = child.kill();
             return Err(MediaError::BadCodec);
         }
+        // A one-frame GIF can make FFmpeg repeat the picture. Those repeats are not frames of the file.
+        if info.frames_exact && info.frames > 0 && decoded >= info.frames {
+            capped = true;
+            let _ = child.kill();
+            break;
+        }
         let image = RgbImage::from_raw(info.width, info.height, buf).ok_or(MediaError::BadCodec)?;
         let keep = on_frame(decoded, &image);
         decoded += 1;
@@ -175,7 +194,7 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
             break;
         }
     }
-    let status = if stopped {
+    let status = if stopped || capped {
         let _ = child.wait();
         true
     } else {

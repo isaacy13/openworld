@@ -446,6 +446,48 @@ fn ffmpeg_decodes_a_lossless_fixture_video() {
 }
 
 #[test]
+fn a_one_frame_gif_is_not_repeated_into_extra_frames() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("blue.png");
+    blank(64, 64).save(&still).unwrap();
+    let gif = dir.path().join("blue.gif");
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&still)
+        .args(["-frames:v", "1"])
+        .arg(&gif)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: gif,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, NO_CLEARANCE);
+    assert_eq!(report.frames_decoded, 1);
+    assert!(report.candidates.is_empty());
+}
+
+#[test]
 fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     let dir = tempfile::tempdir().unwrap();
     let frames = dir.path().join("frames");
