@@ -29,11 +29,13 @@ public final class FlowModel: ObservableObject {
     @Published public var resultDirectory: URL?
     @Published public var leavingURL: URL?
     @Published public var leaveError: String?
+    @Published public var deleteNotice: String?
     @Published public var oldFile = false
     @Published public var error: String?
     @Published public var canAnalyze = true
     let phone: Bool
     private let core = CoreClient()
+    private var scanRoot: URL?
 
     public init(phone: Bool) {
         self.phone = phone
@@ -85,6 +87,7 @@ public final class FlowModel: ObservableObject {
     public func goBack() {
         leavingURL = nil
         leaveError = nil
+        deleteNotice = nil
         switch step {
         case .choose:
             break
@@ -102,11 +105,13 @@ public final class FlowModel: ObservableObject {
     }
 
     public func chooseAnother() {
+        guard removeResult() else { return }
         file = nil
         report = nil
         resultDirectory = nil
         leavingURL = nil
         leaveError = nil
+        deleteNotice = nil
         oldFile = false
         error = nil
         estimate = nil
@@ -119,9 +124,12 @@ public final class FlowModel: ObservableObject {
 
     public func analyze() {
         guard canAnalyze, let file else { return }
+        guard removeResult() else { return }
         leavingURL = nil
         leaveError = nil
+        deleteNotice = nil
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        scanRoot = root
         let posters = root.appendingPathComponent("posters")
         let frames = root.appendingPathComponent("frames")
         do {
@@ -145,6 +153,8 @@ public final class FlowModel: ObservableObject {
         } catch {
             report = nil
             resultDirectory = nil
+            if let scanRoot { try? FileManager.default.removeItem(at: scanRoot) }
+            self.scanRoot = nil
             self.error = error.localizedDescription
         }
         step = .results
@@ -171,6 +181,43 @@ public final class FlowModel: ObservableObject {
         } else {
             leaveError = "OpenWorld only opens an FBI page."
         }
+    }
+
+    /// Remove the result directory through the library, then the temporary frames beside it.
+    public func deleteResult() {
+        guard removeResult() else { return }
+        report = nil
+        leavingURL = nil
+        leaveError = nil
+        error = "Deleted."
+    }
+
+    private func removeResult() -> Bool {
+        guard let resultDirectory else { return true }
+        deleteNotice = nil
+        if !FileManager.default.fileExists(atPath: resultDirectory.path) {
+            self.resultDirectory = nil
+            if let scanRoot { try? FileManager.default.removeItem(at: scanRoot) }
+            scanRoot = nil
+            return true
+        }
+        let data: Data
+        do {
+            data = try core.run(PhoneArguments.delete(out: resultDirectory.path))
+        } catch {
+            deleteNotice = error.localizedDescription
+            return false
+        }
+        let object = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        guard (object["deleted"] as? Bool) == true else {
+            let message = object["message"] as? String
+            deleteNotice = (message?.isEmpty == false ? message : nil) ?? "The result could not be deleted."
+            return false
+        }
+        if let scanRoot { try? FileManager.default.removeItem(at: scanRoot) }
+        self.scanRoot = nil
+        self.resultDirectory = nil
+        return true
     }
 }
 
@@ -410,6 +457,12 @@ public struct FlowView: View {
                     Text(line).font(.footnote)
                 }
                 if let notice = model.leaveError {
+                    Text(notice).foregroundStyle(.orange)
+                }
+                if model.resultDirectory != nil {
+                    prominent("Delete") { model.deleteResult() }
+                }
+                if let notice = model.deleteNotice {
                     Text(notice).foregroundStyle(.orange)
                 }
                 prominent("Choose another file") { model.chooseAnother() }

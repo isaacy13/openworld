@@ -158,6 +158,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
                         }
                         model.leaveNotice?.let { Text(it) }
+                        if (model.resultDir != null) {
+                            Button(onClick = model::deleteResult) { Text("Delete") }
+                        }
+                        model.deleteNotice?.let { Text(it) }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
                 }

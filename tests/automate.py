@@ -9,6 +9,7 @@ window runs when a display is available.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -76,9 +77,12 @@ def desktop() -> None:
         )
         print("+ desktop window", flush=True)
         subprocess.run([sys.executable, str(ROOT / "desktop/openworld_gtk.py")], cwd=ROOT, env=env, check=True)
-        text = status.read_text()
-        if '"ok": true' not in text and '"ok":true' not in text:
-            raise SystemExit(f"desktop exercise failed: {text}")
+        payload = json.loads(status.read_text())
+        if not payload.get("ok"):
+            raise SystemExit(f"desktop exercise failed: {payload}")
+        work = payload.get("work")
+        if not work or Path(work).exists():
+            raise SystemExit(f"desktop left its temporary scan folder: {work}")
 
 
 def main() -> None:

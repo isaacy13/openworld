@@ -34,6 +34,10 @@ class FlowModel {
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var leaveNotice by mutableStateOf<String?>(null)
+    var deleteNotice by mutableStateOf<String?>(null)
+    var resultDir: File? = null
+        private set
+    private var scanRoot: File? = null
     var fbiUrl by mutableStateOf<String?>(null)
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<Pair<String, String>>())
@@ -81,6 +85,7 @@ class FlowModel {
     fun back() {
         leavingUrl = null
         leaveNotice = null
+        deleteNotice = null
         step = when (step) {
             Step.Choose -> Step.Choose
             Step.Device -> Step.Choose
@@ -92,6 +97,7 @@ class FlowModel {
     }
 
     fun chooseAnother() {
+        if (!removeResult()) return
         step = Step.Choose
         fileName = ""
         oldFile = false
@@ -108,7 +114,49 @@ class FlowModel {
         candidateRows = emptyList()
         leavingUrl = null
         leaveNotice = null
+        deleteNotice = null
+        resultDir = null
+        scanRoot = null
         canAnalyze = true
+    }
+
+    fun deleteResult() {
+        if (!removeResult()) return
+        summary = "Deleted."
+        status = "deleted"
+        detail = ""
+        strip = emptyList()
+        candidateRows = emptyList()
+        fbiUrl = null
+        leavingUrl = null
+        leaveNotice = null
+    }
+
+    private fun removeResult(): Boolean {
+        val out = resultDir
+        if (out == null) return true
+        deleteNotice = null
+        if (!out.exists()) {
+            scanRoot?.deleteRecursively()
+            resultDir = null
+            scanRoot = null
+            return true
+        }
+        return try {
+            val json = Core.json(listOf("--json", "delete", "--out", out.absolutePath))
+            if (json.optBoolean("deleted")) {
+                scanRoot?.deleteRecursively()
+                resultDir = null
+                scanRoot = null
+                true
+            } else {
+                deleteNotice = json.present("message") ?: "The result could not be deleted."
+                false
+            }
+        } catch (err: IOException) {
+            deleteNotice = err.message ?: "The result could not be deleted."
+            false
+        }
     }
 
     fun prepareLeave(url: String) {
@@ -174,15 +222,18 @@ class FlowModel {
     fun analyze() {
         val file = localCopy ?: return
         if (!canAnalyze) return
+        if (!removeResult()) return
         strip = emptyList()
         fbiUrl = null
         candidateRows = emptyList()
         leavingUrl = null
         leaveNotice = null
+        deleteNotice = null
         try {
             val parent = File.createTempFile("openworld-out", null).parentFile ?: return
             val root = File(parent, "openworld-" + System.nanoTime())
             if (!root.mkdirs()) return
+            scanRoot = root
             val posters = File(root, "openworld-posters")
             val out = File(root, "openworld-result")
             Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
@@ -253,7 +304,11 @@ class FlowModel {
             }
             strip = pictures
             detail = lines.joinToString("\n")
+            resultDir = if (File(out, "result.json").isFile) out else null
         } catch (err: IOException) {
+            resultDir = null
+            scanRoot?.deleteRecursively()
+            scanRoot = null
             val message = err.message ?: "Incomplete."
             status = if (message.contains("Refusing")) "refused" else "incomplete"
             summary = if (message.contains("Refusing")) message else "Incomplete."

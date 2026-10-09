@@ -71,6 +71,15 @@ fn dispatch(args: &[String]) -> Result<Value, String> {
                 Err(err) => Err(err),
             }
         }
+        "delete" => {
+            let out = parsed
+                .flag("out")
+                .ok_or("A result directory is required. Refusing.")?;
+            match crate::scan::delete_output(Path::new(out)) {
+                Ok(()) => Ok(json!({ "deleted": true })),
+                Err(err) => Ok(json!({ "deleted": false, "message": err })),
+            }
+        }
         "" => Err("The scan request was empty. Refusing.".into()),
         other => Err(format!(
             "The command {other} is not available from the library. Refusing."
@@ -422,6 +431,45 @@ mod tests {
             assert_eq!(lookalike["message"], "OpenWorld only opens an FBI page.");
             assert!(lookalike.get("url").is_none(), "{blocked}");
         }
+    }
+
+    #[test]
+    fn the_library_deletes_a_result_and_refuses_anything_else() {
+        let missing: Value = serde_json::from_str(&invoke_argv(&["delete".into()])).unwrap();
+        assert_eq!(missing["status"], "refused");
+        assert_eq!(missing["message"], "A result directory is required. Refusing.");
+
+        let dir = std::env::temp_dir().join(format!("ow-delete-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("result.json"), b"{}").unwrap();
+        std::fs::write(dir.join("crop.png"), b"crop").unwrap();
+        let path = dir.display().to_string();
+        let deleted: Value = serde_json::from_str(&invoke_argv(&[
+            "--json".into(),
+            "delete".into(),
+            "--out".into(),
+            path.clone(),
+        ]))
+        .unwrap();
+        assert_eq!(deleted["deleted"], true);
+        assert!(!dir.exists());
+
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("notes.txt"), b"keep").unwrap();
+        let refused: Value = serde_json::from_str(&invoke_argv(&[
+            "delete".into(),
+            "--out".into(),
+            path,
+        ]))
+        .unwrap();
+        assert_eq!(refused["deleted"], false);
+        assert_eq!(
+            refused["message"],
+            "Refusing to delete a directory that is not an OpenWorld result."
+        );
+        assert!(dir.join("notes.txt").is_file());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

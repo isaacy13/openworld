@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -56,6 +58,7 @@ class OpenWorld(Gtk.Application):
         self.bin = find_bin()
         self.bundles = find_bundles()
         self.work = Path(tempfile.mkdtemp(prefix="openworld-"))
+        atexit.register(self._remove_work)
         self.input_path: str | None = None
         self.bundle_id = "fast"
         self.long_side = "640"
@@ -269,12 +272,13 @@ class OpenWorld(Gtk.Application):
         inner.append(self.strip)
         inner.append(self.detail)
         inner.append(self.result_note)
-        delete = Gtk.Button(label="Delete")
-        delete.set_halign(Gtk.Align.START)
-        delete.connect("clicked", lambda *_: self.delete_result())
-        inner.append(delete)
         scroll.set_child(inner)
         outer.append(scroll)
+        self.delete_button = Gtk.Button(label="Delete")
+        self.delete_button.set_halign(Gtk.Align.START)
+        self.delete_button.set_sensitive(False)
+        self.delete_button.connect("clicked", lambda *_: self.delete_result())
+        outer.append(self.delete_button)
         return outer
 
     def pick_file(self) -> None:
@@ -398,6 +402,7 @@ class OpenWorld(Gtk.Application):
             return
         self._clear_results()
         self.summary.set_text("Scanning")
+        self.delete_button.set_sensitive(False)
         self._go("results")
         self.primary.set_label("Scanning")
         self.primary.set_sensitive(False)
@@ -498,6 +503,7 @@ class OpenWorld(Gtk.Application):
             self.detail.append(clearance)
         self.primary.set_sensitive(True)
         self.primary.set_label("Choose another file")
+        self.delete_button.set_sensitive(self.out_dir is not None)
         self.back.set_sensitive(len(self.history) > 1)
         self._exercise_report = report
         return False
@@ -620,13 +626,32 @@ class OpenWorld(Gtk.Application):
         if response == Gtk.ResponseType.ACCEPT and url:
             Gio.AppInfo.launch_default_for_uri(url, None)
 
-    def delete_result(self) -> None:
+    def delete_result(self) -> bool:
         if self.out_dir is None:
-            return
-        subprocess.call([self.bin, "--json", "delete", "--out", str(self.out_dir)])
+            return True
+        if not self.out_dir.exists():
+            self._mark_deleted()
+            return True
+        payload = self._run_json(["--json", "delete", "--out", str(self.out_dir)])
+        if not payload.get("deleted"):
+            self.summary.set_text(payload.get("message") or "The result could not be deleted.")
+            return False
+        self._mark_deleted()
+        return True
+
+    def _mark_deleted(self) -> None:
         self._clear_results()
+        self.result_note.set_text("")
         self.summary.set_text("Deleted.")
         self.out_dir = None
+        self.delete_button.set_sensitive(False)
+
+    def _remove_work(self) -> None:
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def do_shutdown(self) -> None:
+        self._remove_work()
+        Gtk.Application.do_shutdown(self)
 
     def _clear_results(self) -> None:
         self.strip.remove_all()
@@ -654,8 +679,9 @@ class OpenWorld(Gtk.Application):
     def choose_another(self) -> None:
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
+        if not self.delete_result():
+            return
         self.input_path = None
-        self.out_dir = None
         self.scan_thread = None
         self._clear_results()
         self.summary.set_text("")
@@ -791,6 +817,13 @@ class OpenWorld(Gtk.Application):
         if len(fbi_buttons) != expected or expected < 1:
             self._exercise_fail(f"expected {expected} FBI buttons, saw {fbi_buttons}")
             return False
+        result = self.out_dir
+        if result is None or not (result / "result.json").is_file() or not self.delete_button.get_sensitive():
+            self._exercise_fail("no result to delete")
+            return False
+        if not self.delete_result() or result.exists() or self.summary.get_text() != "Deleted." or self.result_note.get_text():
+            self._exercise_fail("result remained after delete")
+            return False
         blocked, opened = self.leave_decision("https://www.fbi.gov.evil.com/wanted")
         if opened is not None or "FBI page" not in blocked:
             self._exercise_fail(f"lookalike host was allowed: {blocked} {opened}")
@@ -805,7 +838,7 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail("choose another did not return to the start")
             return False
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
-            json.dumps({"ok": True, "summary": report.get("summary")})
+            json.dumps({"ok": True, "summary": report.get("summary"), "work": str(self.work)})
         )
         try:
             self._save_shot()

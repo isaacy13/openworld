@@ -84,6 +84,10 @@ public enum PhoneArguments {
     public static func leave(url: String) -> [String] {
         ["--json", "leave", "--url", url]
     }
+
+    public static func delete(out: String) -> [String] {
+        ["--json", "delete", "--out", out]
+    }
 }
 
 public struct BundleList: Decodable {

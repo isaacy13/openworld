@@ -156,13 +156,52 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.step, .estimate)
             XCTAssertNil(model.leavingURL)
             XCTAssertNil(model.leaveError)
+            let result = model.resultDirectory
             model.chooseAnother()
             XCTAssertEqual(model.step, .choose)
             XCTAssertNil(model.report)
             XCTAssertNil(model.file)
             XCTAssertEqual(model.coverage, "complete")
             XCTAssertEqual(model.longSide, "640")
+            if let result {
+                XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            }
             _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
+    func testDeleteRemovesTheResultAndLeavesAForeignDirectory() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            let frames = result.deletingLastPathComponent().appendingPathComponent("frames")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: frames.path))
+            _ = FlowView(model: model, importControl: self.control).body
+            model.deleteResult()
+            XCTAssertEqual(model.error, "Deleted.")
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: frames.path))
+            _ = FlowView(model: model, importControl: self.control).body
+
+            let foreign = FileManager.default.temporaryDirectory.appendingPathComponent("ow-foreign-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+            try Data("keep".utf8).write(to: foreign.appendingPathComponent("notes.txt"))
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: self.binary())
+            process.arguments = PhoneArguments.delete(out: foreign.path)
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(object["deleted"] as? Bool, false)
+            XCTAssertTrue((object["message"] as? String)?.contains("not an OpenWorld result") == true)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.appendingPathComponent("notes.txt").path))
+            try FileManager.default.removeItem(at: foreign)
         }
     }
 

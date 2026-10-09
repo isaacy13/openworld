@@ -129,6 +129,9 @@ enum ScreenCopy {
             for item in model.report?.inventory ?? [] where !lines.contains(item.label) {
                 lines.append(item.label)
             }
+            if model.resultDirectory != nil {
+                lines.append("Delete")
+            }
             if model.report?.candidates.isEmpty == false {
                 if let candidate = model.report?.candidates.first {
                     lines.append(candidate.posterTitle + " (" + candidate.posterClass + ")")

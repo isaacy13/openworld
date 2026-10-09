@@ -57,6 +57,37 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun deleteRemovesTheResultAndLeavesAForeignDirectory() {
+        val model = drive("scene")
+        val result = model.resultDir
+        assertNotNull(result)
+        val root = result!!.parentFile
+        assertTrue(File(result, "result.json").isFile)
+        assertTrue(File(root, "openworld-frames").isDirectory)
+        model.deleteResult()
+        assertEquals("Deleted.", model.summary)
+        assertTrue(model.strip.isEmpty())
+        assertTrue(model.candidateRows.isEmpty())
+        assertNull(model.resultDir)
+        assertFalse(result.exists())
+        assertFalse(root!!.exists())
+
+        val foreign = File.createTempFile("ow-foreign", "").parentFile!!
+        val dir = File(foreign, "ow-foreign-" + System.nanoTime())
+        assertTrue(dir.mkdirs())
+        File(dir, "notes.txt").writeText("keep")
+        try {
+            val json = Core.json(listOf("--json", "delete", "--out", dir.absolutePath))
+            assertFalse(json.optBoolean("deleted"))
+            assertTrue(json.optString("message").contains("not an OpenWorld result"))
+        } catch (err: java.io.IOException) {
+            assertTrue(err.message?.contains("not an OpenWorld result") == true)
+        }
+        assertTrue(File(dir, "notes.txt").isFile)
+        dir.deleteRecursively()
+    }
+
+    @Test
     fun sceneShowsACandidateAndAFaceThatWasNotCompared() {
         val model = drive("scene")
         assertEquals("Possible candidate. Not an identification.", model.summary)
@@ -357,7 +388,10 @@ class PhoneScreenTest {
         model.continueFromDevice()
         model.continueFromSize()
         model.analyze()
+        val result = model.resultDir
         compose.onNodeWithText("Choose another file").performClick()
+        assertNotNull(result)
+        assertFalse(result!!.exists())
         compose.onNodeWithText("Choose a photo or video").assertExists()
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
         assertEquals(Step.Choose, model.step)
@@ -392,6 +426,26 @@ class PhoneScreenTest {
         assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
         compose.onAllNodesWithText("Possible candidate. Not an identification.").assertCountEquals(0)
+    }
+
+    @Test
+    fun deleteRemovesTheResultFromTheScreen() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/delete.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("scene").inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        val result = model.resultDir
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
+        compose.onNodeWithText("Deleted.").assertExists()
+        compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
+        compose.onAllNodesWithText("Delete").assertCountEquals(0)
+        assertNotNull(result)
+        assertFalse(result!!.exists())
     }
 }
 
