@@ -120,26 +120,32 @@ enum PlatformDecoder {
             guard let track = asset.tracks(withMediaType: .video).first else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
-            let seconds = CMTimeGetSeconds(asset.duration)
-            guard seconds.isFinite, seconds > 0 else {
-                throw failure("Bad codec or unreadable file. Refusing.")
-            }
             let rate = frameRate(track)
             guard rate > 0 else {
                 throw failure("The decoder did not report a frame rate. Refusing.")
             }
-            let transformed = track.naturalSize.applying(track.preferredTransform)
-            let width = Int(abs(transformed.width).rounded())
-            let height = Int(abs(transformed.height).rounded())
-            guard width > 0, height > 0 else {
+            let seconds = CMTimeGetSeconds(track.timeRange.duration)
+            guard seconds.isFinite, seconds > 0 else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
-            let count = max(1, Int((seconds * rate).rounded()))
+            let codedWidth = Int(abs(track.naturalSize.width).rounded())
+            let codedHeight = Int(abs(track.naturalSize.height).rounded())
+            let (sarNum, sarDen) = pixelAspect(track)
+            let shown = VideoDisplay.shownSize(
+                codedWidth: codedWidth,
+                codedHeight: codedHeight,
+                sarNum: sarNum,
+                sarDen: sarDen,
+                quarterTurn: isQuarterTurn(track.preferredTransform)
+            )
+            guard shown.0 > 0, shown.1 > 0 else {
+                throw failure("Bad codec or unreadable file. Refusing.")
+            }
             return Facts(
-                width: width,
-                height: height,
+                width: shown.0,
+                height: shown.1,
                 fps: rate,
-                frames: count,
+                frames: VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate),
                 duration: seconds,
                 video: true,
                 containerUnix: container,
@@ -218,6 +224,8 @@ enum PlatformDecoder {
         guard let track = asset.tracks(withMediaType: .video).first else {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
+        let (sarNum, sarDen) = pixelAspect(track)
+        let quarter = isQuarterTurn(track.preferredTransform)
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -239,6 +247,7 @@ enum PlatformDecoder {
             if origin.x != 0 || origin.y != 0 {
                 image = image.transformed(by: CGAffineTransform(translationX: -origin.x, y: -origin.y))
             }
+            image = stretchToSquarePixels(image, sarNum: sarNum, sarDen: sarDen, quarterTurn: quarter)
             let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
             try context.writePNGRepresentation(
                 of: image,
@@ -259,6 +268,40 @@ enum PlatformDecoder {
     private static func isVideo(_ url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
         return type.conforms(to: .movie) || type.conforms(to: .video)
+    }
+
+    /// A quarter turn exchanges the coded axes. A half turn does not.
+    private static func isQuarterTurn(_ transform: CGAffineTransform) -> Bool {
+        abs(transform.a) < 0.5 && abs(transform.d) < 0.5 && abs(transform.b) > 0.5 && abs(transform.c) > 0.5
+    }
+
+    /// Horizontal and vertical spacing from the track. Absent spacing is square.
+    private static func pixelAspect(_ track: AVAssetTrack) -> (Int, Int) {
+        for case let format as CMFormatDescription in track.formatDescriptions {
+            guard let aspect = CMFormatDescriptionGetExtension(
+                format,
+                extensionKey: kCMFormatDescriptionExtension_PixelAspectRatio
+            ) as? NSDictionary else {
+                continue
+            }
+            let horizontal = (aspect[kCMFormatDescriptionExtension_PixelAspectRatioHorizontalSpacing] as? NSNumber)?.intValue ?? 0
+            let vertical = (aspect[kCMFormatDescriptionExtension_PixelAspectRatioVerticalSpacing] as? NSNumber)?.intValue ?? 0
+            if horizontal > 0, vertical > 0 {
+                return (horizontal, vertical)
+            }
+        }
+        return (1, 1)
+    }
+
+    /// Stretch the rotated frame by the pixel aspect a player uses.
+    private static func stretchToSquarePixels(_ image: CIImage, sarNum: Int, sarDen: Int, quarterTurn: Bool) -> CIImage {
+        guard sarNum > 0, sarDen > 0, sarNum != sarDen, image.extent.width > 1 else { return image }
+        let num = quarterTurn ? sarDen : sarNum
+        let den = quarterTurn ? sarNum : sarDen
+        let target = VideoDisplay.squareWidth(Int(image.extent.width.rounded()), num: num, den: den)
+        let scale = CGFloat(target) / image.extent.width
+        if abs(scale - 1) < 0.001 { return image }
+        return image.transformed(by: CGAffineTransform(scaleX: scale, y: 1))
     }
 
     private static func frameRate(_ track: AVAssetTrack) -> Double {

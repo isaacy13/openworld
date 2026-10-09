@@ -239,6 +239,25 @@ final class OpenWorldUITests: XCTestCase {
         ])
     }
 
+    func testATurnedVideoWithNonSquarePixelsUsesTheShownSize() {
+        let upright = VideoDisplay.shownSize(codedWidth: 480, codedHeight: 320, sarNum: 1, sarDen: 2, quarterTurn: true)
+        XCTAssertEqual(upright.0, 640)
+        XCTAssertEqual(upright.1, 480)
+        let squeezed = VideoDisplay.shownSize(codedWidth: 320, codedHeight: 480, sarNum: 2, sarDen: 1, quarterTurn: true)
+        XCTAssertEqual(squeezed.0, 240)
+        XCTAssertEqual(squeezed.1, 320)
+        let wide = VideoDisplay.shownSize(codedWidth: 320, codedHeight: 480, sarNum: 2, sarDen: 1, quarterTurn: false)
+        XCTAssertEqual(wide.0, 640)
+        XCTAssertEqual(wide.1, 480)
+        let turned = VideoDisplay.shownSize(codedWidth: 480, codedHeight: 640, sarNum: 1, sarDen: 1, quarterTurn: true)
+        XCTAssertEqual(turned.0, 640)
+        XCTAssertEqual(turned.1, 480)
+        XCTAssertEqual(VideoDisplay.squareWidth(320, num: 2, den: 1), 640)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0.8, rate: 10), 8)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 30, rate: 10), 300)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0, rate: 10), 1)
+    }
+
     func testAJpegOrientationTagIsReadFromTheFile() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-orient-\(UUID().uuidString)")
         try Data(jpegWithOrientation(6)).write(to: url)
