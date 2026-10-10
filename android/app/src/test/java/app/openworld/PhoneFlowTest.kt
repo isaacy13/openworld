@@ -1440,6 +1440,28 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aRefusedScanWithoutAResultHidesDelete() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/unknown-bundle.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        model.bundleId = "not-in-the-catalog"
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertEquals("That bundle is not in the catalog. Refusing.", model.summary)
+        assertNull(model.resultDir)
+        assertFalse(model.detail.contains("No candidate is not a clearance."))
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("That bundle is not in the catalog. Refusing.").assertExists()
+        compose.onAllNodesWithText("Delete").assertCountEquals(0)
+        compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        model.chooseAnother()
+        assertEquals(Step.Choose, model.step)
+        assertEquals("", model.summary)
+    }
+
+    @Test
     fun aPosterPackFileRefusesBeforeTheScan() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/poster-pack.png")

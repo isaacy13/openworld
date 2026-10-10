@@ -240,7 +240,11 @@ class FlowModel {
 
     private fun removeResult(abandonUnmarked: Boolean = false): Boolean {
         val out = resultDir
-        if (out == null) return true
+        if (out == null) {
+            scanRoot?.deleteRecursively()
+            scanRoot = null
+            return true
+        }
         deleteNotice = null
         if (!out.exists()) {
             scanRoot?.deleteRecursively()

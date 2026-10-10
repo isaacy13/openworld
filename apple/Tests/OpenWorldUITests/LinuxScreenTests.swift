@@ -350,6 +350,26 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testARefusedScanWithoutAResultHidesDelete() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.bundleID = "not-in-the-catalog"
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, "That bundle is not in the catalog. Refusing.")
+            XCTAssertNil(model.resultDirectory)
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.filter { $0 == "That bundle is not in the catalog. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("Delete"))
+            XCTAssertFalse(lines.contains("No candidate is not a clearance."))
+            _ = FlowView(model: model, importControl: self.control).body
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.report)
+        }
+    }
+
     func testAPosterPackFileRefusesBeforeTheScan() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data("keep".utf8).write(to: blocker)

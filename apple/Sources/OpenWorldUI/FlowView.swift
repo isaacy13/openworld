@@ -405,7 +405,8 @@ public final class FlowModel: ObservableObject {
     private func apply(_ outcome: FinishedScan) {
         if outcome.keepRoot, let report = outcome.report {
             self.report = report
-            resultDirectory = outcome.result
+            let marker = outcome.result.appendingPathComponent("result.json")
+            resultDirectory = FileManager.default.fileExists(atPath: marker.path) ? outcome.result : nil
             error = nil
         } else {
             report = nil
@@ -478,7 +479,11 @@ public final class FlowModel: ObservableObject {
 
     /// Leave a folder that is not a result on disk so Choose another file and Analyze can continue.
     private func releaseResult() -> Bool {
-        guard let resultDirectory else { return true }
+        guard let resultDirectory else {
+            if let scanRoot { try? FileManager.default.removeItem(at: scanRoot) }
+            self.scanRoot = nil
+            return true
+        }
         let marker = resultDirectory.appendingPathComponent("result.json")
         if FileManager.default.fileExists(atPath: resultDirectory.path),
            !FileManager.default.fileExists(atPath: marker.path) {

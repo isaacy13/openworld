@@ -794,7 +794,7 @@ class OpenWorld(Gtk.Application):
         self.primary.set_sensitive(True)
         self.primary.set_label("Choose another file")
         self.delete_notice.set_visible(False)
-        self._show_delete(self.out_dir is not None)
+        self._show_delete(self.out_dir is not None and (self.out_dir / "result.json").is_file())
         self.back.set_sensitive(len(self.history) > 1)
         self._exercise_report = report
         return False
@@ -1164,6 +1164,17 @@ class OpenWorld(Gtk.Application):
                 f"an unreadable scan lost the refusal: {self.summary.get_text()!r} {self.result_note.get_text()!r}"
             )
             return False
+        if self.delete_button.get_visible():
+            self._exercise_fail("an unreadable scan offered Delete")
+            return False
+        missing_result = self.work / "no-result"
+        missing_result.mkdir()
+        self.out_dir = missing_result
+        self._show_report(self._unreadable_scan_report())
+        if self.delete_button.get_visible() or (missing_result / "result.json").is_file():
+            self._exercise_fail("Delete was offered without a result file")
+            return False
+        self.out_dir = None
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
