@@ -17,7 +17,7 @@ final class ShareViewController: UIViewController {
             finish()
             return
         }
-        let types = [UTType.image.identifier, UTType.movie.identifier]
+        let types = ChooseFile.shareTypeIdentifiers
         guard let type = types.first(where: { provider.hasItemConformingToTypeIdentifier($0) }) else {
             finish()
             return

@@ -16,6 +16,28 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    func testASharedFileKeepsEveryFileAvailable() throws {
+        XCTAssertEqual(ChooseFile.shareTypeIdentifiers, ChooseFile.typeIdentifiers)
+        var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        var plist: URL?
+        for _ in 0..<8 {
+            for candidate in [
+                url.appendingPathComponent("ShareExtension/Info.plist"),
+                url.appendingPathComponent("apple/ShareExtension/Info.plist"),
+            ] {
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    plist = candidate
+                }
+            }
+            if plist != nil { break }
+            if url.path == "/" { break }
+            url.deleteLastPathComponent()
+        }
+        let file = try XCTUnwrap(plist)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(text.contains("<key>NSExtensionActivationSupportsFileWithMaxCount</key>"))
+    }
+
     func testPhoneScreensBuild() throws {
         try MainActor.assumeIsolated {
             try self.drawScreens()

@@ -6,4 +6,6 @@ import Foundation
 /// An extensionless video has no movie type, so `public.data` keeps it available.
 public enum ChooseFile {
     public static let typeIdentifiers = ["public.image", "public.movie", "public.data"]
+    /// The share sheet accepts the same files as Choose File, including an extensionless video.
+    public static let shareTypeIdentifiers = typeIdentifiers
 }
