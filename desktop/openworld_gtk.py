@@ -437,6 +437,8 @@ class OpenWorld(Gtk.Application):
         self.pick_notice.set_visible(True)
 
     def choose_file(self, path: str) -> None:
+        if self.closed:
+            return
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         try:

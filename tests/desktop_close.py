@@ -67,6 +67,24 @@ def main() -> None:
             raise SystemExit("closing the window left the scan running")
         if app._show_report(report) is not False or app.summary.get_text() != "Scanning":
             raise SystemExit(f"a late report reached the closed window: {app.summary.get_text()!r}")
+        open_file = app.work / "open.png"
+        open_file.write_bytes(b"png")
+        app.closed = False
+        app.choose_file(str(open_file))
+        if app.file_label.get_text() != "open.png" or app.stack.get_visible_child_name() != "device":
+            raise SystemExit(
+                f"an open window refused the file: {app.file_label.get_text()!r} {app.stack.get_visible_child_name()!r}"
+            )
+        app._stop_scan()
+        if not app.closed:
+            raise SystemExit("closing the window left it open")
+        late_file = app.work / "late.png"
+        late_file.write_bytes(b"png")
+        app.choose_file(str(late_file))
+        if app.file_label.get_text() != "open.png" or app.stack.get_visible_child_name() != "device":
+            raise SystemExit(
+                f"a file chosen as the window closed reached the screen: {app.file_label.get_text()!r} {app.stack.get_visible_child_name()!r}"
+            )
         added = app._add_crop(
             {
                 "kind": "face",
