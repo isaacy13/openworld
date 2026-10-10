@@ -156,24 +156,29 @@ public struct ScanReport: Decodable {
 }
 
 public struct InventoryItem: Decodable, Identifiable {
-    public var id: String { "\(kind)-\(frameIndex)-\(label)" }
+    /// The crop list uses this. Two crops on one frame can share a label, so the track and the file keep them apart.
+    public var id: String { "\(kind)|\(frameIndex)|\(trackId ?? -1)|\(crop ?? "")|\(label)" }
     public var kind: String
     public var label: String
     public var crop: String?
     public var frameIndex: Int
     public var frameLabel: String
+    public var trackId: Int?
     enum CodingKeys: String, CodingKey {
         case kind, label, crop
         case frameIndex = "frame_index"
         case frameLabel = "frame_label"
+        case trackId = "track_id"
     }
 }
 
 public struct Candidate: Decodable, Identifiable {
-    public var id: String { "\(posterId)-\(frameIndex)-\(kind)" }
+    /// One card per track. Two faces on one frame can match the same poster.
+    public var id: String { "\(posterId)|\(frameIndex)|\(kind)|\(trackId ?? -1)|\(crop ?? "")" }
     public var wording: String
     public var kind: String
     public var uncertainty: String
+    public var trackId: Int?
     public var posterTitle: String
     public var posterClass: String
     public var posterClassLabel: String
@@ -199,6 +204,7 @@ public struct Candidate: Decodable, Identifiable {
         case frameIndex = "frame_index"
         case frameLabel = "frame_label"
         case posterId = "poster_id"
+        case trackId = "track_id"
     }
 }
 

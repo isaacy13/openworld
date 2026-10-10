@@ -26,8 +26,31 @@ final class PhoneContractTests: XCTestCase {
         XCTAssertTrue(labels.contains("A vehicle is not a person."))
         XCTAssertGreaterThanOrEqual(report.facesSeenNotCompared, 1)
         XCTAssertFalse(report.candidates.isEmpty)
+        XCTAssertEqual(Set(report.inventory.map(\.id)).count, report.inventory.count)
+        XCTAssertEqual(Set(report.candidates.map(\.id)).count, report.candidates.count)
         XCTAssertEqual(report.candidates[0].leaving, "You are leaving OpenWorld.")
         XCTAssertTrue(report.candidates[0].fbiUrl.hasPrefix("https://www.fbi.gov"))
+    }
+
+    func testTwoCropsWithTheSameLabelStayDistinct() throws {
+        let crops = try JSONDecoder().decode([InventoryItem].self, from: Data("""
+        [
+          {"kind":"face","label":"Not compared.","frame_index":0,"frame_label":"Frame 1.","track_id":1,"crop":"crops/a.png"},
+          {"kind":"face","label":"Not compared.","frame_index":0,"frame_label":"Frame 1.","track_id":2,"crop":"crops/b.png"}
+        ]
+        """.utf8))
+        XCTAssertEqual(crops.count, 2)
+        XCTAssertNotEqual(crops[0].id, crops[1].id)
+
+        let cards = try JSONDecoder().decode([Candidate].self, from: Data("""
+        [
+          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.90. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":1,"crop":"crops/a.png"},
+          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.80. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":2,"crop":"crops/b.png"}
+        ]
+        """.utf8))
+        XCTAssertEqual(cards.count, 2)
+        XCTAssertNotEqual(cards[0].id, cards[1].id)
+        XCTAssertEqual(cards[0].posterLine, "Fixture subject A (Missing)")
     }
 
     func testBlankStillIsAClearance() throws {
