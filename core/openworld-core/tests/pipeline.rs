@@ -4,7 +4,7 @@ use image::{ImageEncoder, Rgb, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
     BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
-    PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::fiducial::{self, render_face_module, render_plate, render_vehicle};
@@ -207,6 +207,12 @@ fn plate_is_not_read_without_a_published_plate_and_a_vehicle_is_not_a_person() {
     assert!(report.candidates.is_empty());
     assert!(report.inventory.iter().any(|i| i.kind == "vehicle" && i.label == VEHICLE_NOT_PERSON));
     assert!(report.inventory.iter().all(|i| i.kind != "face"));
+    let plate = report.inventory.iter().find(|i| i.kind == "plate").unwrap();
+    assert_eq!(plate.label, PLATE_UNPUBLISHED);
+    assert!(!plate.compared);
+    assert_ne!(plate.label, NOT_COMPARED);
+    assert_ne!(plate.label, PLATE_NOT_ON_POSTER);
+    assert_ne!(plate.label, PLATE_UNREAD);
     let _ = pack;
 }
 

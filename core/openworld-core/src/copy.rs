@@ -11,6 +11,7 @@ pub const VEHICLE_NOT_PERSON: &str = "A vehicle is not a person.";
 pub const BELOW_CUTOFF: &str = "Below the locked cutoff. Not a candidate.";
 pub const PLATE_NOT_ON_POSTER: &str = "This plate text is not published on a poster.";
 pub const PLATE_UNREAD: &str = "The plate could not be read.";
+pub const PLATE_UNPUBLISHED: &str = "No poster publishes a plate.";
 pub const FACE_UNSCORED: &str = "This face could not be scored.";
 pub const FIXTURE_MARKERS: &str = "Fixture markers were read.";
 
@@ -51,6 +52,7 @@ pub fn product_copy() -> serde_json::Value {
         "below_cutoff": BELOW_CUTOFF,
         "plate_not_on_poster": PLATE_NOT_ON_POSTER,
         "plate_unread": PLATE_UNREAD,
+        "plate_unpublished": PLATE_UNPUBLISHED,
         "face_unscored": FACE_UNSCORED,
         "fixture_markers": FIXTURE_MARKERS,
         "disclosure": DISCLOSURE,
