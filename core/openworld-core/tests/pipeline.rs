@@ -136,6 +136,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert_eq!(report.status, "complete");
     assert_eq!(report.bundle_name, "Fast");
     assert_eq!(report.class_note.as_deref(), Some("Missing and wanted."));
+    assert_eq!(report.frames_note.as_deref(), Some("1 frame analyzed."));
     assert!(report.disclosure.iter().any(|l| l == "Nothing is uploaded."));
     assert!(report.disclosure.iter().any(|l| l == "Nobody is enrolled."));
     assert!(report.disclosure.iter().any(|l| l.contains("does not train")));
@@ -347,6 +348,10 @@ fn measured_banner_and_a_stopped_job_is_incomplete() {
     let report = scan_images(&frames, &bundle, &pack, &measured, &mut |_| {});
     assert_eq!(report.coverage_banner.as_deref(), Some(BRIEF_FACE));
     assert!(report.frames_analyzed < report.frames_decoded);
+    assert_eq!(
+        report.frames_note.as_deref(),
+        Some(format!("{} of {} frames analyzed.", report.frames_analyzed, report.frames_decoded).as_str())
+    );
     assert_eq!(report.status, "complete");
 
     measured.coverage = Coverage::Complete;
@@ -358,6 +363,10 @@ fn measured_banner_and_a_stopped_job_is_incomplete() {
     assert!(stopped.disclosure.iter().all(|line| line != NO_CLEARANCE));
     assert!(stopped.disclosure.iter().any(|line| line.contains("Nothing is uploaded.")));
     assert!(stopped.frames_analyzed < frames.len() as u64);
+    assert_eq!(
+        stopped.frames_note.as_deref(),
+        Some(format!("{} of {} frames analyzed.", stopped.frames_analyzed, stopped.frames_decoded).as_str())
+    );
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    class_note, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE,
+    class_note, frames_note, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE,
     NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
@@ -79,6 +79,8 @@ pub struct ScanReport {
     pub perception_note: String,
     pub coverage: String,
     pub coverage_banner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frames_note: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub class_note: Option<String>,
     pub detection: String,
@@ -886,6 +888,7 @@ impl<'a> Engine<'a> {
             perception_note,
             coverage: self.opts.coverage.as_str().into(),
             coverage_banner: (self.opts.coverage == Coverage::Measured).then(|| BRIEF_FACE.into()),
+            frames_note: frames_note(self.frames_analyzed, self.frames_decoded),
             class_note: Some(class_note(self.opts.missing, self.opts.wanted).into()),
             detection: self.opts.detection.as_str(),
             execution: execution.as_str().into(),
@@ -995,6 +998,7 @@ pub fn refused(code: &str, message: &str) -> ScanReport {
         perception_note: String::new(),
         coverage: String::new(),
         coverage_banner: None,
+        frames_note: None,
         class_note: None,
         detection: String::new(),
         execution: String::new(),

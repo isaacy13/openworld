@@ -411,6 +411,7 @@ class FlowModel {
             val reason = json.present("message")
             val context = mutableListOf<String>()
             json.present("coverage_banner")?.let(context::add)
+            json.present("frames_note")?.let(context::add)
             json.present("class_note")?.let(context::add)
             json.present("bundle_name")?.let { context.add("Bundle: $it") }
             json.present("perception_note")?.let(context::add)

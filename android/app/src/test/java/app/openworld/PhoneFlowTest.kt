@@ -459,6 +459,7 @@ class PhoneFlowTest {
         model.analyze()
         assertEquals("Possible candidate. Not an identification.", model.summary)
         assertTrue(model.candidateRows.isNotEmpty())
+        assertTrue(model.context.startsWith("3 frames analyzed."))
     }
 
     @Test
@@ -1056,6 +1057,8 @@ class PhoneScreenTest {
         compose.onNodeWithText("A long scan uses a lot of battery.", substring = true).assertExists()
         compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
         waitForScan(compose, model)
+        assertTrue(model.context.startsWith("1 frame analyzed."))
+        compose.onNodeWithText("1 frame analyzed.", substring = true).assertExists()
         assertTrue(compose.onAllNodesWithText("Possible candidate. Not an identification.").fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithText("Not compared.").assertExists()
         compose.onNodeWithText("A vehicle is not a person.").assertExists()

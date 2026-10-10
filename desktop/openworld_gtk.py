@@ -691,6 +691,8 @@ class OpenWorld(Gtk.Application):
         context = []
         if report.get("coverage_banner"):
             context.append(report["coverage_banner"])
+        if report.get("frames_note"):
+            context.append(report["frames_note"])
         if report.get("class_note"):
             context.append(report["class_note"])
         if report.get("bundle_name"):
@@ -1344,6 +1346,9 @@ class OpenWorld(Gtk.Application):
                     return False
         if "Missing and wanted." not in self.context_note.get_text():
             self._exercise_fail(f"the result did not name the classes under the headline: {self.context_note.get_text()!r}")
+            return False
+        if "1 frame analyzed." not in self.context_note.get_text():
+            self._exercise_fail(f"the result did not say how many frames were analyzed: {self.context_note.get_text()!r}")
             return False
         result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
         if result_shot and not getattr(self, "_result_shot_saved", False):

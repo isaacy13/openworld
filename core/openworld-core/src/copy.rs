@@ -26,6 +26,25 @@ pub fn class_note(missing: bool, wanted: bool) -> &'static str {
     }
 }
 
+/// How much of the file was analyzed. A refusal has no decoded frames, so it has no line.
+pub fn frames_note(analyzed: u64, decoded: u64) -> Option<String> {
+    if decoded == 0 {
+        return None;
+    }
+    if analyzed == decoded {
+        return Some(if decoded == 1 {
+            "1 frame analyzed.".to_string()
+        } else {
+            format!("{decoded} frames analyzed.")
+        });
+    }
+    Some(if analyzed == 1 {
+        format!("1 of {decoded} frames analyzed.")
+    } else {
+        format!("{analyzed} of {decoded} frames analyzed.")
+    })
+}
+
 pub const DISCLOSURE: &[&str] = &[
     "Nothing is uploaded.",
     "Nobody is enrolled.",

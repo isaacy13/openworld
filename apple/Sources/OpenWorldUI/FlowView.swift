@@ -700,6 +700,9 @@ public struct FlowView: View {
                 if let banner = model.report?.coverageBanner {
                     Text(banner)
                 }
+                if let frames = model.report?.framesNote {
+                    Text(frames)
+                }
                 if let classes = model.report?.classNote {
                     Text(classes)
                 }
