@@ -471,6 +471,28 @@ fn estimate_refuses_a_zero_size_and_an_unknown_bundle() {
     ))
     .unwrap_err();
     assert_eq!(bad.refusal.as_deref(), Some("bad_codec"));
+    let frames = dir.path().join("frames");
+    std::fs::create_dir(&frames).unwrap();
+    blank(20, 20).save(frames.join("frame_000000.png")).unwrap();
+    let mut scanned = RequestExtra::default();
+    scanned.media = Some(MediaFacts {
+        width: 20,
+        height: 20,
+        fps: 1.0,
+        frames: 0,
+        duration_sec: 0.0,
+        video: true,
+        container_unix: None,
+    });
+    scanned.frames = Some(frames);
+    let out = dir.path().join("out");
+    let report = scan_path(
+        &request(dir.path(), input.clone(), "fast", dir.path().join("p"), scanned),
+        &mut |_| {},
+    );
+    assert_eq!(report.refusal.as_deref(), Some("bad_codec"));
+    assert_eq!(report.summary, "Bad codec or unreadable file. Refusing.");
+    assert!(!out.exists());
     let unknown = estimate_for(&request(
         dir.path(),
         input,

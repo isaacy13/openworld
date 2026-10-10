@@ -213,6 +213,9 @@ fn require_bundle(dir: &Path, id: &str) -> Result<Bundle, ScanReport> {
 }
 
 pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanReport {
+    if req.media.as_ref().is_some_and(zero_platform_media) {
+        return refused("bad_codec", "Bad codec or unreadable file. Refusing.");
+    }
     if req.frames_dir.is_none() && !input_readable(&req.input) {
         return refused("unreadable", "The file could not be read. Refusing.");
     }
@@ -1117,15 +1120,19 @@ pub fn leave_prompt(url: &str) -> Result<LeavePrompt, String> {
     Ok(LeavePrompt { message: crate::copy::LEAVING.into(), url: url.into() })
 }
 
+fn zero_platform_media(media: &MediaFacts) -> bool {
+    media.width == 0 || media.height == 0 || media.frames == 0
+}
+
 pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, ScanReport> {
+    if req.media.as_ref().is_some_and(zero_platform_media) {
+        return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));
+    }
     if req.media.is_none() && !input_readable(&req.input) {
         return Err(refused("unreadable", "The file could not be read. Refusing."));
     }
     let bundle = require_bundle(&req.bundles_dir, &req.bundle_id)?;
     let (frames, fps, duration, long_side) = if let Some(media) = &req.media {
-        if media.width == 0 || media.height == 0 || media.frames == 0 {
-            return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));
-        }
         (media.frames, media.fps, media_duration(media), media.width.max(media.height))
     } else {
         let probed = decode::probe(&req.input).map_err(|_| refused("bad_codec", "Bad codec or unreadable file. Refusing."))?;

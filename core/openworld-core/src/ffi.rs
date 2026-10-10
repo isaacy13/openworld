@@ -266,4 +266,35 @@ mod tests {
         assert_eq!(value["summary"], "No candidate is not a clearance.");
         assert_eq!(value["coverage"], "measured");
     }
+
+    #[test]
+    fn a_scan_request_refuses_a_zero_size_before_it_reads_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.png");
+        image::RgbImage::new(16, 16).save(&input).unwrap();
+        let out = dir.path().join("out");
+        let request = serde_json::json!({
+            "input": input,
+            "bundles": format!("{}/../../bundles", env!("CARGO_MANIFEST_DIR")),
+            "bundle": "fast",
+            "posters": dir.path().join("missing-pack"),
+            "out": &out,
+            "long_side": "640",
+            "coverage": "complete",
+            "form_factor": "computer",
+            "media": { "width": 0, "height": 16, "frames": 1, "video": false }
+        });
+        let c = CString::new(request.to_string()).unwrap();
+        let ptr = ow_scan_request(c.as_ptr());
+        let body = unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned();
+        ow_string_free(ptr);
+        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(value["status"], "refused", "{body}");
+        assert_eq!(value["refusal"], "bad_codec", "{body}");
+        assert_eq!(value["summary"], "Bad codec or unreadable file. Refusing.");
+        assert!(!out.exists());
+        assert!(input.is_file());
+    }
 }
