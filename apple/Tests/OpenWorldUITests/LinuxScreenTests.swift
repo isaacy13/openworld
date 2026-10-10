@@ -145,6 +145,31 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAScanStartedAsTheWindowClosesStaysOffThePage() throws {
+        let file = try still("blank")
+        let model = MainActor.assumeIsolated { () -> FlowModel in
+            let model = FlowModel(phone: false)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertTrue(model.canAnalyze)
+            XCTAssertFalse(model.scanning)
+            model.closeWindow()
+            XCTAssertNil(model.scanRoot)
+            model.startScan()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.scanRoot)
+            return model
+        }
+        let scanning = MainActor.assumeIsolated { model.scanning }
+        XCTAssertFalse(scanning)
+        let deadline = Date().addingTimeInterval(2)
+        while MainActor.assumeIsolated({ model.scanning }) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
     func testClosingOneWindowLeavesTheOtherWindowsScanRunning() throws {
         let first = try still("blank")
         let second = try still("blank")

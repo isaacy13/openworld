@@ -103,6 +103,24 @@ def main() -> None:
             if late.poll() is None:
                 late.kill()
                 late.wait(timeout=2)
+        app.summary.set_text("Estimate")
+        app._go("estimate")
+        if app.stack.get_visible_child_name() != "estimate" or app.primary.get_label() != "Analyze":
+            raise SystemExit(
+                f"the closed window could not sit on the estimate: {app.stack.get_visible_child_name()!r} {app.primary.get_label()!r}"
+            )
+        app.start_scan()
+        if (
+            app.stack.get_visible_child_name() != "estimate"
+            or app.summary.get_text() != "Estimate"
+            or app.primary.get_label() != "Analyze"
+            or (app.scan_thread is not None and app.scan_thread.is_alive())
+            or app.scan_proc is not None
+        ):
+            raise SystemExit(
+                "a scan started as the window closed reached the screen: "
+                f"{app.stack.get_visible_child_name()!r} {app.summary.get_text()!r} {app.primary.get_label()!r}"
+            )
     finally:
         if running.poll() is None:
             running.kill()

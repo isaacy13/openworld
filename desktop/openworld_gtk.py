@@ -765,6 +765,8 @@ class OpenWorld(Gtk.Application):
         return f"{name}. {size}. {cover}"
 
     def start_scan(self) -> None:
+        if self.closed:
+            return
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         # A result that cannot be deleted stays. The estimate keeps that sentence.

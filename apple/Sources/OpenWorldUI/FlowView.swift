@@ -476,6 +476,7 @@ public final class FlowModel: ObservableObject {
 
     /// Leaves the estimate page in place and says Scanning until the result is ready.
     public func startScan() {
+        guard !closed else { return }
         guard !scanning, canAnalyze, let file else { return }
         guard releaseResult() else { return }
         guard let paths = makeScanPaths() else {
