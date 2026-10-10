@@ -202,3 +202,90 @@ fn an_old_file_is_warned_before_the_estimate() {
     let warnings = report["warnings"].as_array().unwrap();
     assert!(warnings.iter().any(|line| line == warning));
 }
+
+#[test]
+fn analyze_json_is_one_document() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("blank.png");
+    let (code, _text, err) = run(
+        false,
+        &["fixture-still", "--blank", "--out", still.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let posters = dir.path().join("posters");
+    let (code, _text, err) = run(
+        false,
+        &[
+            "posters",
+            "write-fixture",
+            "--out",
+            posters.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let args = [
+        "analyze",
+        "--input",
+        still.to_str().unwrap(),
+        "--bundle",
+        "fast",
+        "--long-side",
+        "640",
+        "--coverage",
+        "complete",
+        "--posters",
+        posters.to_str().unwrap(),
+    ];
+
+    let held = dir.path().join("held");
+    let (code, text, err) = run(
+        true,
+        &[args.as_slice(), &["--out", held.to_str().unwrap()]]
+            .concat()
+            .as_slice(),
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let held_doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(held_doc["started"], false);
+    assert_eq!(held_doc["message"], "Not started.");
+    assert!(!held.join("result.json").exists());
+
+    let out = dir.path().join("result");
+    let (code, text, err) = run(
+        true,
+        &[
+            args.as_slice(),
+            &["--yes", "--out", out.to_str().unwrap()],
+        ]
+        .concat()
+        .as_slice(),
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let report: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(report["status"], "complete");
+    assert_eq!(report["summary"], "No candidate is not a clearance.");
+    assert!(text.lines().all(|line| line != "Scanning"));
+    assert!(text.lines().all(|line| line != "This file stays on this device."));
+
+    let blocked = dir.path().join("blocked");
+    let (code, text, err) = run(
+        true,
+        &[
+            args.as_slice(),
+            &[
+                "--yes",
+                "--no-missing",
+                "--no-wanted",
+                "--out",
+                blocked.to_str().unwrap(),
+            ],
+        ]
+        .concat()
+        .as_slice(),
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let refusal: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(refusal["status"], "refused");
+    assert_eq!(refusal["message"], "Choose missing, wanted, or both.");
+    assert!(!blocked.join("result.json").exists());
+}

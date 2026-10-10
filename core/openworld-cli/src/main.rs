@@ -538,12 +538,10 @@ fn analyze(
                     println!("{line}");
                 }
             }
-            PathBuf::from(prompt("Photo or video path:")?)
+            PathBuf::from(prompt("Photo or video path:", json_mode)?)
         }
     };
-    for line in device_lines(&input) {
-        println!("{line}");
-    }
+    speak(json_mode, device_lines(&input));
     let all = load_bundles(bundles).map_err(|e| e.to_string())?;
     let bundle = match bundle {
         Some(id) => id,
@@ -553,7 +551,7 @@ fn analyze(
                     println!("{line}");
                 }
             }
-            let entered = prompt("Bundle [fast]:")?;
+            let entered = prompt("Bundle [fast]:", json_mode)?;
             if entered.is_empty() {
                 "fast".into()
             } else {
@@ -569,7 +567,7 @@ fn analyze(
                     println!("{line}");
                 }
             }
-            let entered = prompt("Detection long side (320, 480, 640, full) [640]:")?;
+            let entered = prompt("Detection long side (320, 480, 640, full) [640]:", json_mode)?;
             if entered.is_empty() {
                 "640".into()
             } else {
@@ -589,7 +587,7 @@ fn analyze(
                     println!("  {id} — {}", marked_name(label, id == "complete"));
                 }
             }
-            let entered = prompt("Coverage (complete, measured) [complete]:")?;
+            let entered = prompt("Coverage (complete, measured) [complete]:", json_mode)?;
             if entered.is_empty() {
                 "complete".into()
             } else {
@@ -599,11 +597,11 @@ fn analyze(
     };
     let posters = match posters {
         Some(path) => path,
-        None => PathBuf::from(prompt("Poster pack directory:")?),
+        None => PathBuf::from(prompt("Poster pack directory:", json_mode)?),
     };
     let out = match out {
         Some(path) => path,
-        None => PathBuf::from(prompt("Result directory:")?),
+        None => PathBuf::from(prompt("Result directory:", json_mode)?),
     };
     let (missing, wanted) = if yes || no_missing || no_wanted {
         (!no_missing, !no_wanted)
@@ -613,7 +611,7 @@ fn analyze(
                 println!("{line}");
             }
         }
-        (prompt_on("Missing")?, prompt_on("Wanted")?)
+        (prompt_on("Missing", json_mode)?, prompt_on("Wanted", json_mode)?)
     };
     let req = request(
         bundles,
@@ -638,17 +636,18 @@ fn analyze(
                 .find(|item| item.id == req.bundle_id)
                 .map(|item| item.name.as_str())
                 .unwrap_or(req.bundle_id.as_str());
-            for line in estimate_lines(
-                &est,
-                name,
-                req.detection,
-                req.coverage,
-                req.missing,
-                req.wanted,
-                file_is_old(&input),
-            ) {
-                println!("{line}");
-            }
+            speak(
+                json_mode,
+                estimate_lines(
+                    &est,
+                    name,
+                    req.detection,
+                    req.coverage,
+                    req.missing,
+                    req.wanted,
+                    file_is_old(&input),
+                ),
+            );
         }
         Err(report) => return finish_report(json_mode, &report),
     }
@@ -663,9 +662,13 @@ fn analyze(
         return Ok(2);
     }
     if !yes {
-        let answer = prompt("Analyze? [y/N]:")?;
+        let answer = prompt("Analyze? [y/N]:", json_mode)?;
         if !matches!(answer.as_str(), "y" | "Y" | "yes") {
-            println!("Not started.");
+            emit(
+                json_mode,
+                json!({ "started": false, "message": "Not started." }),
+            );
+            speak(json_mode, ["Not started."]);
             return Ok(0);
         }
     }
@@ -1026,8 +1029,8 @@ fn parse_class_answer(answer: &str) -> Result<bool, String> {
     }
 }
 
-fn prompt_on(label: &str) -> Result<bool, String> {
-    parse_class_answer(&prompt(&format!("{label}? [Y/n]:"))?)
+fn prompt_on(label: &str, json_mode: bool) -> Result<bool, String> {
+    parse_class_answer(&prompt(&format!("{label}? [Y/n]:"), json_mode)?)
 }
 
 fn bundle_display_name(bundles: &Path, id: &str) -> String {
@@ -1141,9 +1144,14 @@ fn size_menu_lines() -> Vec<String> {
     lines
 }
 
-fn prompt(text: &str) -> Result<String, String> {
-    print!("{text} ");
-    io::stdout().flush().ok();
+fn prompt(text: &str, json_mode: bool) -> Result<String, String> {
+    if json_mode {
+        eprint!("{text} ");
+        io::stderr().flush().ok();
+    } else {
+        print!("{text} ");
+        io::stdout().flush().ok();
+    }
     let mut line = String::new();
     io::stdin()
         .lock()
