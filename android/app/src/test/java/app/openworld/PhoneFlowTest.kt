@@ -2263,6 +2263,36 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun changingTheDisplaySizeKeepsTheOpenFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        val open = compose.activity
+        val sized = Configuration(open.resources.configuration)
+        sized.densityDpi = if (sized.densityDpi == 480) 320 else 480
+        val next = window.controller.configurationChange(sized)
+        compose.waitForIdle()
+        assertSame(open, next.get())
+        assertFalse(open.isDestroyed)
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("shared.png").assertExists()
+        compose.onNodeWithText("Choose a photo or video").assertDoesNotExist()
+        assertEquals(sized.densityDpi, open.resources.configuration.densityDpi)
+        val info = open.packageManager.getActivityInfo(open.componentName, 0)
+        assertEquals(ActivityInfo.CONFIG_DENSITY, info.configChanges and ActivityInfo.CONFIG_DENSITY)
+    }
+
+    @Test
     fun theSystemBackStepsToThePreviousPage() {
         val file = still("blank")
         val uri = Uri.parse("content://app.openworld/shared.png")
