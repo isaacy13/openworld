@@ -21,6 +21,30 @@ public func markedChoice(_ title: String, selected: Bool) -> String {
     return "\(title). Selected."
 }
 
+/// The detection-size row, including the mark on the size that will run.
+public func detectionChoice(_ value: String, selected: String) -> String {
+    let title: String
+    switch value {
+    case "320": title = "320 px on the long side"
+    case "480": title = "480 px on the long side"
+    case "640": title = "640 px on the long side"
+    case "full": title = "Full resolution"
+    default: title = value
+    }
+    return markedChoice(title, selected: value == selected)
+}
+
+/// The coverage row, including the mark on the coverage that will run.
+public func coverageChoice(_ value: String, selected: String) -> String {
+    let title: String
+    switch value {
+    case "measured": title = "Measured. 5 frames a second, plus the tracker."
+    case "complete": title = "Complete. Every decoded frame."
+    default: title = value
+    }
+    return markedChoice(title, selected: value == selected)
+}
+
 public enum Step {
     case choose, device, bundle, size, estimate, results
 }
@@ -850,17 +874,17 @@ public struct FlowView: View {
     @ViewBuilder private var sizePicker: some View {
         #if os(Linux)
         VStack(alignment: .leading, spacing: 8) {
-            sizeChoice("320", "320 px on the long side")
-            sizeChoice("480", "480 px on the long side")
-            sizeChoice("640", "640 px on the long side")
-            sizeChoice("full", "Full resolution")
+            sizeChoice("320")
+            sizeChoice("480")
+            sizeChoice("640")
+            sizeChoice("full")
         }
         #elseif os(macOS)
         let picker = Picker("Detection size", selection: $model.longSide) {
-            Text("320 px on the long side").tag("320")
-            Text("480 px on the long side").tag("480")
-            Text("640 px on the long side").tag("640")
-            Text("Full resolution").tag("full")
+            Text(detectionChoice("320", selected: model.longSide)).tag("320")
+            Text(detectionChoice("480", selected: model.longSide)).tag("480")
+            Text(detectionChoice("640", selected: model.longSide)).tag("640")
+            Text(detectionChoice("full", selected: model.longSide)).tag("full")
         }
         if model.phone {
             picker.pickerStyle(.inline)
@@ -869,10 +893,10 @@ public struct FlowView: View {
         }
         #else
         Picker("Detection size", selection: $model.longSide) {
-            Text("320 px on the long side").tag("320")
-            Text("480 px on the long side").tag("480")
-            Text("640 px on the long side").tag("640")
-            Text("Full resolution").tag("full")
+            Text(detectionChoice("320", selected: model.longSide)).tag("320")
+            Text(detectionChoice("480", selected: model.longSide)).tag("480")
+            Text(detectionChoice("640", selected: model.longSide)).tag("640")
+            Text(detectionChoice("full", selected: model.longSide)).tag("full")
         }
         .pickerStyle(.inline)
         #endif
@@ -882,16 +906,16 @@ public struct FlowView: View {
         #if os(Linux)
         VStack(alignment: .leading, spacing: 8) {
             Button(action: { model.coverage = "complete" }) {
-                Text(model.coverage == "complete" ? "Complete. Every decoded frame. Selected." : "Complete. Every decoded frame.")
+                Text(coverageChoice("complete", selected: model.coverage))
             }
             Button(action: { model.coverage = "measured" }) {
-                Text(model.coverage == "measured" ? "Measured. 5 frames a second, plus the tracker. Selected." : "Measured. 5 frames a second, plus the tracker.")
+                Text(coverageChoice("measured", selected: model.coverage))
             }
         }
         #elseif os(macOS)
         let picker = Picker("Coverage", selection: $model.coverage) {
-            Text("Complete. Every decoded frame.").tag("complete")
-            Text("Measured. 5 frames a second, plus the tracker.").tag("measured")
+            Text(coverageChoice("complete", selected: model.coverage)).tag("complete")
+            Text(coverageChoice("measured", selected: model.coverage)).tag("measured")
         }
         if model.phone {
             picker.pickerStyle(.inline)
@@ -900,8 +924,8 @@ public struct FlowView: View {
         }
         #else
         Picker("Coverage", selection: $model.coverage) {
-            Text("Complete. Every decoded frame.").tag("complete")
-            Text("Measured. 5 frames a second, plus the tracker.").tag("measured")
+            Text(coverageChoice("complete", selected: model.coverage)).tag("complete")
+            Text(coverageChoice("measured", selected: model.coverage)).tag("measured")
         }
         .pickerStyle(.inline)
         #endif
@@ -909,9 +933,9 @@ public struct FlowView: View {
 
     #if os(Linux)
     @ViewBuilder
-    private func sizeChoice(_ value: String, _ title: String) -> some View {
+    private func sizeChoice(_ value: String) -> some View {
         Button(action: { model.longSide = value }) {
-            Text(model.longSide == value ? "\(title). Selected." : title)
+            Text(detectionChoice(value, selected: model.longSide))
         }
     }
     #endif

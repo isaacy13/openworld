@@ -147,6 +147,12 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(markedChoice("Fast", selected: true), "Fast. Selected.")
         XCTAssertEqual(markedChoice("Accurate", selected: false), "Accurate")
         XCTAssertEqual(markedChoice("Complete. Every decoded frame.", selected: true), "Complete. Every decoded frame. Selected.")
+        XCTAssertEqual(detectionChoice("640", selected: "640"), "640 px on the long side. Selected.")
+        XCTAssertEqual(detectionChoice("full", selected: "640"), "Full resolution")
+        XCTAssertEqual(detectionChoice("full", selected: "full"), "Full resolution. Selected.")
+        XCTAssertEqual(coverageChoice("complete", selected: "complete"), "Complete. Every decoded frame. Selected.")
+        XCTAssertEqual(coverageChoice("measured", selected: "complete"), "Measured. 5 frames a second, plus the tracker.")
+        XCTAssertEqual(coverageChoice("measured", selected: "measured"), "Measured. 5 frames a second, plus the tracker. Selected.")
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
             model.choose(try self.still("blank"))

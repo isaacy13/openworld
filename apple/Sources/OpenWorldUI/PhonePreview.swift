@@ -32,16 +32,11 @@ public enum PhonePreview {
             return lines
         case "size":
             var lines = ["Back", "Detection size", Copy.sizeHint]
-            for (value, title) in [
-                ("320", "320 px on the long side"),
-                ("480", "480 px on the long side"),
-                ("640", "640 px on the long side"),
-                ("full", "Full resolution"),
-            ] {
-                lines.append(markedChoice(title, selected: model.longSide == value))
+            for value in ["320", "480", "640", "full"] {
+                lines.append(detectionChoice(value, selected: model.longSide))
             }
-            lines.append(markedChoice("Complete. Every decoded frame.", selected: model.coverage == "complete"))
-            lines.append(markedChoice("Measured. 5 frames a second, plus the tracker.", selected: model.coverage == "measured"))
+            lines.append(coverageChoice("complete", selected: model.coverage))
+            lines.append(coverageChoice("measured", selected: model.coverage))
             if model.coverage == "measured" {
                 lines.append(Copy.brief)
             }
