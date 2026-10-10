@@ -12,12 +12,12 @@ import Foundation
 
 #if !canImport(Combine)
 /// The phone model on Linux stores these fields directly. Combine is an Apple framework.
-protocol ObservableObject: AnyObject {}
+public protocol ObservableObject: AnyObject {}
 
 @propertyWrapper
-struct Published<Value> {
-    var wrappedValue: Value
-    init(wrappedValue: Value) {
+public struct Published<Value> {
+    public var wrappedValue: Value
+    public init(wrappedValue: Value) {
         self.wrappedValue = wrappedValue
     }
 }
