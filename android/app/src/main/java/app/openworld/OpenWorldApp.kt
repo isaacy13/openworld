@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+
+/** A break between characters, so a long name with no spaces wraps on the page. */
+internal fun wrappingFileName(name: String): String {
+    if (name.isEmpty()) return name
+    return name.map { it.toString() }.joinToString("\u200B")
+}
 
 internal fun posterLine(title: String, classLabel: String): String {
     return when {
@@ -93,7 +100,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Device -> {
                         Text("This file stays on this device.", style = MaterialTheme.typography.headlineMedium)
                         if (model.fileName.isNotBlank()) {
-                            Text(model.fileName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                wrappingFileName(model.fileName),
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                         }
                         if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         disclosure.forEach { Text(it) }

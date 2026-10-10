@@ -760,7 +760,9 @@ public struct FlowView: View {
             backControl
             Text(Copy.onDevice).font(model.phone ? .largeTitle : .title)
             if let file = model.file {
-                Text(file.lastPathComponent).font(.headline)
+                Text(PhonePreview.wrappingFileName(file.lastPathComponent))
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if model.oldFile {
                 Text(Copy.oldFile).foregroundStyle(.orange)

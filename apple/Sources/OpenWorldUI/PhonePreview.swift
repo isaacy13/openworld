@@ -6,6 +6,11 @@ import OpenWorldContract
 /// Every line is kept. A short list used to drop the size rules and Analyze.
 @MainActor
 public enum PhonePreview {
+    /// A break between characters, so a long name with no spaces wraps on the page.
+    public static func wrappingFileName(_ name: String) -> String {
+        name.map(String.init).joined(separator: "\u{200B}")
+    }
+
     public static func lines(screen: String, model: FlowModel) -> [String] {
         var lines = column(screen: screen, model: model)
         if let notice = model.deleteNotice, !notice.isEmpty,

@@ -15,6 +15,20 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testALongFileNameBreaksBetweenCharacters() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let name = String(repeating: "A", count: 80) + ".png"
+            model.file = URL(fileURLWithPath: "/tmp/\(name)")
+            let shown = PhonePreview.wrappingFileName(name)
+            XCTAssertEqual(shown.split(separator: "\u{200B}").map(String.init), name.map(String.init))
+            XCTAssertEqual(PhonePreview.wrappingFileName(model.file?.lastPathComponent ?? ""), shown)
+            let lines = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertTrue(lines.contains(name))
+            XCTAssertFalse(lines.contains { $0.contains("\u{200B}") })
+        }
+    }
+
     func testSceneScanReachesTheResultsScreen() throws {
         try MainActor.assumeIsolated {
             if ProcessInfo.processInfo.environment["OPENWORLD_LIB"] != nil {

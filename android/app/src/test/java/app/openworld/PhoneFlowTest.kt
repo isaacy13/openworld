@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -1052,6 +1053,18 @@ class PhoneScreenTest {
     val compose = createComposeRule()
 
     @Test
+    fun aLongFileNameBreaksBetweenCharacters() {
+        val model = FlowModel()
+        model.step = Step.Device
+        val raw = "A".repeat(80) + ".png"
+        model.fileName = raw
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val shown = shownTexts().single { it.replace("\u200B", "") == raw }
+        assertEquals(raw.map { it.toString() }, shown.split('\u200B'))
+        compose.onNode(fileNameShown(raw)).assertExists()
+    }
+
+    @Test
     fun aBlankFileNameLeavesNoLineUnderTheDeviceHeadline() {
         val model = FlowModel()
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
@@ -1068,12 +1081,12 @@ class PhoneScreenTest {
         model.choose(uri, resolver)
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
         compose.onNodeWithText("This file stays on this device.").assertExists()
-        compose.onNodeWithText("named.png").assertExists()
+        compose.onNode(fileNameShown("named.png")).assertExists()
         compose.onNodeWithText("Nothing is uploaded.").assertExists()
         assertFalse(shownTexts().any { it.isBlank() })
         model.fileName = ""
         compose.waitForIdle()
-        compose.onNodeWithText("named.png").assertDoesNotExist()
+        compose.onNode(fileNameShown("named.png")).assertDoesNotExist()
         compose.onNodeWithText("Nothing is uploaded.").assertExists()
         assertFalse(shownTexts().any { it.isBlank() })
     }
@@ -2019,8 +2032,15 @@ class PhoneLaunchTest {
         compose.waitForIdle()
         compose.onNodeWithText("This file stays on this device.").assertExists()
         compose.onNodeWithText("Nothing is uploaded.").assertExists()
-        compose.onNodeWithText("shared.png").assertExists()
+        compose.onNode(fileNameShown("shared.png")).assertExists()
     }
+}
+
+private fun fileNameShown(name: String) = SemanticsMatcher("file name $name") { node ->
+    val text = node.config.getOrNull(SemanticsProperties.Text)
+        ?.joinToString("") { it.text }
+        ?: return@SemanticsMatcher false
+    text.replace("\u200B", "") == name
 }
 
 private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentTestRule, model: FlowModel) {
