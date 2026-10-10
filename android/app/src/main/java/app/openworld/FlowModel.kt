@@ -574,18 +574,50 @@ class FlowModel {
     }
 
     private fun originalModified(uri: Uri, resolver: ContentResolver): Long? {
-        resolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (!cursor.moveToFirst()) return null
+        columnModified(uri, resolver)?.let { return it }
+        return descriptorModified(uri, resolver)
+    }
+
+    private fun columnModified(uri: Uri, resolver: ContentResolver): Long? {
+        val cursor = try {
+            resolver.query(uri, null, null, null, null)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        cursor.use {
+            if (!it.moveToFirst()) return null
             for (name in listOf("last_modified", "date_modified", "datetaken")) {
-                val index = cursor.getColumnIndex(name)
-                if (index >= 0 && !cursor.isNull(index)) {
-                    val value = cursor.getLong(index)
+                val index = it.getColumnIndex(name)
+                if (index >= 0 && !it.isNull(index)) {
+                    val value = it.getLong(index)
                     if (value > 1_000_000_000_000L) return value
                     if (value > 1_000_000_000L) return value * 1000
                 }
             }
         }
         return null
+    }
+
+    /** A share sheet often omits the date column. The open file still has its own time. */
+    private fun descriptorModified(uri: Uri, resolver: ContentResolver): Long? {
+        val descriptor = try {
+            resolver.openFileDescriptor(uri, "r")
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val modified = try {
+            // st_mtime is seconds. A zero stat means this platform did not report a time.
+            val seconds = android.system.Os.fstat(descriptor.fileDescriptor).st_mtime
+            if (seconds > 0L) seconds * 1000L else null
+        } catch (_: Exception) {
+            null
+        }
+        try {
+            descriptor.close()
+        } catch (_: Exception) {
+            // The time was already read. Closing is separate.
+        }
+        return modified
     }
 }
 

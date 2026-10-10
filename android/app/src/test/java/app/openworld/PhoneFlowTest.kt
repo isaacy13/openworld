@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package app.openworld
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.content.Intent
+import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.os.ParcelFileDescriptor
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -28,6 +32,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.robolectric.shadows.ShadowContentResolver
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -358,6 +363,26 @@ class PhoneFlowTest {
         assertFalse(model.canAnalyze)
         assertFalse(model.estimateText.contains("Missing and wanted."))
         assertTrue(model.estimateText.contains("Refusing"))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h800dp", shadows = [SharedFileOsShadow::class])
+    fun aSharedFileWithoutADateColumnKeepsTheFileTime() {
+        val fresh = chooseSharedFile("fresh.png", System.currentTimeMillis())
+        assertFalse(fresh.oldFile)
+        assertEquals("fresh.png", fresh.fileName)
+        assertEquals(Step.Device, fresh.step)
+        val old = chooseSharedFile("old-share.png", System.currentTimeMillis() - 40L * 24 * 60 * 60 * 1000)
+        assertTrue(old.oldFile)
+        assertEquals("old-share.png", old.fileName)
+        assertEquals(Step.Device, old.step)
+        val dated = chooseSharedFile(
+            "dated.png",
+            System.currentTimeMillis() - 40L * 24 * 60 * 60 * 1000,
+            System.currentTimeMillis(),
+        )
+        assertFalse(dated.oldFile)
+        assertEquals(Step.Device, dated.step)
     }
 
     @Test
@@ -883,6 +908,54 @@ class PhoneFlowTest {
         assertEquals(Step.Estimate, model.step)
         model.analyze()
         assertEquals(Step.Results, model.step)
+        return model
+    }
+
+    private fun chooseSharedFile(name: String, modified: Long, columnMillis: Long? = null): FlowModel {
+        val source = still("blank")
+        assertTrue(source.setLastModified(modified))
+        val uri = Uri.parse("content://app.openworld.files/$name")
+        val provider = object : ContentProvider() {
+            override fun onCreate() = true
+            override fun query(
+                uri: Uri,
+                projection: Array<out String>?,
+                selection: String?,
+                selectionArgs: Array<out String>?,
+                sortOrder: String?,
+            ): android.database.Cursor {
+                val names = if (columnMillis == null) {
+                    arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
+                } else {
+                    arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE, "last_modified")
+                }
+                val cursor = MatrixCursor(names)
+                if (columnMillis == null) {
+                    cursor.addRow(arrayOf(name, source.length()))
+                } else {
+                    cursor.addRow(arrayOf(name, source.length(), columnMillis))
+                }
+                return cursor
+            }
+            override fun getType(uri: Uri) = "image/png"
+            override fun insert(uri: Uri, values: ContentValues?) = null
+            override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+                SharedFileOsShadow.opened = source
+                return ParcelFileDescriptor.open(source, ParcelFileDescriptor.MODE_READ_ONLY)
+            }
+        }
+        val info = android.content.pm.ProviderInfo()
+        info.authority = "app.openworld.files"
+        info.exported = true
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        provider.attachInfo(context, info)
+        ShadowContentResolver.registerProviderInternal("app.openworld.files", provider)
+        val resolver = context.contentResolver
+        shadowOf(resolver).registerInputStream(uri, source.inputStream())
+        val model = FlowModel()
+        model.choose(uri, resolver)
         return model
     }
 
