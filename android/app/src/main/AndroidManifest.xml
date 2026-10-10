@@ -7,7 +7,7 @@
         android:theme="@style/Theme.OpenWorld">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|fontScale|density"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|fontScale|density|locale|layoutDirection"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>

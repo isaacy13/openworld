@@ -2293,6 +2293,37 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun changingTheLanguageKeepsTheOpenFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        val open = compose.activity
+        val spoken = Configuration(open.resources.configuration)
+        spoken.setLocale(java.util.Locale.forLanguageTag("ar"))
+        val next = window.controller.configurationChange(spoken)
+        compose.waitForIdle()
+        assertSame(open, next.get())
+        assertFalse(open.isDestroyed)
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("shared.png").assertExists()
+        compose.onNodeWithText("Choose a photo or video").assertDoesNotExist()
+        assertEquals("ar", open.resources.configuration.locales[0].language)
+        val info = open.packageManager.getActivityInfo(open.componentName, 0)
+        val kept = ActivityInfo.CONFIG_LOCALE or ActivityInfo.CONFIG_LAYOUT_DIRECTION
+        assertEquals(kept, info.configChanges and kept)
+    }
+
+    @Test
     fun theSystemBackStepsToThePreviousPage() {
         val file = still("blank")
         val uri = Uri.parse("content://app.openworld/shared.png")
