@@ -880,6 +880,79 @@ fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
     assert_eq!(fs::read(&unreadable).unwrap(), b"keep");
 }
 
+#[test]
+fn a_zero_size_platform_decode_is_the_bad_codec_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("result");
+    let sentence = "Bad codec or unreadable file. Refusing.";
+    let (code, text, err) = run(
+        false,
+        &[
+            "estimate",
+            "--input",
+            "missing.png",
+            "--width",
+            "0",
+            "--height",
+            "10",
+            "--frame-count",
+            "1",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(sentence), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
+
+    let (code, text, err) = run(
+        true,
+        &[
+            "scan",
+            "--input",
+            "missing.png",
+            "--width",
+            "8",
+            "--height",
+            "0",
+            "--frame-count",
+            "2",
+            "--out",
+            out.to_str().unwrap(),
+            "--posters",
+            dir.path().join("posters").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "bad_codec");
+    assert_eq!(doc["summary"], sentence);
+    assert_eq!(doc["message"], sentence);
+    assert!(err.is_empty(), "{err}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(!out.exists());
+
+    let (code, text, err) = run(
+        true,
+        &[
+            "estimate",
+            "--input",
+            "missing.png",
+            "--video",
+            "--height",
+            "10",
+            "--frame-count",
+            "1",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "bad_request");
+    assert_eq!(doc["message"], "A platform decode needs a width.");
+    assert!(err.is_empty(), "{err}");
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {

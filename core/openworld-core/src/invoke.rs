@@ -51,6 +51,16 @@ fn refused(message: &str) -> String {
     json!({ "status": "refused", "summary": message, "message": message }).to_string()
 }
 
+/// The same report `openworld estimate` and `openworld scan` print for a bad argument.
+fn refused_request(message: &str) -> Result<Value, String> {
+    let code = if message == "Bad codec or unreadable file. Refusing." {
+        "bad_codec"
+    } else {
+        "bad_request"
+    };
+    serde_json::to_value(crate::scan::refused(code, message)).map_err(|err| err.to_string())
+}
+
 fn dispatch_with_progress(
     args: &[String],
     progress: &mut dyn FnMut(crate::scan::Progress),
@@ -64,14 +74,20 @@ fn dispatch_with_progress(
             Ok(json!({ "bundles": rows }))
         }
         "estimate" => {
-            let req = scan_request(&bundles, &parsed)?;
+            let req = match scan_request(&bundles, &parsed) {
+                Ok(req) => req,
+                Err(message) => return refused_request(&message),
+            };
             match estimate_for(&req) {
                 Ok(estimate) => serde_json::to_value(&estimate).map_err(|err| err.to_string()),
                 Err(report) => serde_json::to_value(&report).map_err(|err| err.to_string()),
             }
         }
         "scan" => {
-            let req = scan_request(&bundles, &parsed)?;
+            let req = match scan_request(&bundles, &parsed) {
+                Ok(req) => req,
+                Err(message) => return refused_request(&message),
+            };
             let report = if parsed.progress {
                 scan_path(&req, progress)
             } else {
@@ -572,6 +588,27 @@ mod tests {
             "--frame-count",
             "1",
         ]);
+        let zero: Value = serde_json::from_str(&invoke_argv(&[
+            "estimate".into(),
+            "--width".into(),
+            "0".into(),
+            "--height".into(),
+            "10".into(),
+            "--frame-count".into(),
+            "1".into(),
+        ]))
+        .unwrap();
+        assert_eq!(zero["status"], "refused");
+        assert_eq!(zero["refusal"], "bad_codec");
+        assert_eq!(zero["summary"], "Bad codec or unreadable file. Refusing.");
+        assert_eq!(zero["message"], "Bad codec or unreadable file. Refusing.");
+        let missing_width: Value = serde_json::from_str(&invoke_argv(&[
+            "estimate".into(),
+            "--video".into(),
+        ]))
+        .unwrap();
+        assert_eq!(missing_width["refusal"], "bad_request");
+        assert_eq!(missing_width["message"], "A platform decode needs a width.");
         refuse(&["estimate", "--video"]);
         refuse(&[
             "estimate",

@@ -289,6 +289,10 @@ fn run(cli: Cli) -> Result<i32, String> {
             no_wanted,
             media,
         } => {
+            let facts = match platform_facts(cli.json, &media) {
+                Ok(facts) => facts,
+                Err(stop) => return stop,
+            };
             let req = match request(
                 &bundles,
                 &input,
@@ -303,7 +307,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                 !no_wanted,
                 None,
                 None,
-                media.facts()?,
+                facts,
             ) {
                 Ok(req) => req,
                 Err(message) => {
@@ -356,6 +360,10 @@ fn run(cli: Cli) -> Result<i32, String> {
             media,
             progress,
         } => {
+            let facts = match platform_facts(cli.json, &media) {
+                Ok(facts) => facts,
+                Err(stop) => return stop,
+            };
             let req = match request(
                 &bundles,
                 &input,
@@ -370,7 +378,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                 wanted && !no_wanted,
                 abort_after_frames,
                 frames,
-                media.facts()?,
+                facts,
             ) {
                 Ok(req) => req,
                 Err(message) => {
@@ -1199,6 +1207,27 @@ fn bundle_display_name(bundles: &Path, id: &str) -> String {
         })
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| id.to_string())
+}
+
+/// A zero-size platform decode is the same refusal as an unreadable picture.
+fn platform_facts(
+    json_mode: bool,
+    media: &PlatformMedia,
+) -> Result<Option<MediaFacts>, Result<i32, String>> {
+    match media.facts() {
+        Ok(facts) => Ok(facts),
+        Err(message) => {
+            let code = if message == "Bad codec or unreadable file. Refusing." {
+                "bad_codec"
+            } else {
+                "bad_request"
+            };
+            Err(finish_report(
+                json_mode,
+                &openworld_core::scan::refused(code, &message),
+            ))
+        }
+    }
 }
 
 fn request(
