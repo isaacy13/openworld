@@ -216,13 +216,14 @@ public final class FlowModel: ObservableObject {
     }
 
     /// A catalog that can run is titled Model bundle. A refusal is the headline.
+    /// A file that cannot be read stays above that headline. It does not rename an empty catalog.
     public var bundleHeadline: String {
         guard bundles.isEmpty else { return "Model bundle" }
+        if let notice = catalogNotice, !notice.isEmpty {
+            return notice
+        }
         if let error, !error.isEmpty, error != "The file could not be read. Refusing." {
             return error
-        }
-        if error == "The file could not be read. Refusing." {
-            return "Model bundle"
         }
         return "The scan program is not on this device. Refusing."
     }

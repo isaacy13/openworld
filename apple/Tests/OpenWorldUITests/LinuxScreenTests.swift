@@ -196,6 +196,17 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(preview.last, "Continue")
             model.continueFromBundles()
             XCTAssertEqual(model.step, .bundle)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-bundles.png"))
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.bundleHeadline, "The scan program is not on this device. Refusing.")
+            let refusedFile = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(refusedFile.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(refusedFile.dropFirst(2).first, "The scan program is not on this device. Refusing.")
+            XCTAssertFalse(refusedFile.contains("Model bundle"))
+            XCTAssertFalse(refusedFile.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertEqual(refusedFile.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(refusedFile.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
             _ = FlowView(model: model, importControl: self.control).body
         }
         if let previous {
@@ -234,6 +245,14 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(bundle.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
             XCTAssertEqual(bundle.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
             XCTAssertFalse(bundle.contains("The scan program is not on this device. Refusing."))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-catalog.png"))
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.bundleHeadline, "The bundle catalog could not be read. Refusing.")
+            let keptCatalog = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(keptCatalog.first, "The file could not be read. Refusing.")
+            XCTAssertFalse(keptCatalog.contains("Model bundle"))
+            XCTAssertEqual(keptCatalog.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(keptCatalog.filter { $0 == "The file could not be read. Refusing." }.count, 1)
 
             model.choose(try self.still("blank"))
             model.loadEstimate()
