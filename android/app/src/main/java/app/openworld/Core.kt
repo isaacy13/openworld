@@ -34,10 +34,14 @@ object Core {
         return "openworld"
     }
 
-    /** Walk up from the working directory, the same way the CLI finds `bundles/`. */
-    fun bundlesDir(): String {
-        val env = System.getenv("OPENWORLD_BUNDLES")
-        if (!env.isNullOrBlank() && File(env, "fast/manifest.toml").isFile) return env
+    /**
+     * A named catalog is that catalog, including one that has no Fast bundle.
+     * Otherwise walk up from the working directory, the same way the CLI finds `bundles/`.
+     */
+    fun bundlesDir(): String = bundlesDir(System.getenv("OPENWORLD_BUNDLES"))
+
+    internal fun bundlesDir(env: String?): String {
+        if (!env.isNullOrBlank()) return env
         var cursor: File? = File(System.getProperty("user.dir") ?: ".")
         repeat(8) {
             val dir = cursor ?: return@repeat

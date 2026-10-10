@@ -959,6 +959,23 @@ class PhoneFlowTest {
         return model
     }
 
+    @Test
+    fun aCatalogWithoutFastStaysTheCatalog() {
+        val empty = File(System.getProperty("java.io.tmpdir"), "openworld-empty-" + System.nanoTime())
+        assertTrue(empty.mkdirs())
+        try {
+            assertEquals(empty.absolutePath, Core.bundlesDir(empty.absolutePath))
+            assertFalse(File(empty, "fast/manifest.toml").isFile)
+        } finally {
+            empty.delete()
+        }
+        assertNotEquals("   ", Core.bundlesDir("   "))
+        val named = System.getenv("OPENWORLD_BUNDLES")
+        if (!named.isNullOrBlank()) {
+            assertEquals(named, Core.bundlesDir())
+        }
+    }
+
     private fun choose(model: FlowModel, file: File) {
         val uri = Uri.parse("content://app.openworld/${file.name}")
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
