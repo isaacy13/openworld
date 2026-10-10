@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -100,11 +104,17 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Device -> {
                         Text("This file stays on this device.", style = MaterialTheme.typography.headlineMedium)
                         if (model.fileName.isNotBlank()) {
-                            Text(
-                                wrappingFileName(model.fileName),
-                                modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clearAndSetSemantics { text = AnnotatedString(model.fileName) },
+                            ) {
+                                Text(
+                                    wrappingFileName(model.fileName),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
                         }
                         if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         disclosure.forEach { Text(it) }

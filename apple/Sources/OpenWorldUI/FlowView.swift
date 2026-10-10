@@ -763,6 +763,7 @@ public struct FlowView: View {
                 Text(PhonePreview.wrappingFileName(file.lastPathComponent))
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel(file.lastPathComponent)
             }
             if model.oldFile {
                 Text(Copy.oldFile).foregroundStyle(.orange)
