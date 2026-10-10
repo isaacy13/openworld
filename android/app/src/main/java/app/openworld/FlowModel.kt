@@ -106,6 +106,7 @@ class FlowModel : ViewModel() {
     internal var fixturePackDirectory: File? = null
 
     fun choose(uri: Uri, resolver: ContentResolver) {
+        if (abandoned.get()) return
         if (scanning) return
         val copy = File.createTempFile("openworld", null)
         try {

@@ -89,6 +89,21 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(order, ["claim", "open"])
     }
 
+    func testAFileChosenAsTheWindowClosesStaysOffThePage() throws {
+        let first = try still("blank")
+        let second = try still("blank")
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.choose(first)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, first.path)
+            model.closeWindow()
+            model.choose(second)
+            XCTAssertEqual(model.file?.path, first.path)
+            XCTAssertEqual(model.step, .device)
+        }
+    }
+
     func testClosingTheWindowStopsAScanThatIsStillRunning() throws {
         let process = try RunningProgram.launch("/bin/sleep", arguments: ["30"])
         XCTAssertTrue(process.isRunning)

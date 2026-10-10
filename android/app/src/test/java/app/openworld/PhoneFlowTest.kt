@@ -164,6 +164,25 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aFileChosenAsThePhoneClosesStaysOffThePage() {
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val first = still("blank")
+        val firstUri = Uri.parse("content://app.openworld/first.png")
+        shadowOf(resolver).registerInputStream(firstUri, first.inputStream())
+        val model = FlowModel()
+        model.choose(firstUri, resolver)
+        assertEquals(Step.Device, model.step)
+        assertEquals("first.png", model.fileName)
+        model.abandonScan()
+        val second = still("blank")
+        val secondUri = Uri.parse("content://app.openworld/second.png")
+        shadowOf(resolver).registerInputStream(secondUri, second.inputStream())
+        model.choose(secondUri, resolver)
+        assertEquals("first.png", model.fileName)
+        assertEquals(Step.Device, model.step)
+    }
+
+    @Test
     fun sceneShowsACandidateAndAFaceThatWasNotCompared() {
         val model = drive("scene")
         assertEquals("Possible candidate. Not an identification.", model.summary)

@@ -169,6 +169,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func choose(_ url: URL) {
+        guard !closed else { return }
         #if !os(Linux)
         _ = url.startAccessingSecurityScopedResource()
         #endif
