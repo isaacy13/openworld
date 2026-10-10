@@ -54,6 +54,15 @@ def find_bundles() -> str:
     return os.environ.get("OPENWORLD_BUNDLES", str(repo_root() / "bundles"))
 
 
+def filter_rules(item: Gtk.FileFilter) -> list[str]:
+    """The patterns and MIME types on a file dialog filter, in the order they were added."""
+    rules = item.to_gvariant().get_child_value(1)
+    values: list[str] = []
+    for index in range(rules.n_children()):
+        values.append(rules.get_child_value(index).get_child_value(1).get_string())
+    return values
+
+
 def drain_scan_pipes(proc: subprocess.Popen[str], on_line) -> str:
     """Read the report and the crop lines together.
 
@@ -378,9 +387,25 @@ class OpenWorld(Gtk.Application):
         outer.append(self.delete_notice)
         return outer
 
+    def file_dialog(self) -> Gtk.FileDialog:
+        """Choose File opens on photos and video. Every file stays available in that dialog."""
+        dialog = Gtk.FileDialog(title="Choose a photo or video")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        photos = Gtk.FileFilter()
+        photos.set_name("Photos and video")
+        photos.add_mime_type("image/*")
+        photos.add_mime_type("video/*")
+        everything = Gtk.FileFilter()
+        everything.set_name("All files")
+        everything.add_pattern("*")
+        filters.append(photos)
+        filters.append(everything)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(photos)
+        return dialog
+
     def pick_file(self) -> None:
-        dialog = Gtk.FileDialog()
-        dialog.open(self.window, None, self._file_chosen)
+        self.file_dialog().open(self.window, None, self._file_chosen)
 
     def _file_chosen(self, dialog: Gtk.FileDialog, result: Gio.AsyncResult) -> None:
         try:
@@ -1247,6 +1272,24 @@ class OpenWorld(Gtk.Application):
         path = os.environ.get("OPENWORLD_INPUT")
         if not path:
             self._exercise_fail("missing input")
+            return False
+        dialog = self.file_dialog()
+        filters = dialog.get_filters()
+        default = dialog.get_default_filter()
+        if (
+            dialog.get_title() != "Choose a photo or video"
+            or filters is None
+            or filters.get_n_items() != 2
+            or filters.get_item(0).get_name() != "Photos and video"
+            or filter_rules(filters.get_item(0)) != ["image/*", "video/*"]
+            or filters.get_item(1).get_name() != "All files"
+            or filter_rules(filters.get_item(1)) != ["*"]
+            or default is None
+            or default.get_name() != "Photos and video"
+        ):
+            self._exercise_fail(
+                f"Choose File did not open on photos and video: {dialog.get_title()!r}"
+            )
             return False
         self._show_report(
             {
