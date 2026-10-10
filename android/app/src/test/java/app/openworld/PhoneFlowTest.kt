@@ -5,6 +5,7 @@ import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.database.MatrixCursor
 import android.graphics.Bitmap
 import android.os.ParcelFileDescriptor
@@ -31,6 +32,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -2022,9 +2024,11 @@ private class PhoneWindowRule : ExternalResource() {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w360dp-h800dp")
 class PhoneLaunchTest {
+    private val window = PhoneWindowRule()
+
     @get:Rule
-    val compose = AndroidComposeTestRule<ExternalResource, MainActivity>(PhoneWindowRule()) { rule ->
-        (rule as PhoneWindowRule).activity
+    val compose = AndroidComposeTestRule<ExternalResource, MainActivity>(window) { _ ->
+        window.activity
     }
 
     @Test
@@ -2064,6 +2068,49 @@ class PhoneLaunchTest {
     fun aShareReusesTheOpenWindow() {
         val info = compose.activity.packageManager.getActivityInfo(compose.activity.componentName, 0)
         assertEquals(ActivityInfo.LAUNCH_SINGLE_TASK, info.launchMode)
+    }
+
+    @Test
+    fun turningThePhoneKeepsTheOpenFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Model bundle").assertExists()
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Detection size").assertExists()
+        val open = compose.activity
+        val turned = Configuration(open.resources.configuration)
+        turned.orientation = Configuration.ORIENTATION_LANDSCAPE
+        turned.screenWidthDp = 800
+        turned.screenHeightDp = 360
+        turned.uiMode = (turned.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_YES
+        window.controller.configurationChange(turned)
+        compose.waitForIdle()
+        assertSame(open, compose.activity)
+        compose.onNodeWithText("Detection size").assertExists()
+        compose.onNodeWithText("This file stays on this device.").assertDoesNotExist()
+        compose.onNodeWithText("Choose a photo or video").assertDoesNotExist()
+        val info = open.packageManager.getActivityInfo(open.componentName, 0)
+        val kept = ActivityInfo.CONFIG_ORIENTATION or
+            ActivityInfo.CONFIG_SCREEN_SIZE or
+            ActivityInfo.CONFIG_SCREEN_LAYOUT or
+            ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE or
+            ActivityInfo.CONFIG_KEYBOARD or
+            ActivityInfo.CONFIG_KEYBOARD_HIDDEN or
+            ActivityInfo.CONFIG_UI_MODE
+        assertEquals(kept, info.configChanges and kept)
     }
 }
 
