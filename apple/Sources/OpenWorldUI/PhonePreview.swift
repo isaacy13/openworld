@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+import OpenWorldContract
 
 /// The words the Linux phone preview prints, in the same order as the phone column.
 /// Every line is kept. A short list used to drop the size rules and Analyze.
@@ -85,13 +86,7 @@ public enum PhonePreview {
                reason != model.report?.summary {
                 lines.append(reason)
             }
-            if let banner = model.report?.coverageBanner { lines.append(banner) }
-            if let frames = model.report?.framesNote { lines.append(frames) }
-            if let classes = model.report?.classNote { lines.append(classes) }
-            if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
-            if let size = model.report?.detectionNote { lines.append(size) }
-            if let coverage = model.report?.coverageNote { lines.append(coverage) }
-            if let note = model.report?.perceptionNote { lines.append(note) }
+            lines.append(contentsOf: contextLines(model.report))
             lines.append(contentsOf: model.report?.warnings ?? [])
             for candidate in model.report?.candidates ?? [] {
                 lines.append(candidate.wording)
@@ -131,6 +126,25 @@ public enum PhonePreview {
             if let error = model.error { lines.append(error) }
             return lines
         }
+    }
+
+    /// Lines under the headline. A refusal leaves the bundle and the perception line empty, so those stay off the screen.
+    public static func contextLines(_ report: ScanReport?) -> [String] {
+        guard let report else { return [] }
+        var lines: [String] = []
+        func keep(_ value: String?) {
+            if let value, !value.isEmpty { lines.append(value) }
+        }
+        keep(report.coverageBanner)
+        keep(report.framesNote)
+        keep(report.classNote)
+        if let name = report.bundleName, !name.isEmpty {
+            lines.append("Bundle: \(name)")
+        }
+        keep(report.detectionNote)
+        keep(report.coverageNote)
+        keep(report.perceptionNote)
+        return lines
     }
 
     /// Wrapped the way the terminal preview prints a phone column. Nothing is dropped.

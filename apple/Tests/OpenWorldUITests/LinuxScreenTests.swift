@@ -758,6 +758,25 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testARefusalLeavesTheBundleUnnamed() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.report = try JSONDecoder().decode(ScanReport.self, from: Data(refusedJSON.utf8))
+            model.step = .results
+            let preview = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(preview.first, "Back")
+            XCTAssertEqual(preview.dropFirst().first, "The file could not be read. Refusing.")
+            XCTAssertFalse(preview.contains { $0.hasPrefix("Bundle:") })
+            XCTAssertFalse(preview.contains("Fixture markers were read."))
+            XCTAssertFalse(preview.contains(""))
+            XCTAssertFalse(preview.contains(Copy.clearance))
+            XCTAssertTrue(preview.contains("Nothing is uploaded."))
+            XCTAssertEqual(preview.last, "Choose another file")
+            XCTAssertEqual(PhonePreview.contextLines(model.report), [])
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testAnIncompleteReportKeepsTheReason() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
@@ -1149,6 +1168,10 @@ private extension Data {
         self.init(bytes)
     }
 }
+
+private let refusedJSON = """
+{"status":"refused","summary":"The file could not be read. Refusing.","message":"The file could not be read. Refusing.","bundle_name":"","perception_note":"","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":[],"faces_seen_not_compared":0,"inventory":[],"candidates":[],"comparisons":[]}
+"""
 
 private let incompleteJSON = """
 {"status":"incomplete","summary":"Incomplete.","message":"The file was not fully decoded.","disclosure":["Nothing is uploaded."],"warnings":[],"faces_seen_not_compared":0,"inventory":[],"candidates":[],"comparisons":[]}

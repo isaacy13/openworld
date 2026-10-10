@@ -728,26 +728,8 @@ public struct FlowView: View {
                    reason != model.report?.summary {
                     Text(reason)
                 }
-                if let banner = model.report?.coverageBanner {
-                    Text(banner)
-                }
-                if let frames = model.report?.framesNote {
-                    Text(frames)
-                }
-                if let classes = model.report?.classNote {
-                    Text(classes)
-                }
-                if let name = model.report?.bundleName {
-                    Text("Bundle: \(name)")
-                }
-                if let size = model.report?.detectionNote {
-                    Text(size)
-                }
-                if let coverage = model.report?.coverageNote {
-                    Text(coverage)
-                }
-                if let note = model.report?.perceptionNote {
-                    Text(note)
+                ForEach(PhonePreview.contextLines(model.report), id: \.self) { line in
+                    Text(line)
                 }
                 ForEach(model.report?.warnings ?? [], id: \.self) { line in
                     Text(line).foregroundStyle(.orange)
