@@ -161,6 +161,19 @@ public final class FlowModel: ObservableObject {
         step = .bundle
     }
 
+    /// A refusal the current page does not already print. An empty catalog prints its own line.
+    public var showsTopError: Bool {
+        guard let error, !error.isEmpty else { return false }
+        switch step {
+        case .estimate, .results:
+            return false
+        case .bundle where bundles.isEmpty:
+            return false
+        default:
+            return true
+        }
+    }
+
     public func loadEstimate() {
         guard let file else {
             estimate = nil
@@ -514,7 +527,7 @@ public struct FlowView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let error = model.error, model.step != .estimate, model.step != .results {
+            if model.showsTopError, let error = model.error {
                 Text(error)
                     .foregroundStyle(.orange)
                     .padding(.horizontal)

@@ -167,9 +167,10 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.bundles.isEmpty)
             XCTAssertEqual(model.step, .bundle)
             XCTAssertEqual(model.error, "The scan program is not on this device. Refusing.")
+            XCTAssertFalse(model.showsTopError)
             let preview = PhonePreview.lines(screen: "bundle", model: model)
             XCTAssertTrue(preview.contains("Model bundle"))
-            XCTAssertTrue(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertEqual(preview.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
             XCTAssertFalse(preview.contains("Fast. Selected."))
             XCTAssertEqual(preview.last, "Continue")
             _ = FlowView(model: model, importControl: self.control).body
@@ -352,16 +353,19 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.step, .choose)
             XCTAssertNil(model.file)
             XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
             let file = try self.still("blank")
             model.choose(file)
             XCTAssertEqual(model.step, .device)
             XCTAssertNil(model.error)
+            XCTAssertFalse(model.showsTopError)
             let folder = file.deletingLastPathComponent().appendingPathComponent("not-a-file-dir", isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             model.choose(folder)
             XCTAssertEqual(model.step, .device)
             XCTAssertEqual(model.file?.path, file.path)
             XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
             _ = FlowView(model: model, importControl: self.control).body
         }
     }
