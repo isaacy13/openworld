@@ -1604,6 +1604,13 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
         assertTrue(outcome.detail.contains("Nothing is uploaded."))
         assertTrue(outcome.detail.contains("On-device does not mean the file is real."))
+        model.summary = ""
+        model.status = "refused"
+        compose.onNodeWithText("Refusing.").assertExists()
+        compose.onAllNodesWithText("Incomplete.").assertCountEquals(0)
+        model.summary = "The result could not be written."
+        compose.onNodeWithText("The result could not be written.").assertExists()
+        compose.onAllNodesWithText("Refusing.").assertCountEquals(0)
         val stopped = model.decodeFailure("The file was not fully decoded.")
         assertEquals("Incomplete.", stopped.summary)
         assertEquals("The file was not fully decoded.", stopped.incompleteReason)

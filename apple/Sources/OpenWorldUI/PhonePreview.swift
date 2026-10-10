@@ -82,7 +82,7 @@ public enum PhonePreview {
             }
             return lines
         case "results", "leaving":
-            var lines = ["Back", model.report?.summary ?? model.error ?? Copy.incomplete]
+            var lines = ["Back", model.resultHeadline]
             if model.report?.status == "incomplete",
                let reason = model.report?.message,
                !reason.isEmpty,

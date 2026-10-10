@@ -193,6 +193,19 @@ public final class FlowModel: ObservableObject {
         step = .bundle
     }
 
+    /// The result headline. An empty summary falls through to the error, then Incomplete.
+    public var resultHeadline: String {
+        if let summary = report?.summary, !summary.isEmpty { return summary }
+        if let error, !error.isEmpty { return error }
+        return Copy.incomplete
+    }
+
+    /// A refusal is the headline, in the warning color. Deleted and a finished scan stay in the title color.
+    public var resultRefused: Bool {
+        if report?.status == "refused" { return true }
+        return resultHeadline.contains("Refusing.")
+    }
+
     /// A catalog that can run is titled Model bundle. A refusal is the headline.
     public var bundleHeadline: String {
         guard bundles.isEmpty else { return "Model bundle" }
@@ -844,8 +857,9 @@ public struct FlowView: View {
     private var resultsColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
                 backControl
-                Text(model.report?.summary ?? model.error ?? Copy.incomplete)
+                Text(model.resultHeadline)
                     .font(model.phone ? .largeTitle : .title)
+                    .foregroundStyle(model.resultRefused ? .orange : .primary)
                 if model.report?.status == "incomplete",
                    let reason = model.report?.message,
                    !reason.isEmpty,

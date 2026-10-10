@@ -639,6 +639,7 @@ class OpenWorld(Gtk.Application):
         self.warning_note.set_text("")
         self.warning_note.set_visible(False)
         self.summary.set_text("Scanning")
+        self.summary.remove_css_class("warn")
         self.delete_notice.set_text("")
         self.delete_notice.set_visible(False)
         self._show_delete(False)
@@ -785,6 +786,10 @@ class OpenWorld(Gtk.Application):
             else:
                 summary = PHRASES["incomplete"]
         self.summary.set_text(summary)
+        if status == "refused" or summary.endswith("Refusing."):
+            self.summary.add_css_class("warn")
+        else:
+            self.summary.remove_css_class("warn")
         reason = report.get("message") or ""
         if status == "incomplete" and reason and reason != summary:
             self.reason.set_text(reason)
@@ -1013,6 +1018,7 @@ class OpenWorld(Gtk.Application):
         self.warning_note.set_text("")
         self.warning_note.set_visible(False)
         self.summary.set_text("Deleted.")
+        self.summary.remove_css_class("warn")
         self.out_dir = None
         self.delete_notice.set_text("")
         self.delete_notice.set_visible(False)
@@ -1171,6 +1177,7 @@ class OpenWorld(Gtk.Application):
         )
         if (
             self.summary.get_text() != PHRASES["incomplete"]
+            or "warn" in self.summary.get_css_classes()
             or self.reason.get_text() != "The file was not fully decoded."
             or not self.reason.get_visible()
         ):
@@ -1224,6 +1231,7 @@ class OpenWorld(Gtk.Application):
         detail_labels = self._labels_under(self.detail)
         if (
             self.summary.get_text() != PHRASES["clearance"]
+            or "warn" in self.summary.get_css_classes()
             or self.stack.get_visible_child_name() != "results"
             or PHRASES["clearance"] not in self.result_note.get_text()
             or PHRASES["clearance"] in detail_labels
@@ -1686,6 +1694,7 @@ class OpenWorld(Gtk.Application):
         self.start_scan()
         if (
             self.summary.get_text() != "The poster pack could not be read. Refusing."
+            or "warn" not in self.summary.get_css_classes()
             or blocker.read_bytes() != b"keep"
             or self.delete_button.get_visible()
             or self.primary.get_label() != "Choose another file"
@@ -1699,6 +1708,18 @@ class OpenWorld(Gtk.Application):
                 f"a poster pack file still started a scan: {self.summary.get_text()!r} {self.result_note.get_text()!r}"
             )
             return False
+        result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
+        if result_shot:
+            subprocess.run(
+                ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
+                check=False,
+            )
+            context = GLib.MainContext.default()
+            deadline = time.time() + 0.4
+            while time.time() < deadline:
+                context.iteration(False)
+                time.sleep(0.05)
+            self._grab(result_shot)
         blocker.unlink()
         self._exercise_report = None
         self.context_note.set_text("Missing and wanted.")
@@ -1767,6 +1788,9 @@ class OpenWorld(Gtk.Application):
                 if phrase not in blob:
                     self._exercise_fail(f"missing {phrase}")
                     return False
+        if "warn" in self.summary.get_css_classes():
+            self._exercise_fail("a finished scan kept the refusal color")
+            return False
         if "Missing and wanted." not in self.context_note.get_text():
             self._exercise_fail(f"the result did not name the classes under the headline: {self.context_note.get_text()!r}")
             return False

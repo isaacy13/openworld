@@ -196,14 +196,19 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         model.deleteNotice?.let { Text(it) }
                     }
                     Step.Results -> {
+                        val headline = model.summary.ifBlank {
+                            when (model.status) {
+                                "complete" -> if (model.candidateRows.isNotEmpty()) ProductCopy.possible else ProductCopy.clearance
+                                "refused" -> "Refusing."
+                                "deleted" -> "Deleted."
+                                else -> ProductCopy.incomplete
+                            }
+                        }
+                        val refusedResult = model.status == "refused" || headline.endsWith("Refusing.")
                         Text(
-                            model.summary.ifBlank {
-                                when (model.status) {
-                                    "complete" -> if (model.fbiUrl != null) ProductCopy.possible else ProductCopy.clearance
-                                    else -> ProductCopy.incomplete
-                                }
-                            },
+                            headline,
                             style = MaterialTheme.typography.headlineMedium,
+                            color = if (refusedResult) warningColor else Color.Unspecified,
                         )
                         if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
                         if (model.context.isNotBlank()) Text(model.context)
