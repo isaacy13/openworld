@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -84,12 +85,14 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
     }
     MaterialTheme {
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
+            val scroll = rememberScrollState()
+            LaunchedEffect(model.step) { scroll.scrollTo(0) }
             Column(
                 modifier = Modifier
                     .padding(padding)
                     .padding(20.dp)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.pickNotice?.let { Text(it, color = warningColor) }

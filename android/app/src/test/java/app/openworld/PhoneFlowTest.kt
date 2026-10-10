@@ -1109,6 +1109,32 @@ class PhoneScreenTest {
     val compose = createComposeRule()
 
     @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h200dp")
+    fun theNextPageStartsAtTheTop() {
+        val model = FlowModel()
+        model.step = Step.Device
+        model.fileName = "photo.png"
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Continue").performScrollTo()
+        compose.waitForIdle()
+        val deviceTitle = compose.onNodeWithText("This file stays on this device.").fetchSemanticsNode().boundsInRoot
+        assertTrue("the device title stayed on screen: $deviceTitle", deviceTitle.height == 0f)
+        compose.runOnUiThread {
+            model.bundleRows = List(24) { index ->
+                Triple("id$index", "Bundle $index\nBest for phones.", "Not measured yet.")
+            }
+            model.step = Step.Bundle
+        }
+        compose.waitForIdle()
+        val bundleTitle = compose.onNodeWithText("Model bundle").fetchSemanticsNode().boundsInRoot
+        assertTrue("Model bundle opened at $bundleTitle", bundleTitle.height > 0f && bundleTitle.top >= 0f)
+        compose.runOnUiThread { model.back() }
+        compose.waitForIdle()
+        val returned = compose.onNodeWithText("This file stays on this device.").fetchSemanticsNode().boundsInRoot
+        assertTrue("Back opened the file page at $returned", returned.height > 0f && returned.top >= 0f)
+    }
+
+    @Test
     fun aLongFileNameBreaksBetweenCharacters() {
         val model = FlowModel()
         model.step = Step.Device
