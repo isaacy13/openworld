@@ -3,8 +3,8 @@
 use image::{ImageEncoder, Rgb, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
-    BRIEF_FACE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE,
-    VEHICLE_NOT_PERSON,
+    BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER,
+    PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::fiducial::{self, render_face_module, render_plate, render_vehicle};
@@ -207,6 +207,27 @@ fn plate_is_not_read_without_a_published_plate_and_a_vehicle_is_not_a_person() {
     assert!(report.inventory.iter().any(|i| i.kind == "vehicle" && i.label == VEHICLE_NOT_PERSON));
     assert!(report.inventory.iter().all(|i| i.kind != "face"));
     let _ = pack;
+}
+
+#[test]
+fn a_large_face_that_cannot_be_scored_is_not_a_clearance_or_a_cutoff() {
+    let bundle = fast();
+    let dir = tempfile::tempdir().unwrap();
+    posters::write_fixture_pack(dir.path(), now()).unwrap();
+    let pack = posters::load_pack(dir.path(), now()).unwrap();
+    let mut image = blank(640, 426);
+    fiducial::place(&mut image, &render_face_module(7, 24), 1, 0);
+    let report = scan_images(&[image], &bundle, &pack, &opts(DetectionSize::Px(320), Coverage::Complete), &mut |_| {});
+    assert!(report.candidates.is_empty());
+    assert_eq!(report.summary, NO_CLEARANCE);
+    assert_eq!(report.faces_embedded, 0);
+    let row = report.inventory.iter().find(|item| item.kind == "face").unwrap();
+    assert!(row.orig_short_px >= FACE_COMPARE_PX);
+    assert_eq!(row.label, FACE_UNSCORED);
+    assert!(!row.compared);
+    assert_ne!(row.label, NOT_COMPARED);
+    assert_ne!(row.label, BELOW_CUTOFF);
+    assert_ne!(row.label, "No score.");
 }
 
 #[test]

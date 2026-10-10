@@ -2,8 +2,8 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER,
-    PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
+    PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
 use crate::embed::fixture_probe;
@@ -594,7 +594,7 @@ impl<'a> Engine<'a> {
                 track_id,
                 det_short_px: det_rect.short(),
                 orig_short_px: orig.short(),
-                label: "No score.".into(),
+                label: FACE_UNSCORED.into(),
                 compared: false,
                 crop: crop_path.clone(),
                 fiducial_id: None,
