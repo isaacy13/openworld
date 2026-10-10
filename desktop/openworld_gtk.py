@@ -776,6 +776,9 @@ class OpenWorld(Gtk.Application):
 
     def _show_report(self, report: dict) -> bool:
         self.scan_thread = None
+        # The unread-file sentence was about a file this scan did not use.
+        if self.pick_notice.get_text() == "The file could not be read. Refusing.":
+            self.pick_notice.set_visible(False)
         summary = report.get("summary") or ""
         status = report.get("status") or ""
         if not summary:
@@ -1787,6 +1790,8 @@ class OpenWorld(Gtk.Application):
             or self.primary.get_sensitive()
             or self.back.get_sensitive()
             or self.stack.get_visible_child_name() != "results"
+            or not self.pick_notice.get_visible()
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
         ):
             self._exercise_fail(
                 f"Scanning kept the previous result: {self.summary.get_text()!r} {self.result_note.get_text()!r} {self.reason.get_text()!r}"
@@ -1860,6 +1865,9 @@ class OpenWorld(Gtk.Application):
             self._grab(result_shot)
         if report.get("status") != "complete":
             self._exercise_fail(report.get("message", "not complete"))
+            return False
+        if self.pick_notice.get_visible():
+            self._exercise_fail("a finished scan kept the unread-file sentence")
             return False
         labels = self._strip_labels()
         for phrase in (PHRASES["possible"], PHRASES["not_compared"], "A vehicle is not a person."):

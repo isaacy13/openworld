@@ -1340,6 +1340,9 @@ class PhoneScreenTest {
         assertTrue(estimate.contains("Analyze"))
 
         model.analyze()
+        assertNull(model.pickNotice)
+        compose.waitForIdle()
+        assertFalse(texts().contains("The file could not be read. Refusing."))
         val result = model.resultDir
         assertNotNull(result)
         assertTrue(File(result!!, "result.json").isFile)

@@ -546,6 +546,8 @@ class FlowModel {
     }
 
     private fun applyScan(outcome: ScanOutcome) {
+        // The unread-file sentence was about a file this scan did not use.
+        pickNotice = null
         if (outcome.earlyReturn) {
             val message = outcome.estimateText ?: "The output directory could not be created. Refusing."
             estimateOk = false
