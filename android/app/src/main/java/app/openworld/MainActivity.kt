@@ -7,9 +7,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : ComponentActivity() {
-    private val model = FlowModel()
+    private lateinit var model: FlowModel
     private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) model.choose(uri, contentResolver)
     }
@@ -21,7 +22,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleShare(intent)
+        model = ViewModelProvider(this).get(FlowModel::class.java)
+        if (!model.launchHandled) {
+            model.launchHandled = true
+            handleShare(intent)
+        }
         setContent {
             OpenWorldApp(model = model, onChoose = { picker.launch(chooseFileMimeTypes) }, onOpen = { url ->
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -30,7 +35,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        model.abandonScan()
+        if (::model.isInitialized && !isChangingConfigurations) model.abandonScan()
         super.onDestroy()
     }
 

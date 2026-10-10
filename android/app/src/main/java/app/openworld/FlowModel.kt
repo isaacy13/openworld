@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import android.os.Handler
 import android.os.Looper
+import androidx.lifecycle.ViewModel
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -57,7 +58,9 @@ class CandidateRow(
     val frameLabel: String = "Frame",
 )
 
-class FlowModel {
+class FlowModel : ViewModel() {
+    /** The launch share is handled once. A recreated window keeps the page already open. */
+    internal var launchHandled = false
     var step by mutableStateOf(Step.Choose)
     var fileName by mutableStateOf("")
     var oldFile by mutableStateOf(false)

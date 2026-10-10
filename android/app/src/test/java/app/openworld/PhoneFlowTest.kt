@@ -2393,6 +2393,46 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun changingTheGrammaticalGenderKeepsTheOpenFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Model bundle").assertExists()
+        val open = compose.activity
+        val model = phoneModel(open)
+        assertEquals(Step.Bundle, model.step)
+        val gendered = Configuration(open.resources.configuration)
+        val feminine = Configuration.GRAMMATICAL_GENDER_FEMININE
+        val setGender = Configuration::class.java.getMethod("setGrammaticalGender", Int::class.javaPrimitiveType)
+        setGender.invoke(
+            gendered,
+            if (gendered.grammaticalGender == feminine) Configuration.GRAMMATICAL_GENDER_MASCULINE else feminine
+        )
+        val next = window.controller.configurationChange(gendered)
+        next.visible()
+        val kept = next.get()
+        assertFalse(kept.isDestroyed)
+        assertSame(model, phoneModel(kept))
+        assertEquals(Step.Bundle, phoneModel(kept).step)
+        assertEquals("shared.png", phoneModel(kept).fileName)
+        val shown = shownOn(kept)
+        assertTrue(shown.any { "Model bundle" in it })
+        assertFalse(shown.any { "Choose a photo or video" in it })
+        assertEquals(gendered.grammaticalGender, kept.resources.configuration.grammaticalGender)
+    }
+
+    @Test
     fun theSystemBackStepsToThePreviousPage() {
         val file = still("blank")
         val uri = Uri.parse("content://app.openworld/shared.png")
@@ -2430,6 +2470,43 @@ private fun phoneModel(activity: MainActivity): FlowModel {
     val field = MainActivity::class.java.getDeclaredField("model")
     field.isAccessible = true
     return field.get(activity) as FlowModel
+}
+
+private fun shownOn(activity: android.app.Activity): List<String> {
+    val compose = findNamed(activity.window.decorView, "androidx.compose.ui.platform.ComposeView")
+    if (compose is androidx.compose.ui.platform.AbstractComposeView) compose.createComposition()
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    val root = findSemanticsView(activity.window.decorView) ?: return emptyList()
+    val owner = root.javaClass.getMethod("getSemanticsOwner").invoke(root) as androidx.compose.ui.semantics.SemanticsOwner
+    val out = mutableListOf<String>()
+    fun walk(node: androidx.compose.ui.semantics.SemanticsNode) {
+        node.config.getOrNull(SemanticsProperties.Text)?.let { pieces ->
+            out.add(pieces.joinToString { it.text })
+        }
+        node.children.forEach { walk(it) }
+    }
+    walk(owner.unmergedRootSemanticsNode)
+    return out
+}
+
+private fun findNamed(view: android.view.View, name: String): android.view.View? {
+    if (view.javaClass.name == name) return view
+    if (view is android.view.ViewGroup) {
+        for (index in 0 until view.childCount) {
+            findNamed(view.getChildAt(index), name)?.let { return it }
+        }
+    }
+    return null
+}
+
+private fun findSemanticsView(view: android.view.View): android.view.View? {
+    if (view.javaClass.methods.any { it.name == "getSemanticsOwner" && it.parameterCount == 0 }) return view
+    if (view is android.view.ViewGroup) {
+        for (index in 0 until view.childCount) {
+            findSemanticsView(view.getChildAt(index))?.let { return it }
+        }
+    }
+    return null
 }
 
 private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentTestRule, model: FlowModel) {
