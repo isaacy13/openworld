@@ -117,6 +117,8 @@ public final class FlowModel: ObservableObject {
     public var progressSeen: DispatchSemaphore?
     /// The scan thread waits here after the first crop so a test can read the estimate.
     public var progressHold: DispatchSemaphore?
+    /// When set, the next scan writes the fixture pack here. A file at this path is refused.
+    public var fixturePackDirectory: URL?
     let phone: Bool
     private let core = CoreClient()
     private var scanRoot: URL?
@@ -394,7 +396,7 @@ public final class FlowModel: ObservableObject {
         scanRoot = root
         return ScanPaths(
             root: root,
-            posters: root.appendingPathComponent("posters"),
+            posters: fixturePackDirectory ?? root.appendingPathComponent("posters"),
             frames: root.appendingPathComponent("frames"),
             result: root.appendingPathComponent("result")
         )
@@ -528,7 +530,15 @@ public final class FlowModel: ObservableObject {
 
 extension CoreClient {
     func runPublic(posters: URL) throws {
-        _ = try run(PhoneArguments.writeFixture(out: posters.path))
+        let data = try run(PhoneArguments.writeFixture(out: posters.path))
+        if let message = Self.refusalMessage(data) {
+            throw CoreFailure(message: message)
+        }
+        let object = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let id = object["id"] as? String
+        if id?.isEmpty != false {
+            throw CoreFailure(message: "The poster pack could not be read. Refusing.")
+        }
     }
 }
 

@@ -98,6 +98,8 @@ class FlowModel {
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
     var bundleNotice by mutableStateOf<String?>(null)
     private var localCopy: File? = null
+    /** When set, the next scan writes the fixture pack here. A file at this path is refused. */
+    internal var fixturePackDirectory: File? = null
 
     fun choose(uri: Uri, resolver: ContentResolver) {
         val copy = File.createTempFile("openworld", null)
@@ -405,9 +407,15 @@ class FlowModel {
             )
         }
         return try {
-            val posters = File(root, "openworld-posters")
+            val posters = fixturePackDirectory ?: File(root, "openworld-posters")
             val out = File(root, "openworld-result")
-            Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
+            val written = Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
+            if (written.optString("status") == "refused") {
+                val message = written.optString("message").ifBlank {
+                    written.optString("summary").ifBlank { "The poster pack could not be read. Refusing." }
+                }
+                return ScanOutcome(root = root, status = "refused", summary = message)
+            }
             val frames = File(root, "openworld-frames")
             val reel = PlatformDecode.writeFrames(file, frames)
             val args = listOf(

@@ -1401,6 +1401,32 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aPosterPackFileRefusesBeforeTheScan() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/poster-pack.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        val blocker = File.createTempFile("ow-posters", "")
+        blocker.writeText("keep")
+        model.fixturePackDirectory = blocker
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertEquals("refused", model.status)
+        assertEquals("The poster pack could not be read. Refusing.", model.summary)
+        assertNull(model.resultDir)
+        assertFalse(model.detail.contains("No candidate is not a clearance."))
+        assertEquals("keep", blocker.readText())
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("The poster pack could not be read. Refusing.").assertExists()
+        compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        compose.onAllNodesWithText("The poster pack is missing. Refusing.").assertCountEquals(0)
+        compose.onAllNodesWithText("Delete").assertCountEquals(0)
+        compose.onNodeWithText("Choose another file").assertExists()
+        blocker.delete()
+    }
+
+    @Test
     fun aDecodeFailureDoesNotRepeatTheRefusal() {
         val model = FlowModel()
         val outcome = model.decodeFailure("Bad codec or unreadable file. Refusing.")

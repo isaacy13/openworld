@@ -631,10 +631,23 @@ class OpenWorld(Gtk.Application):
             self._grab(shot)
         self.posters = self.work / "posters"
         self.out_dir = self.work / "result"
-        subprocess.check_call(
-            [self.bin, "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)],
-            stdout=subprocess.DEVNULL,
+        written = self._run_json(
+            ["--json", "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)]
         )
+        if written.get("status") == "refused" or not written.get("id"):
+            message = written.get("message") or written.get("summary") or "The poster pack could not be read. Refusing."
+            self.out_dir = None
+            self._show_report(
+                {
+                    "status": "refused",
+                    "summary": message,
+                    "message": message,
+                    "disclosure": [],
+                    "candidates": [],
+                    "inventory": [],
+                }
+            )
+            return
         out_dir = self.out_dir
         classes = self._class_args()
         self.scan_thread = threading.Thread(target=self._scan_worker, args=(out_dir, classes), daemon=True)
@@ -1461,6 +1474,23 @@ class OpenWorld(Gtk.Application):
                 f"a warning was mixed into the class line: {self.context_note.get_text()!r} {self.warning_note.get_text()!r}"
             )
             return False
+        blocker = self.work / "posters"
+        blocker.write_bytes(b"keep")
+        self.start_scan()
+        if (
+            self.summary.get_text() != "The poster pack could not be read. Refusing."
+            or blocker.read_bytes() != b"keep"
+            or self.delete_button.get_visible()
+            or self.primary.get_label() != "Choose another file"
+            or not self.primary.get_sensitive()
+            or PHRASES["clearance"] in self.result_note.get_text()
+            or self.stack.get_visible_child_name() != "results"
+        ):
+            self._exercise_fail(
+                f"a poster pack file still started a scan: {self.summary.get_text()!r} {self.result_note.get_text()!r}"
+            )
+            return False
+        blocker.unlink()
         self._exercise_report = None
         self.context_note.set_text("Missing and wanted.")
         self.result_note.set_text(PHRASES["clearance"])

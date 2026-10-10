@@ -291,6 +291,29 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAPosterPackFileRefusesBeforeTheScan() throws {
+        let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("keep".utf8).write(to: blocker)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.fixturePackDirectory = blocker
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertEqual(model.error, "The poster pack could not be read. Refusing.")
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.filter { $0 == "The poster pack could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("The poster pack is missing. Refusing."))
+            XCTAssertFalse(lines.contains("No candidate is not a clearance."))
+            XCTAssertFalse(lines.contains("Delete"))
+            XCTAssertTrue(lines.contains("Choose another file"))
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+        XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
+    }
+
     func testAnalyzeSaysScanningUntilTheResultIsReady() async throws {
         let file = try self.still("blank")
         let model = await MainActor.run { () -> FlowModel in
