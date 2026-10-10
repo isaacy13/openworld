@@ -699,6 +699,8 @@ class OpenWorld(Gtk.Application):
             context.append(f"Bundle: {report['bundle_name']}")
         if report.get("detection_note"):
             context.append(report["detection_note"])
+        if report.get("coverage_note"):
+            context.append(report["coverage_note"])
         if report.get("perception_note"):
             context.append(report["perception_note"])
         self.context_note.set_text("\n".join(context))
@@ -1358,6 +1360,9 @@ class OpenWorld(Gtk.Application):
         if "640 px on the long side." not in self.context_note.get_text():
             self._exercise_fail(f"the result did not repeat the detection size: {self.context_note.get_text()!r}")
             return False
+        if "Every decoded frame." not in self.context_note.get_text():
+            self._exercise_fail(f"the result did not repeat the coverage: {self.context_note.get_text()!r}")
+            return False
         result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
         if result_shot and not getattr(self, "_result_shot_saved", False):
             self._result_shot_saved = True
@@ -1366,7 +1371,7 @@ class OpenWorld(Gtk.Application):
                 check=False,
             )
             adjustment = self.results_scroll.get_vadjustment()
-            adjustment.set_value(max(0, adjustment.get_upper() - adjustment.get_page_size()))
+            adjustment.set_value(0)
             self._grab(result_shot)
         if report.get("status") != "complete":
             self._exercise_fail(report.get("message", "not complete"))

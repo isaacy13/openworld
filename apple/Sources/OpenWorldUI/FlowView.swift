@@ -712,6 +712,9 @@ public struct FlowView: View {
                 if let size = model.report?.detectionNote {
                     Text(size)
                 }
+                if let coverage = model.report?.coverageNote {
+                    Text(coverage)
+                }
                 if let note = model.report?.perceptionNote {
                     Text(note)
                 }

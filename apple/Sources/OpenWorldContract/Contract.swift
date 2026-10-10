@@ -134,6 +134,7 @@ public struct ScanReport: Decodable {
     public var coverageBanner: String?
     public var framesNote: String?
     public var detectionNote: String?
+    public var coverageNote: String?
     public var classNote: String?
     public var perceptionNote: String?
     public var warnings: [String]
@@ -147,6 +148,7 @@ public struct ScanReport: Decodable {
         case coverageBanner = "coverage_banner"
         case framesNote = "frames_note"
         case detectionNote = "detection_note"
+        case coverageNote = "coverage_note"
         case classNote = "class_note"
         case perceptionNote = "perception_note"
         case facesSeenNotCompared = "faces_seen_not_compared"

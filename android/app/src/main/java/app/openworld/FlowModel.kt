@@ -422,6 +422,7 @@ class FlowModel {
             json.present("class_note")?.let(context::add)
             json.present("bundle_name")?.let { context.add("Bundle: $it") }
             json.present("detection_note")?.let(context::add)
+            json.present("coverage_note")?.let(context::add)
             json.present("perception_note")?.let(context::add)
             val warningLines = mutableListOf<String>()
             val warnings = json.optJSONArray("warnings")

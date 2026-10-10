@@ -31,6 +31,14 @@ impl Coverage {
             Coverage::Measured => "measured",
         }
     }
+
+    /// The words of the size-page button, including the period.
+    pub fn label(self) -> &'static str {
+        match self {
+            Coverage::Complete => "Every decoded frame.",
+            Coverage::Measured => "5 frames a second, plus the tracker.",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

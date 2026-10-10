@@ -795,6 +795,9 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
         if let Some(size) = &report.detection_note {
             println!("{size}");
         }
+        if let Some(coverage) = &report.coverage_note {
+            println!("{coverage}");
+        }
         if !report.perception_note.is_empty() {
             println!("{}", report.perception_note);
         }

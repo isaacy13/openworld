@@ -86,6 +86,8 @@ pub struct ScanReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detection_note: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage_note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub class_note: Option<String>,
     pub detection: String,
     pub execution: String,
@@ -904,6 +906,7 @@ impl<'a> Engine<'a> {
             coverage_banner: (self.opts.coverage == Coverage::Measured).then(|| BRIEF_FACE.into()),
             frames_note: frames_note(self.frames_analyzed, self.frames_decoded),
             detection_note: Some(format!("{}.", self.opts.detection.label())),
+            coverage_note: Some(self.opts.coverage.label().into()),
             class_note: Some(class_note(self.opts.missing, self.opts.wanted).into()),
             detection: self.opts.detection.as_str(),
             execution: execution.as_str().into(),
@@ -1015,6 +1018,7 @@ pub fn refused(code: &str, message: &str) -> ScanReport {
         coverage_banner: None,
         frames_note: None,
         detection_note: None,
+        coverage_note: None,
         class_note: None,
         detection: String::new(),
         execution: String::new(),
