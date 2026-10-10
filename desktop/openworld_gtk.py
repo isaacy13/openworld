@@ -239,6 +239,7 @@ class OpenWorld(Gtk.Application):
             ("full", "Full resolution"),
         ):
             button = Gtk.CheckButton(label=label)
+            button.base_label = label
             if group is None:
                 group = button
             else:
@@ -248,16 +249,20 @@ class OpenWorld(Gtk.Application):
             button.connect("toggled", self._on_size, value)
             self.size_buttons[value] = button
             box.append(button)
+        self._mark_sizes()
         cover = Gtk.Label(label="Coverage", xalign=0)
         cover.add_css_class("section")
         cover.set_margin_top(12)
         box.append(cover)
         self.complete_button = Gtk.CheckButton(label="Complete. Every decoded frame.")
+        self.complete_button.base_label = "Complete. Every decoded frame."
         self.measured_button = Gtk.CheckButton(label="Measured. 5 frames a second, plus the tracker.")
+        self.measured_button.base_label = "Measured. 5 frames a second, plus the tracker."
         self.measured_button.set_group(self.complete_button)
         self.complete_button.set_active(True)
         self.complete_button.connect("toggled", self._on_coverage, "complete")
         self.measured_button.connect("toggled", self._on_coverage, "measured")
+        self._mark_coverage()
         self.brief_label = Gtk.Label(label=PHRASES["brief"], xalign=0)
         self.brief_label.set_visible(False)
         box.append(self.complete_button)
@@ -456,14 +461,31 @@ class OpenWorld(Gtk.Application):
             self.bundle_id = row.bundle_id
             self._mark_bundle_rows()
 
+    def _selected_label(self, label: str, selected: bool) -> str:
+        if not selected:
+            return label
+        if label.endswith("."):
+            return f"{label} Selected."
+        return f"{label}. Selected."
+
+    def _mark_sizes(self) -> None:
+        for button in self.size_buttons.values():
+            button.set_label(self._selected_label(button.base_label, button.get_active()))
+
+    def _mark_coverage(self) -> None:
+        for button in (self.complete_button, self.measured_button):
+            button.set_label(self._selected_label(button.base_label, button.get_active()))
+
     def _on_size(self, button: Gtk.CheckButton, value: str) -> None:
         if button.get_active():
             self.long_side = value
+        self._mark_sizes()
 
     def _on_coverage(self, button: Gtk.CheckButton, value: str) -> None:
         if button.get_active():
             self.coverage = value
             self.brief_label.set_visible(value == "measured")
+        self._mark_coverage()
 
     def refresh_estimate(self) -> None:
         if not self.input_path:
@@ -1142,6 +1164,17 @@ class OpenWorld(Gtk.Application):
             or 'the label is "Not compared."' not in size_hint
         ):
             self._exercise_fail(f"the size page did not explain what is left out: {size_hint!r}")
+            return False
+        if (
+            self.size_buttons["640"].get_label() != "640 px on the long side. Selected."
+            or self.size_buttons["full"].get_label() != "Full resolution"
+            or self.complete_button.get_label() != "Complete. Every decoded frame. Selected."
+            or self.measured_button.get_label() != "Measured. 5 frames a second, plus the tracker."
+        ):
+            self._exercise_fail(
+                "the size page did not mark the choice: "
+                f"{self.size_buttons['640'].get_label()!r} {self.complete_button.get_label()!r}"
+            )
             return False
         size_shot = os.environ.get("OPENWORLD_SIZE_SHOT")
         if size_shot:

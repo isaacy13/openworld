@@ -28,6 +28,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+internal fun markedChoice(title: String, selected: Boolean): String {
+    if (!selected) return title
+    return if (title.endsWith(".")) "$title Selected." else "$title. Selected."
+}
+
 private object ProductCopy {
     const val possible = "Possible candidate. Not an identification."
     const val incomplete = "Incomplete."
@@ -86,10 +91,14 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             Text("The scan program is not on this device. Refusing.")
                         }
                         model.bundleRows.forEach { (id, title, curve) ->
+                            val lines = title.lines()
+                            val name = lines.firstOrNull().orEmpty()
+                            val best = lines.drop(1).joinToString("\n")
                             androidx.compose.foundation.layout.Row {
                                 RadioButton(selected = model.bundleId == id, onClick = { model.bundleId = id })
                                 Column {
-                                    Text(title, style = MaterialTheme.typography.titleMedium)
+                                    Text(markedChoice(name, model.bundleId == id), style = MaterialTheme.typography.titleMedium)
+                                    if (best.isNotBlank()) Text(best)
                                     Text(curve)
                                 }
                             }
@@ -102,17 +111,17 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         listOf("320" to "320 px on the long side", "480" to "480 px on the long side", "640" to "640 px on the long side", "full" to "Full resolution").forEach { (value, label) ->
                             androidx.compose.foundation.layout.Row {
                                 RadioButton(selected = model.longSide == value, onClick = { model.longSide = value })
-                                Text(label, modifier = Modifier.padding(top = 12.dp))
+                                Text(markedChoice(label, model.longSide == value), modifier = Modifier.padding(top = 12.dp))
                             }
                         }
                         Text("Coverage", style = MaterialTheme.typography.titleMedium)
                         androidx.compose.foundation.layout.Row {
                             RadioButton(selected = model.coverage == "complete", onClick = { model.coverage = "complete" })
-                            Text("Complete. Every decoded frame.", modifier = Modifier.padding(top = 12.dp))
+                            Text(markedChoice("Complete. Every decoded frame.", model.coverage == "complete"), modifier = Modifier.padding(top = 12.dp))
                         }
                         androidx.compose.foundation.layout.Row {
                             RadioButton(selected = model.coverage == "measured", onClick = { model.coverage = "measured" })
-                            Text("Measured. 5 frames a second, plus the tracker.", modifier = Modifier.padding(top = 12.dp))
+                            Text(markedChoice("Measured. 5 frames a second, plus the tracker.", model.coverage == "measured"), modifier = Modifier.padding(top = 12.dp))
                         }
                         if (model.coverage == "measured") Text("A brief face can be missed.")
                         Button(onClick = model::continueFromSize) { Text("Continue") }

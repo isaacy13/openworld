@@ -545,6 +545,17 @@ fn analyze(
     let long_side = match long_side {
         Some(value) => value,
         None => {
+            if !json_mode {
+                println!("Detection size:");
+                for (id, label) in [
+                    ("320", "320 px on the long side"),
+                    ("480", "480 px on the long side"),
+                    ("640", "640 px on the long side"),
+                    ("full", "Full resolution"),
+                ] {
+                    println!("  {id} — {}", marked_name(label, id == "640"));
+                }
+            }
             let entered = prompt("Detection long side (320, 480, 640, full) [640]:")?;
             if entered.is_empty() {
                 "640".into()
@@ -556,6 +567,15 @@ fn analyze(
     let coverage = match coverage {
         Some(value) => value,
         None => {
+            if !json_mode {
+                println!("Coverage:");
+                for (id, label) in [
+                    ("complete", "Complete. Every decoded frame."),
+                    ("measured", "Measured. 5 frames a second, plus the tracker."),
+                ] {
+                    println!("  {id} — {}", marked_name(label, id == "complete"));
+                }
+            }
             let entered = prompt("Coverage (complete, measured) [complete]:")?;
             if entered.is_empty() {
                 "complete".into()
@@ -954,10 +974,13 @@ fn prompt(text: &str) -> Result<String, String> {
 }
 
 fn marked_name(name: &str, selected: bool) -> String {
-    if selected {
-        format!("{name}. Selected.")
+    if !selected {
+        return name.to_string();
+    }
+    if name.ends_with('.') {
+        format!("{name} Selected.")
     } else {
-        name.to_string()
+        format!("{name}. Selected.")
     }
 }
 
@@ -1606,5 +1629,13 @@ mod cli_tests {
         assert!(listed.iter().any(|line| line.contains("Not measured yet.")));
         assert_eq!(marked_name("Fast", true), "Fast. Selected.");
         assert_eq!(marked_name("Accurate", false), "Accurate");
+        assert_eq!(
+            marked_name("Complete. Every decoded frame.", true),
+            "Complete. Every decoded frame. Selected."
+        );
+        assert_eq!(
+            marked_name("640 px on the long side", true),
+            "640 px on the long side. Selected."
+        );
     }
 }
