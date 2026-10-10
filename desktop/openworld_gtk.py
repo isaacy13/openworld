@@ -8,6 +8,7 @@ import atexit
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
@@ -108,6 +109,7 @@ class OpenWorld(Gtk.Application):
         self.out_dir: Path | None = None
         self.posters: Path | None = None
         self.scan_thread: threading.Thread | None = None
+        self.scan_proc: subprocess.Popen[str] | None = None
 
     def do_activate(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self, title="OpenWorld")
@@ -797,7 +799,9 @@ class OpenWorld(Gtk.Application):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
+        self.scan_proc = proc
 
         def on_line(line: str) -> None:
             line = line.strip()
@@ -809,12 +813,16 @@ class OpenWorld(Gtk.Application):
                 return
             GLib.idle_add(self._add_crop, event)
 
-        stdout = drain_scan_pipes(proc, on_line)
         try:
-            report = json.loads(stdout)
-        except json.JSONDecodeError:
-            report = self._unreadable_scan_report()
-        GLib.idle_add(self._show_report, report)
+            stdout = drain_scan_pipes(proc, on_line)
+            try:
+                report = json.loads(stdout)
+            except json.JSONDecodeError:
+                report = self._unreadable_scan_report()
+            GLib.idle_add(self._show_report, report)
+        finally:
+            if self.scan_proc is proc:
+                self.scan_proc = None
 
     def _add_crop(self, event: dict) -> bool:
         kind = event.get("kind")
@@ -1126,7 +1134,28 @@ class OpenWorld(Gtk.Application):
     def _remove_work(self) -> None:
         shutil.rmtree(self.work, ignore_errors=True)
 
+    def _stop_scan(self) -> None:
+        """Closing the window stops a scan that is still running, so its folder can be removed."""
+        proc = self.scan_proc
+        if proc is not None and proc.poll() is None:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    proc.kill()
+                proc.wait(timeout=2)
+        thread = self.scan_thread
+        if thread is not None and thread.daemon and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=2)
+
     def do_shutdown(self) -> None:
+        self._stop_scan()
         self._remove_work()
         Gtk.Application.do_shutdown(self)
 
