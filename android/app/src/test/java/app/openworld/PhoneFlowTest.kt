@@ -760,7 +760,6 @@ class PhoneScreenTest {
     val compose = createComposeRule()
 
     @Test
-    @Test
     fun anUnreadableImportShowsTheRefusalOnTheChoosePage() {
         val model = FlowModel()
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
