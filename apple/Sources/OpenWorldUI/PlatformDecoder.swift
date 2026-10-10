@@ -287,8 +287,11 @@ enum PlatformDecoder {
     }
 
     private static func isVideo(_ url: URL) -> Bool {
-        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
-        return type.conforms(to: .movie) || type.conforms(to: .video)
+        if let type = UTType(filenameExtension: url.pathExtension),
+           type.conforms(to: .movie) || type.conforms(to: .video) {
+            return true
+        }
+        return StillMotion.movieContainer(url)
     }
 
     /// A quarter turn exchanges the coded axes. A half turn does not.

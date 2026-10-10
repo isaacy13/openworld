@@ -185,6 +185,35 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAVideoWithoutAnExtensionIsAMovieContainer() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-bare-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let named = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", named.path])
+        let bare = root.appendingPathComponent("clip")
+        try FileManager.default.copyItem(at: named, to: bare)
+        XCTAssertTrue(StillMotion.movieContainer(bare))
+        XCTAssertTrue(StillMotion.movieContainer(named))
+        let webm = root.appendingPathComponent("clip.webm")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2", "-an", "-c:v", "libvpx", webm.path])
+        let bareWebm = root.appendingPathComponent("webm")
+        try FileManager.default.copyItem(at: webm, to: bareWebm)
+        XCTAssertTrue(StillMotion.movieContainer(bareWebm))
+        let avi = root.appendingPathComponent("avi")
+        let aviBytes = Array("RIFF".utf8) + [UInt8](repeating: 0, count: 4) + Array("AVI ".utf8)
+        try Data(aviBytes).write(to: avi)
+        XCTAssertTrue(StillMotion.movieContainer(avi))
+        let heic = root.appendingPathComponent("still")
+        let heicBytes = [UInt8](repeating: 0, count: 4) + Array("ftypheic".utf8)
+        try Data(heicBytes).write(to: heic)
+        XCTAssertFalse(StillMotion.movieContainer(heic))
+        let png = try still("blank")
+        XCTAssertFalse(StillMotion.movieContainer(png))
+        let jpeg = root.appendingPathComponent("photo")
+        try Data([0xFF, 0xD8, 0xFF, 0xD9] + [UInt8](repeating: 0, count: 8)).write(to: jpeg)
+        XCTAssertFalse(StillMotion.movieContainer(jpeg))
+    }
+
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
         let apng = try movingPicture("apng")
         XCTAssertTrue(StillMotion.animatedPng(apng))

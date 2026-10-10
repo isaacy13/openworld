@@ -43,4 +43,23 @@ public enum StillMotion {
         }
         return false
     }
+
+    /// A movie container, including a file whose name has no extension.
+    /// HEIF and AVIF stay stills. A JPEG, a PNG, and a still WebP stay stills.
+    public static func movieContainer(_ url: URL) -> Bool {
+        guard let input = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? input.close() }
+        guard let head = try? input.read(upToCount: 12), head.count == 12 else { return false }
+        let bytes = [UInt8](head)
+        if bytes[0] == 0x1A && bytes[1] == 0x45 && bytes[2] == 0xDF && bytes[3] == 0xA3 {
+            return true
+        }
+        if Array(bytes[0..<4]) == Array("RIFF".utf8) && Array(bytes[8..<12]) == Array("AVI ".utf8) {
+            return true
+        }
+        if Array(bytes[4..<8]) != Array("ftyp".utf8) { return false }
+        let brand = String(bytes: bytes[8..<12], encoding: .ascii) ?? ""
+        let still: Set<String> = ["heic", "heix", "hevc", "heif", "mif1", "msf1", "avif", "avis"]
+        return !still.contains(brand)
+    }
 }
