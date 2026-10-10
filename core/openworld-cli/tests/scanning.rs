@@ -1120,6 +1120,68 @@ fn a_still_that_cannot_be_written_uses_the_refusal() {
     assert!(scene.is_dir());
 }
 
+#[test]
+fn a_fixture_still_answer_is_a_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("still.png");
+    let cases = [
+        (
+            vec!["fixture-still", "--scene", "--blank", "--out", out.to_str().unwrap()],
+            "Choose a scene or a blank still.",
+        ),
+        (
+            vec!["fixture-still", "--module", "0", "--out", out.to_str().unwrap()],
+            "Module size must be at least 1.",
+        ),
+        (
+            vec!["fixture-still", "--x", "8", "--out", out.to_str().unwrap()],
+            "Provide both x and y, or neither.",
+        ),
+        (
+            vec![
+                "fixture-still",
+                "--below-cutoff",
+                "--x",
+                "8",
+                "--y",
+                "8",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            "A below-cutoff still picks its own origin.",
+        ),
+        (
+            vec![
+                "fixture-still",
+                "--x",
+                "390",
+                "--y",
+                "300",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            "The marker does not fit on the still.",
+        ),
+    ];
+    for (args, sentence) in cases {
+        let (code, text, err) = run(false, &args);
+        assert_eq!(code, Some(2), "{sentence}\n{err}\n{text}");
+        assert_eq!(text.trim(), sentence, "{err}");
+        assert!(err.is_empty(), "{err}");
+        assert!(!out.exists(), "{sentence}");
+
+        let (code, text, err) = run(true, &args);
+        assert_eq!(code, Some(2), "{sentence}\n{err}\n{text}");
+        let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+        assert_eq!(doc["status"], "refused");
+        assert_eq!(doc["summary"], sentence);
+        assert_eq!(doc["message"], sentence);
+        assert!(doc.get("detail").is_none(), "{text}");
+        assert!(err.is_empty(), "{err}");
+        assert!(!out.exists(), "{sentence}");
+    }
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {

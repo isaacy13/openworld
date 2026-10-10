@@ -835,7 +835,7 @@ fn fixture_still(
     json_mode: bool,
 ) -> Result<i32, String> {
     if scene && blank_canvas {
-        return Err("Choose a scene or a blank still.".into());
+        return command_refusal(json_mode, "Choose a scene or a blank still.");
     }
     if blank_canvas {
         let ready = ensure_parent(out, json_mode)?;
@@ -854,7 +854,7 @@ fn fixture_still(
         return Ok(0);
     }
     if !scene && module == 0 {
-        return Err("Module size must be at least 1.".into());
+        return command_refusal(json_mode, "Module size must be at least 1.");
     }
     let fast = match require_fast(bundles) {
         Ok(bundle) => bundle,
@@ -887,14 +887,17 @@ fn fixture_still(
     let (mw, mh) = marker.dimensions();
     let (px, py) = match (x, y, below_cutoff) {
         (Some(_), Some(_), true) => {
-            return Err("A below-cutoff still picks its own origin.".into());
+            return command_refusal(json_mode, "A below-cutoff still picks its own origin.");
         }
         (Some(x), Some(y), false) => (x, y),
-        (None, None, below) => find_origin(id, mw, mh, threshold, below)?,
-        _ => return Err("Provide both x and y, or neither.".into()),
+        (None, None, below) => match find_origin(id, mw, mh, threshold, below) {
+            Ok(origin) => origin,
+            Err(message) => return command_refusal(json_mode, &message),
+        },
+        _ => return command_refusal(json_mode, "Provide both x and y, or neither."),
     };
     if px.saturating_add(mw) > 400 || py.saturating_add(mh) > 320 {
-        return Err("The marker does not fit on the still.".into());
+        return command_refusal(json_mode, "The marker does not fit on the still.");
     }
     let mut image = blank(400, 320);
     fiducial::place(&mut image, &marker, px, py);
@@ -955,6 +958,19 @@ fn ensure_parent(out: &Path, json_mode: bool) -> Result<i32, String> {
         }
     }
     Ok(0)
+}
+
+fn command_refusal(json_mode: bool, message: &str) -> Result<i32, String> {
+    emit(
+        json_mode,
+        json!({
+            "status": "refused",
+            "summary": message,
+            "message": message,
+        }),
+    );
+    speak(json_mode, [message]);
+    Ok(2)
 }
 
 fn write_still(saved: bool, json_mode: bool) -> Result<i32, String> {
