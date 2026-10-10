@@ -135,12 +135,12 @@ public enum PhonePreview {
         }
     }
 
-    /// Disclosure from the report. An unreadable scan still names what stays on the device, and it leaves out the clearance sentence.
+    /// Disclosure from the report. A refusal that never became a report still names what stays on the device, and it leaves out the clearance sentence.
     public static func disclosureLines(_ model: FlowModel) -> [String] {
         if let report = model.report {
             return report.disclosure
         }
-        if model.error == "The scan could not be read. Refusing." {
+        if let error = model.error, error.contains("Refusing.") {
             return Copy.disclosure.filter { $0 != Copy.clearance }
         }
         return []

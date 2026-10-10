@@ -385,6 +385,8 @@ final class OpenWorldUITests: XCTestCase {
             let lines = PhonePreview.lines(screen: "results", model: model)
             XCTAssertEqual(lines.filter { $0 == "The poster pack could not be read. Refusing." }.count, 1)
             XCTAssertFalse(lines.contains("The poster pack is missing. Refusing."))
+            XCTAssertTrue(lines.contains("Nothing is uploaded."))
+            XCTAssertTrue(lines.contains("On-device does not mean the file is real."))
             XCTAssertFalse(lines.contains("No candidate is not a clearance."))
             XCTAssertFalse(lines.contains("Delete"))
             XCTAssertTrue(lines.contains("Choose another file"))

@@ -646,7 +646,7 @@ class OpenWorld(Gtk.Application):
                     "status": "refused",
                     "summary": message,
                     "message": message,
-                    "disclosure": [],
+                    "disclosure": self._refusal_disclosure(),
                     "candidates": [],
                     "inventory": [],
                 }
@@ -730,20 +730,23 @@ class OpenWorld(Gtk.Application):
         self.strip_heading.set_visible(True)
         return False
 
+    def _refusal_disclosure(self) -> list[str]:
+        return [
+            "Nothing is uploaded.",
+            "Nobody is enrolled.",
+            "OpenWorld does not train on this file.",
+            "OpenWorld does not contact an agency.",
+            "A candidate is not an identification.",
+            "This file is not authenticated.",
+            "On-device does not mean the file is real.",
+        ]
+
     def _unreadable_scan_report(self) -> dict:
         return {
             "status": "refused",
             "summary": "The scan could not be read. Refusing.",
             "message": "The scan could not be read. Refusing.",
-            "disclosure": [
-                "Nothing is uploaded.",
-                "Nobody is enrolled.",
-                "OpenWorld does not train on this file.",
-                "OpenWorld does not contact an agency.",
-                "A candidate is not an identification.",
-                "This file is not authenticated.",
-                "On-device does not mean the file is real.",
-            ],
+            "disclosure": self._refusal_disclosure(),
             "candidates": [],
             "inventory": [],
         }
@@ -1592,6 +1595,8 @@ class OpenWorld(Gtk.Application):
             or self.delete_button.get_visible()
             or self.primary.get_label() != "Choose another file"
             or not self.primary.get_sensitive()
+            or "Nothing is uploaded." not in self.result_note.get_text()
+            or "On-device does not mean the file is real." not in self.result_note.get_text()
             or PHRASES["clearance"] in self.result_note.get_text()
             or self.stack.get_visible_child_name() != "results"
         ):

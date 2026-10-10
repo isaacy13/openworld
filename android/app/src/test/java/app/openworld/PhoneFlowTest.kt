@@ -1476,6 +1476,8 @@ class PhoneScreenTest {
         assertEquals("refused", model.status)
         assertEquals("The poster pack could not be read. Refusing.", model.summary)
         assertNull(model.resultDir)
+        assertTrue(model.detail.contains("Nothing is uploaded."))
+        assertTrue(model.detail.contains("On-device does not mean the file is real."))
         assertFalse(model.detail.contains("No candidate is not a clearance."))
         assertEquals("keep", blocker.readText())
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
@@ -1499,6 +1501,8 @@ class PhoneScreenTest {
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
         compose.onAllNodesWithText("Bad codec or unreadable file. Refusing.").assertCountEquals(1)
         compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        assertTrue(outcome.detail.contains("Nothing is uploaded."))
+        assertTrue(outcome.detail.contains("On-device does not mean the file is real."))
         val stopped = model.decodeFailure("The file was not fully decoded.")
         assertEquals("Incomplete.", stopped.summary)
         assertEquals("The file was not fully decoded.", stopped.incompleteReason)

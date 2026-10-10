@@ -423,7 +423,12 @@ class FlowModel {
                 val message = written.optString("message").ifBlank {
                     written.optString("summary").ifBlank { "The poster pack could not be read. Refusing." }
                 }
-                return ScanOutcome(root = root, status = "refused", summary = message)
+                return ScanOutcome(
+                    root = root,
+                    status = "refused",
+                    summary = message,
+                    detail = refusalDisclosure(),
+                )
             }
             val frames = File(root, "openworld-frames")
             val reel = PlatformDecode.writeFrames(file, frames)
@@ -578,7 +583,7 @@ class FlowModel {
             status = status,
             summary = summary,
             incompleteReason = if (status == "incomplete" && text != summary) text else "",
-            detail = "",
+            detail = if (status == "refused") refusalDisclosure() else "",
         )
     }
 
