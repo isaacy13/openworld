@@ -400,7 +400,9 @@ class PhoneFlowTest {
         model.continueFromSize()
         model.analyze()
         assertEquals("No candidate is not a clearance.", model.summary)
-        assertTrue(model.context.contains("This file is older than about 30 days."))
+        assertTrue(model.warnings.contains("This file is older than about 30 days."))
+        assertFalse(model.context.contains("This file is older than about 30 days."))
+        assertTrue(model.context.contains("Missing and wanted."))
         assertFalse(model.detail.contains("Open FBI page"))
     }
 

@@ -26,6 +26,7 @@ internal class ScanOutcome(
     val summary: String = "",
     val incompleteReason: String = "",
     val context: String = "",
+    val warnings: String = "",
     val detail: String = "",
     val rows: List<CandidateRow> = emptyList(),
     val strip: List<Pair<String, String>> = emptyList(),
@@ -59,6 +60,7 @@ class FlowModel {
     var status by mutableStateOf("")
     var incompleteReason by mutableStateOf("")
     var context by mutableStateOf("")
+    var warnings by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var leaveNotice by mutableStateOf<String?>(null)
@@ -168,6 +170,7 @@ class FlowModel {
         status = ""
         incompleteReason = ""
         context = ""
+        warnings = ""
         detail = ""
         strip = emptyList()
         fbiUrl = null
@@ -187,6 +190,7 @@ class FlowModel {
         status = "deleted"
         incompleteReason = ""
         context = ""
+        warnings = ""
         detail = ""
         strip = emptyList()
         candidateRows = emptyList()
@@ -384,10 +388,11 @@ class FlowModel {
             json.present("class_note")?.let(context::add)
             json.present("bundle_name")?.let { context.add("Bundle: $it") }
             json.present("perception_note")?.let(context::add)
+            val warningLines = mutableListOf<String>()
             val warnings = json.optJSONArray("warnings")
             if (warnings != null) {
                 for (i in 0 until warnings.length()) {
-                    if (!warnings.isNull(i)) context.add(warnings.getString(i))
+                    if (!warnings.isNull(i)) warningLines.add(warnings.getString(i))
                 }
             }
             val lines = mutableListOf<String>()
@@ -430,6 +435,7 @@ class FlowModel {
                 summary = summary,
                 incompleteReason = if (status == "incomplete" && reason != null && reason != summary) reason else "",
                 context = context.joinToString("\n"),
+                warnings = warningLines.joinToString("\n"),
                 detail = lines.joinToString("\n"),
                 rows = rows,
                 strip = pictures,
@@ -455,6 +461,7 @@ class FlowModel {
         summary = outcome.summary
         incompleteReason = outcome.incompleteReason
         context = outcome.context
+        warnings = outcome.warnings
         detail = outcome.detail
         candidateRows = outcome.rows
         fbiUrl = outcome.rows.firstOrNull()?.url

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -159,6 +160,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         )
                         if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
                         if (model.context.isNotBlank()) Text(model.context)
+                        if (model.warnings.isNotBlank()) Text(model.warnings, color = Color(0xFF8A5A00))
                         model.candidateRows.forEach { row ->
                             Text(row.wording, style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
