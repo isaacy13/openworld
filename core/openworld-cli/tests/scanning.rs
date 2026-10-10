@@ -105,3 +105,100 @@ fn a_scan_says_scanning_and_names_each_crop() {
     assert_eq!(lines.get(1), Some(&"No candidate is not a clearance."));
     assert!(lines.iter().all(|line| *line != "Crops from this file."));
 }
+
+#[test]
+fn an_old_file_is_warned_before_the_estimate() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("still.png");
+    let (code, _text, err) = run(
+        false,
+        &["fixture-still", "--blank", "--out", still.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let fresh = run(false, &["estimate", "--input", still.to_str().unwrap()]);
+    assert_eq!(fresh.0, Some(0), "{}", fresh.2);
+    assert!(fresh
+        .1
+        .lines()
+        .all(|line| line != "This file is older than about 30 days."));
+
+    let file = std::fs::File::options().write(true).open(&still).unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(40 * 24 * 3600);
+    file.set_modified(old).unwrap();
+    drop(file);
+    let (code, text, err) = run(false, &["estimate", "--input", still.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{err}");
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(
+        lines.first(),
+        Some(&"This file is older than about 30 days.")
+    );
+    let caveat = lines
+        .iter()
+        .position(|line| *line == "This is a planning estimate, not a thermal measurement.")
+        .expect("caveat");
+    assert!(caveat > 0);
+    assert!(lines
+        .iter()
+        .all(|line| *line != "The file timestamps disagree."));
+
+    let posters = dir.path().join("posters");
+    let (code, _text, err) = run(
+        false,
+        &[
+            "posters",
+            "write-fixture",
+            "--out",
+            posters.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let out = dir.path().join("result");
+    let (code, text, err) = run(
+        false,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            still.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let lines: Vec<_> = text.lines().collect();
+    let warning = "This file is older than about 30 days.";
+    let first = lines
+        .iter()
+        .position(|line| *line == warning)
+        .expect("file warning");
+    let uploaded = lines
+        .iter()
+        .position(|line| *line == "Nothing is uploaded.")
+        .expect("disclosure");
+    let second = lines
+        .iter()
+        .rposition(|line| *line == warning)
+        .expect("later warning");
+    let fixture = lines
+        .iter()
+        .position(|line| *line == "Fixture posters. Real FBI photos stay off.")
+        .expect("fixture");
+    assert!(
+        first < uploaded && uploaded < fixture && fixture < second,
+        "{lines:?}"
+    );
+    assert_eq!(lines[first - 1], "still.png");
+    let saved = std::fs::read(out.join("result.json")).unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+    let warnings = report["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|line| line == warning));
+}

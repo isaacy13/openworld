@@ -309,6 +309,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                             req.coverage,
                             req.missing,
                             req.wanted,
+                            file_is_old(&input),
                         ) {
                             println!("{line}");
                         }
@@ -529,14 +530,13 @@ fn analyze(
     no_wanted: bool,
     yes: bool,
 ) -> Result<i32, String> {
-    println!("{}", openworld_core::copy::ON_DEVICE);
-    for line in openworld_core::copy::DISCLOSURE {
-        println!("{line}");
-    }
     let input = match input {
         Some(path) => path,
         None => PathBuf::from(prompt("Photo or video path:")?),
     };
+    for line in device_lines(&input) {
+        println!("{line}");
+    }
     let all = load_bundles(bundles).map_err(|e| e.to_string())?;
     if !json_mode {
         println!("Bundles:");
@@ -651,6 +651,7 @@ fn analyze(
                 req.coverage,
                 req.missing,
                 req.wanted,
+                file_is_old(&input),
             ) {
                 println!("{line}");
             }
@@ -948,6 +949,34 @@ fn human_lines(report: &openworld_core::ScanReport) -> Vec<String> {
 }
 
 /// The estimate a person reads, in the same order as the estimate screen.
+fn file_is_old(path: &Path) -> bool {
+    let mtime = std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok();
+    openworld_core::media_warnings(mtime, None, SystemTime::now())
+        .iter()
+        .any(|line| line == openworld_core::copy::OLD_FILE)
+}
+
+fn device_lines(path: &Path) -> Vec<String> {
+    let mut lines = vec![openworld_core::copy::ON_DEVICE.to_string()];
+    if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+        if !name.is_empty() {
+            lines.push(name.to_string());
+        }
+    }
+    if file_is_old(path) {
+        lines.push(openworld_core::copy::OLD_FILE.to_string());
+    }
+    lines.extend(
+        openworld_core::copy::DISCLOSURE
+            .iter()
+            .map(|line| (*line).to_string()),
+    );
+    lines.push("Fixture posters. Real FBI photos stay off.".into());
+    lines
+}
+
 fn estimate_lines(
     est: &openworld_core::estimate::Estimate,
     bundle_name: &str,
@@ -955,8 +984,14 @@ fn estimate_lines(
     coverage: Coverage,
     missing: bool,
     wanted: bool,
+    old_file: bool,
 ) -> Vec<String> {
-    let mut lines = vec![est.human.clone(), est.caveat.clone()];
+    let mut lines = Vec::new();
+    if old_file {
+        lines.push(openworld_core::copy::OLD_FILE.to_string());
+    }
+    lines.push(est.human.clone());
+    lines.push(est.caveat.clone());
     if let Some(note) = &est.device_note {
         lines.push(note.clone());
     }
@@ -1605,6 +1640,7 @@ mod cli_tests {
             Coverage::Measured,
             true,
             true,
+            false,
         );
         assert_eq!(lines[0], measured.human);
         assert_eq!(
@@ -1636,12 +1672,28 @@ mod cli_tests {
             lines.last().map(String::as_str),
             Some("Missing and wanted.")
         );
+        let aged = estimate_lines(
+            &measured,
+            "Fast",
+            DetectionSize::Px(640),
+            Coverage::Measured,
+            true,
+            true,
+            true,
+        );
+        assert_eq!(aged[0], "This file is older than about 30 days.");
+        assert_eq!(aged[1], measured.human);
+        assert!(aged
+            .iter()
+            .all(|line| line != "The file timestamps disagree."));
+        assert_eq!(aged.last().map(String::as_str), Some("Missing and wanted."));
         let missing_only = estimate_lines(
             &measured,
             "Fast",
             DetectionSize::Px(640),
             Coverage::Measured,
             true,
+            false,
             false,
         );
         let brief = missing_only
@@ -1658,6 +1710,7 @@ mod cli_tests {
             "Fast",
             DetectionSize::Px(640),
             Coverage::Measured,
+            false,
             false,
             false,
         );
@@ -1683,6 +1736,7 @@ mod cli_tests {
             Coverage::Complete,
             false,
             true,
+            false,
         );
         assert!(still
             .iter()
