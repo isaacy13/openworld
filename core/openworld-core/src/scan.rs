@@ -2,7 +2,7 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
+    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
     PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
@@ -861,10 +861,7 @@ impl<'a> Engine<'a> {
         };
         let execution = self.models.as_ref().map(|models| models.execution).unwrap_or(self.opts.execution);
         let perception_note = if self.pack.perception == PERCEPTION_FIDUCIAL {
-            format!(
-                "Fixture markers were read. {} weights are not what ran, so this is not a {} scan.",
-                self.bundle.detector, self.bundle.detector
-            )
+            FIXTURE_MARKERS.to_string()
         } else {
             format!("Weights from {} ran.", self.bundle.name)
         };

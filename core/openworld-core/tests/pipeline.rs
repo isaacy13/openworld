@@ -3,8 +3,8 @@
 use image::{ImageEncoder, Rgb, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
-    BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER,
-    PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
+    PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::fiducial::{self, render_face_module, render_plate, render_vehicle};
@@ -143,7 +143,8 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert!(report.faces_seen_not_compared >= 1);
     assert!(report.faces_embedded >= 1);
     assert!(report.inventory.iter().any(|i| i.crop.is_some()));
-    assert!(report.perception_note.contains("not a SCRFD"));
+    assert_eq!(report.perception_note, FIXTURE_MARKERS);
+    assert!(!report.perception_note.contains("SCRFD"));
     let face = report.candidates.iter().find(|c| c.kind == "face").unwrap();
     assert!(face.uncertainty.contains("Score "));
     assert!(face.uncertainty.contains("Fast keeps a candidate at"));
