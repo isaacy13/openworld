@@ -243,6 +243,10 @@ fn missing_bundle_missing_pack_and_bad_perception_refuse() {
         &mut |_| {},
     );
     assert_eq!(missing_bundle.refusal.as_deref(), Some("bundle_not_found"));
+    assert_eq!(
+        missing_bundle.summary,
+        "That bundle is not in the catalog. Refusing."
+    );
     assert_ne!(missing_bundle.summary, NO_CLEARANCE);
 
     let missing_pack = scan_path(
@@ -476,6 +480,10 @@ fn estimate_refuses_a_zero_size_and_an_unknown_bundle() {
     ))
     .unwrap_err();
     assert_eq!(unknown.refusal.as_deref(), Some("bundle_not_found"));
+    assert_eq!(
+        unknown.summary,
+        "That bundle is not in the catalog. Refusing."
+    );
 }
 
 #[test]

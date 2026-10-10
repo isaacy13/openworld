@@ -328,10 +328,10 @@ fn analyze_yes_uses_the_preselected_choices() {
         ],
     );
     assert_eq!(code, Some(0), "{err}\n{text}");
-    assert!(!text.contains("Bundle [fast]:"));
+    assert!(!text.contains("Model bundle [fast]:"));
     assert!(!text.contains("Detection size (320"));
     assert!(!text.contains("Coverage (complete"));
-    assert!(!err.contains("Bundle [fast]:"));
+    assert!(!err.contains("Model bundle [fast]:"));
     assert!(text.lines().any(|line| line == "Estimate"));
     let saved = std::fs::read(out.join("result.json")).unwrap();
     let report: serde_json::Value = serde_json::from_slice(&saved).unwrap();

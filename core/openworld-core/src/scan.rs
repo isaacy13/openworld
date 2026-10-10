@@ -208,7 +208,7 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
         .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
     {
         Some(bundle) => bundle,
-        None => return refused("bundle_not_found", "That bundle is not in the catalog."),
+        None => return refused("bundle_not_found", "That bundle is not in the catalog. Refusing."),
     };
     let pack = match crate::posters::load_pack(&req.posters_dir, req.now) {
         Ok(pack) => pack,
@@ -1084,7 +1084,7 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
     let bundle = crate::bundle::load_bundles(&req.bundles_dir)
         .ok()
         .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
-        .ok_or_else(|| refused("bundle_not_found", "That bundle is not in the catalog."))?;
+        .ok_or_else(|| refused("bundle_not_found", "That bundle is not in the catalog. Refusing."))?;
     let (frames, fps, duration, long_side) = if let Some(media) = &req.media {
         if media.width == 0 || media.height == 0 || media.frames == 0 {
             return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));

@@ -563,7 +563,7 @@ fn analyze(
                     println!("{line}");
                 }
             }
-            let entered = prompt("Bundle [fast]:", json_mode)?;
+            let entered = prompt("Model bundle [fast]:", json_mode)?;
             if entered.is_empty() {
                 "fast".into()
             } else {
