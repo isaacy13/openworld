@@ -154,6 +154,7 @@ class OpenWorld(Gtk.Application):
             xalign=0,
             wrap=True,
         )
+        self.choose_hint = hint
         hint.add_css_class("dim")
         button = Gtk.Button(label="Choose File")
         button.set_halign(Gtk.Align.START)
@@ -1846,7 +1847,11 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(f"FBI page was blocked: {message} {allowed}")
             return False
         self.choose_another()
-        if self.stack.get_visible_child_name() != "choose" or self.input_path is not None:
+        if (
+            self.stack.get_visible_child_name() != "choose"
+            or self.input_path is not None
+            or self.choose_hint.get_text() != "Import a file you already have. Drop it here, or use Choose File. There is no camera."
+        ):
             self._exercise_fail("choose another did not return to the start")
             return False
         orphan = self.work / "not-a-result"

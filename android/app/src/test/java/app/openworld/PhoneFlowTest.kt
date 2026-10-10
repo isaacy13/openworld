@@ -1714,7 +1714,7 @@ class PhoneLaunchTest {
     @Test
     fun coldStartAsksForAFileTheUserAlreadyHas() {
         compose.onNodeWithText("Choose a photo or video").assertExists()
-        compose.onNodeWithText("There is no camera.", substring = true).assertExists()
+        compose.onNodeWithText("Import a file you already have, or receive it from the share sheet. There is no camera.").assertExists()
         compose.onNodeWithText("Choose File").assertExists()
     }
 

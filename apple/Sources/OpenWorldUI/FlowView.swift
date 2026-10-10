@@ -638,7 +638,7 @@ public struct FlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Choose a photo or video")
                 .font(model.phone ? .largeTitle : .title)
-            Text("Import a file you already have. There is no camera.")
+            Text(Copy.importHint(phone: model.phone))
                 .foregroundStyle(.secondary)
             importControl
             Spacer()

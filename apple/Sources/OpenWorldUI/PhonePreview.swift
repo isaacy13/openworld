@@ -129,7 +129,7 @@ public enum PhonePreview {
         default:
             return [
                 "Choose a photo or video",
-                "Import a file you already have. There is no camera.",
+                Copy.importHint(phone: model.phone),
                 "Choose File",
             ]
         }
