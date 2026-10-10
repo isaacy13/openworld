@@ -727,6 +727,47 @@ class PhoneFlowTest {
         assertEquals("The file could not be read. Refusing.", model.pickNotice)
     }
 
+    @Test
+    fun chooseAnotherRemovesTheImportedCopy() {
+        val before = openworldTempFiles()
+        val model = FlowModel()
+        choose(model, still("blank"))
+        val first = openworldTempFiles() - before
+        assertEquals(1, first.size)
+        val copy = first.first()
+        assertTrue(copy.length() > 0)
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        model.choose(Uri.parse("content://app.openworld/also-missing.png"), resolver)
+        assertTrue(copy.exists())
+        choose(model, still("blank"))
+        assertFalse(copy.exists())
+        val replacement = (openworldTempFiles() - before).single()
+        model.continueFromDevice()
+        model.bundleId = "fast"
+        model.longSide = "640"
+        model.coverage = "complete"
+        model.continueFromBundle()
+        model.continueFromSize()
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertEquals("No candidate is not a clearance.", model.summary)
+        assertEquals(setOf(replacement), openworldTempFiles() - before)
+        model.deleteResult()
+        assertEquals("Deleted.", model.summary)
+        assertTrue(replacement.exists())
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertEquals("No candidate is not a clearance.", model.summary)
+        model.chooseAnother()
+        assertFalse(replacement.exists())
+        assertTrue((openworldTempFiles() - before).isEmpty())
+    }
+
+    private fun openworldTempFiles(): Set<File> {
+        val dir = System.getProperty("java.io.tmpdir") ?: return emptySet()
+        return File(dir).listFiles()?.filter { it.isFile && it.name.startsWith("openworld") }?.toSet() ?: emptySet()
+    }
+
     private fun drive(kind: String): FlowModel {
         val model = FlowModel()
         choose(model, still(kind))

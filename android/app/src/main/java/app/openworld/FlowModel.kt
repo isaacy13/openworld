@@ -59,10 +59,17 @@ class FlowModel {
             pickNotice = "The file could not be read. Refusing."
             return
         }
+        if (!removeResult()) {
+            copy.delete()
+            if (pickNotice == null) pickNotice = deleteNotice ?: "The result could not be deleted."
+            return
+        }
         pickNotice = null
+        val previous = localCopy
         fileName = displayName(uri, resolver)
         originalModified(uri, resolver)?.let { modified -> copy.setLastModified(modified) }
         localCopy = copy
+        if (previous != null && previous.absolutePath != copy.absolutePath) previous.delete()
         val ageMs = System.currentTimeMillis() - copy.lastModified()
         oldFile = ageMs > 30L * 24 * 60 * 60 * 1000
         step = Step.Device
@@ -116,10 +123,10 @@ class FlowModel {
 
     fun chooseAnother() {
         if (!removeResult()) return
+        discardImport()
         step = Step.Choose
         fileName = ""
         oldFile = false
-        localCopy = null
         bundleId = "fast"
         longSide = "640"
         coverage = "complete"
@@ -253,9 +260,13 @@ class FlowModel {
         deleteNotice = null
         incompleteReason = ""
         try {
-            val parent = File.createTempFile("openworld-out", null).parentFile ?: return
-            val root = File(parent, "openworld-" + System.nanoTime())
-            if (!root.mkdirs()) return
+            val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
+            val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
+            if (root == null || !root.mkdirs()) {
+                estimateText = "The output directory could not be created."
+                canAnalyze = false
+                return
+            }
             scanRoot = root
             val posters = File(root, "openworld-posters")
             val out = File(root, "openworld-result")
@@ -343,6 +354,11 @@ class FlowModel {
             detail = if (incompleteReason.isNotEmpty()) "" else message
         }
         step = Step.Results
+    }
+
+    private fun discardImport() {
+        localCopy?.delete()
+        localCopy = null
     }
 
     private fun displayName(uri: Uri, resolver: ContentResolver): String {
