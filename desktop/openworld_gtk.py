@@ -283,9 +283,9 @@ class OpenWorld(Gtk.Application):
         box.append(title)
         box.append(self.estimate_warn)
         box.append(self.estimate_body)
+        box.append(self.class_label)
         box.append(self.missing_button)
         box.append(self.wanted_button)
-        box.append(self.class_label)
         return box
 
     def _results_page(self) -> Gtk.Widget:
@@ -506,9 +506,9 @@ class OpenWorld(Gtk.Application):
             lines.append(payload["battery_note"])
         if payload.get("suggest_computer_text"):
             lines.append(payload["suggest_computer_text"])
+        lines.append(self.choice_line())
         if self.coverage == "measured":
             lines.append(PHRASES["brief"])
-        lines.append(self.choice_line())
         self.estimate_body.set_text("\n".join(line for line in lines if line))
         self._apply_class_gate()
 
@@ -1236,6 +1236,19 @@ class OpenWorld(Gtk.Application):
         if "Fast. 640 px on the long side. Every decoded frame." not in text or "Bundle fast" in text or "Coverage complete" in text:
             self._exercise_fail(f"estimate did not repeat the choice in plain words: {text}")
             return False
+        self.coverage = "measured"
+        self.refresh_estimate()
+        measured = self.estimate_body.get_text()
+        choice = "Fast. 640 px on the long side. 5 frames a second, plus the tracker."
+        if (
+            choice not in measured
+            or PHRASES["brief"] not in measured
+            or measured.find(choice) > measured.find(PHRASES["brief"])
+        ):
+            self._exercise_fail(f"the measured estimate did not warn after the choice: {measured!r}")
+            return False
+        self.coverage = "complete"
+        self.refresh_estimate()
         if (
             not self.missing_button.get_visible()
             or not self.wanted_button.get_visible()

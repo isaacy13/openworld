@@ -294,30 +294,14 @@ fn run(cli: Cli) -> Result<i32, String> {
                         serde_json::to_value(&est).map_err(|e| e.to_string())?,
                     );
                     if !cli.json {
-                        println!("{}", est.human);
-                        println!("{}", est.caveat);
-                        if let Some(note) = &est.device_note {
-                            println!("{note}");
-                        }
-                        if let Some(note) = &est.heat_note {
-                            println!("{note}");
-                        }
-                        if let Some(note) = &est.battery_note {
-                            println!("{note}");
-                        }
-                        if let Some(note) = &est.suggest_computer_text {
-                            println!("{note}");
+                        let name = bundle_display_name(&bundles, &req.bundle_id);
+                        for line in estimate_lines(&est, &name, req.detection, req.coverage) {
+                            println!("{line}");
                         }
                     }
                     Ok(0)
                 }
-                Err(report) => {
-                    emit(
-                        cli.json,
-                        serde_json::to_value(&report).map_err(|e| e.to_string())?,
-                    );
-                    Ok(2)
-                }
+                Err(report) => finish_report(cli.json, &report),
             }
         }
         Cmd::Scan {
@@ -611,22 +595,13 @@ fn analyze(
     )?;
     match estimate_for(&req) {
         Ok(est) => {
-            println!("{}", est.human);
-            println!("{}", est.caveat);
-            if let Some(note) = &est.device_note {
-                println!("{note}");
-            }
-            if let Some(note) = &est.heat_note {
-                println!("{note}");
-            }
-            if let Some(note) = &est.battery_note {
-                println!("{note}");
-            }
-            if let Some(note) = &est.suggest_computer_text {
-                println!("{note}");
-            }
-            if req.coverage == Coverage::Measured {
-                println!("{}", openworld_core::copy::BRIEF_FACE);
+            let name = all
+                .iter()
+                .find(|item| item.id == req.bundle_id)
+                .map(|item| item.name.as_str())
+                .unwrap_or(req.bundle_id.as_str());
+            for line in estimate_lines(&est, name, req.detection, req.coverage) {
+                println!("{line}");
             }
         }
         Err(report) => return finish_report(json_mode, &report),
@@ -867,6 +842,50 @@ fn human_lines(report: &openworld_core::ScanReport) -> Vec<String> {
     }
     lines.extend(report.disclosure.iter().cloned());
     lines
+}
+
+/// The estimate a person reads, in the same order as the estimate screen.
+fn estimate_lines(
+    est: &openworld_core::estimate::Estimate,
+    bundle_name: &str,
+    detection: DetectionSize,
+    coverage: Coverage,
+) -> Vec<String> {
+    let mut lines = vec![est.human.clone(), est.caveat.clone()];
+    if let Some(note) = &est.device_note {
+        lines.push(note.clone());
+    }
+    if let Some(note) = &est.heat_note {
+        lines.push(note.clone());
+    }
+    if let Some(note) = &est.battery_note {
+        lines.push(note.clone());
+    }
+    if let Some(note) = &est.suggest_computer_text {
+        lines.push(note.clone());
+    }
+    lines.push(format!(
+        "{bundle_name}. {}. {}",
+        detection.label(),
+        coverage.label()
+    ));
+    if coverage == Coverage::Measured {
+        lines.push(openworld_core::copy::BRIEF_FACE.into());
+    }
+    lines.push("Missing and wanted.".into());
+    lines
+}
+
+fn bundle_display_name(bundles: &Path, id: &str) -> String {
+    load_bundles(bundles)
+        .ok()
+        .and_then(|all| {
+            all.into_iter()
+                .find(|item| item.id == id)
+                .map(|item| item.name)
+        })
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| id.to_string())
 }
 
 fn request(
@@ -1331,5 +1350,86 @@ mod cli_tests {
         assert!(refused_lines
             .iter()
             .all(|line| line != "No candidate is not a clearance."));
+    }
+
+    #[test]
+    fn the_estimate_a_person_reads_matches_the_screen() {
+        let measured =
+            openworld_core::estimate::estimate(&openworld_core::estimate::EstimateInput {
+                frames: 27_000,
+                fps: 30.0,
+                duration_sec: 900.0,
+                original_long_side: 1920,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Measured,
+                bundle_factor: 1.0,
+                execution: openworld_core::Execution::Cpu,
+                form_factor: FormFactor::Phone,
+            });
+        let lines = estimate_lines(
+            &measured,
+            "Fast",
+            DetectionSize::Px(640),
+            Coverage::Measured,
+        );
+        assert_eq!(lines[0], measured.human);
+        assert_eq!(
+            lines[1],
+            "This is a planning estimate, not a thermal measurement."
+        );
+        let choice = lines
+            .iter()
+            .position(|line| {
+                line == "Fast. 640 px on the long side. 5 frames a second, plus the tracker."
+            })
+            .expect("choice");
+        let brief = lines
+            .iter()
+            .position(|line| line == "A brief face can be missed.")
+            .expect("brief");
+        assert!(lines[..choice].iter().any(|line| line.contains("CPU")));
+        assert!(lines[..choice]
+            .iter()
+            .any(|line| line.contains("This phone may get hot.")));
+        assert!(lines[..choice]
+            .iter()
+            .any(|line| line.contains("A long scan uses a lot of battery.")));
+        assert!(lines[..choice]
+            .iter()
+            .any(|line| line.contains("A computer will finish this sooner.")));
+        assert!(choice < brief);
+        assert_eq!(
+            lines.last().map(String::as_str),
+            Some("Missing and wanted.")
+        );
+
+        let still = estimate_lines(
+            &openworld_core::estimate::estimate(&openworld_core::estimate::EstimateInput {
+                frames: 1,
+                fps: 0.0,
+                duration_sec: 0.0,
+                original_long_side: 640,
+                detection: DetectionSize::Full,
+                coverage: Coverage::Complete,
+                bundle_factor: 1.0,
+                execution: openworld_core::Execution::Cpu,
+                form_factor: FormFactor::Computer,
+            }),
+            "Fast",
+            DetectionSize::Full,
+            Coverage::Complete,
+        );
+        assert!(still
+            .iter()
+            .all(|line| line != "A brief face can be missed."));
+        assert!(still.iter().all(|line| !line.contains("hot")));
+        assert_eq!(
+            still.iter().rev().nth(1).map(String::as_str),
+            Some("Fast. Full resolution. Every decoded frame.")
+        );
+        assert_eq!(
+            still.last().map(String::as_str),
+            Some("Missing and wanted.")
+        );
     }
 }

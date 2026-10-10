@@ -314,8 +314,10 @@ class PhoneFlowTest {
         model.coverage = "measured"
         model.continueFromDevice()
         model.continueFromSize()
-        assertTrue(model.estimateText.contains("A brief face can be missed."))
-        assertTrue(model.estimateText.contains("Fast. 640 px on the long side. 5 frames a second, plus the tracker."))
+        val choice = model.estimateText.indexOf("Fast. 640 px on the long side. 5 frames a second, plus the tracker.")
+        val brief = model.estimateText.indexOf("A brief face can be missed.")
+        val classes = model.estimateText.indexOf("Missing and wanted.")
+        assertTrue(choice >= 0 && brief > choice && classes > brief)
     }
 
     @Test

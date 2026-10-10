@@ -305,8 +305,8 @@ class FlowModel {
                     json.present("heat_note"),
                     json.present("battery_note"),
                     json.present("suggest_computer_text"),
-                    if (coverage == "measured") "A brief face can be missed." else null,
                     choiceLine(),
+                    if (coverage == "measured") "A brief face can be missed." else null,
                 ).joinToString("\n")
                 refreshClassLine()
             }

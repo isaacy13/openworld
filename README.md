@@ -23,7 +23,7 @@ cargo test --manifest-path core/Cargo.toml
 cargo run --manifest-path core/Cargo.toml -p openworld-cli -- demo --out /tmp/openworld-demo
 ```
 
-That writes a synthetic still, a fixture poster pack, and a result directory. The summary is either "Possible candidate. Not an identification." or, when nothing passes, "No candidate is not a clearance." The report then lists each candidate the way the screen does: the frame, the poster, and Open FBI page with its address. The crops follow, each named with its frame. A warning is printed before those cards. An unfinished scan prints its reason under "Incomplete." `openworld leave --url` prints "You are leaving OpenWorld." before that address. Crops are under `/tmp/openworld-demo/result/crops`.
+That writes a synthetic still, a fixture poster pack, and a result directory. The summary is either "Possible candidate. Not an identification." or, when nothing passes, "No candidate is not a clearance." The report then lists each candidate the way the screen does: the frame, the poster, and Open FBI page with its address. The crops follow, each named with its frame. A warning is printed before those cards. An unfinished scan prints its reason under "Incomplete." `openworld leave --url` prints "You are leaving OpenWorld." before that address. `openworld estimate` prints the same planning lines as the estimate screen: the time, the caveat, where the scan runs, then the bundle, size, and coverage in the words of those buttons. Measured coverage then says "A brief face can be missed." The lines end with "Missing and wanted." A file that cannot be read prints the refusal. Crops are under `/tmp/openworld-demo/result/crops`.
 
 ```sh
 python3 desktop/openworld_gtk.py
