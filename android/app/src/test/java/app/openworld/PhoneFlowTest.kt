@@ -909,7 +909,7 @@ class PhoneScreenTest {
         model.continueFromSize()
         model.analyze()
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
-        assertTrue(compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onAllNodesWithText("No candidate is not a clearance.", substring = true).assertCountEquals(2)
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
         compose.onAllNodesWithText("Possible candidate. Not an identification.").assertCountEquals(0)
     }

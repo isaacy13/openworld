@@ -140,8 +140,6 @@ enum ScreenCopy {
                     lines.append(candidate.posterTitle + " (" + candidate.posterClass + ")")
                 }
                 lines.append("Open FBI page")
-            } else if model.report?.status == "complete" {
-                lines.append(Copy.clearance)
             }
             if model.report?.inventory.isEmpty == false {
                 lines.append("Crops from this file.")

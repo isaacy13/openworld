@@ -601,9 +601,6 @@ class OpenWorld(Gtk.Application):
         self._fill_strip(report)
         for candidate in report.get("candidates") or []:
             self.detail.append(self._candidate_card(candidate))
-        if not report.get("candidates") and report.get("status") == "complete":
-            clearance = Gtk.Label(label=PHRASES["clearance"], xalign=0, wrap=True)
-            self.detail.append(clearance)
         self.primary.set_sensitive(True)
         self.primary.set_label("Choose another file")
         self.delete_button.set_sensitive(self.out_dir is not None)
@@ -904,6 +901,40 @@ class OpenWorld(Gtk.Application):
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
+        self._show_report(
+            {
+                "status": "complete",
+                "summary": PHRASES["clearance"],
+                "disclosure": ["Nothing is uploaded.", PHRASES["clearance"]],
+                "candidates": [],
+                "inventory": [],
+            }
+        )
+        self._go("results")
+        detail_labels = self._labels_under(self.detail)
+        if (
+            self.summary.get_text() != PHRASES["clearance"]
+            or self.stack.get_visible_child_name() != "results"
+            or PHRASES["clearance"] not in self.result_note.get_text()
+            or PHRASES["clearance"] in detail_labels
+        ):
+            self._exercise_fail(
+                f"clearance was repeated under the headline: {self.summary.get_text()!r} {detail_labels!r}"
+            )
+            return False
+        if os.environ.get("OPENWORLD_CLEARANCE_SHOT"):
+            context = GLib.MainContext.default()
+            deadline = time.time() + 1.2
+            while time.time() < deadline:
+                context.iteration(False)
+                time.sleep(0.05)
+        self._grab(os.environ.get("OPENWORLD_CLEARANCE_SHOT"))
+        self._exercise_report = None
+        self._clear_results()
+        self.summary.set_text("")
+        self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
         self.choose_file(path)
         aged = time.time() - 40 * 24 * 3600
         os.utime(path, (aged, aged))
@@ -1094,7 +1125,9 @@ class OpenWorld(Gtk.Application):
         self.quit()
 
     def _save_shot(self) -> None:
-        path = os.environ.get("OPENWORLD_SHOT")
+        self._grab(os.environ.get("OPENWORLD_SHOT"))
+
+    def _grab(self, path: str | None) -> None:
         if not path:
             return
         context = GLib.MainContext.default()

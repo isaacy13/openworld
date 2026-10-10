@@ -468,8 +468,6 @@ public struct FlowView: View {
                         .clipShape(RoundedRectangle(cornerRadius: model.phone ? 12 : 8))
                         #endif
                     }
-                } else if model.report?.status == "complete" {
-                    Text(Copy.clearance)
                 }
                 if let items = model.report?.inventory, !items.isEmpty {
                     Text("Crops from this file.")
