@@ -781,40 +781,92 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
         serde_json::to_value(report).map_err(|e| e.to_string())?,
     );
     if !json_mode {
-        println!("{}", report.summary);
-        if let Some(banner) = &report.coverage_banner {
-            println!("{banner}");
-        }
-        if let Some(frames) = &report.frames_note {
-            println!("{frames}");
-        }
-        if let Some(classes) = &report.class_note {
-            println!("{classes}");
-        }
-        println!("Bundle: {}", report.bundle_name);
-        if let Some(size) = &report.detection_note {
-            println!("{size}");
-        }
-        if let Some(coverage) = &report.coverage_note {
-            println!("{coverage}");
-        }
-        if !report.perception_note.is_empty() {
-            println!("{}", report.perception_note);
-        }
-        for line in &report.disclosure {
+        for line in human_lines(report) {
             println!("{line}");
-        }
-        for item in &report.inventory {
-            println!(
-                "{}  {}  {}  {}",
-                item.kind,
-                item.frame_label,
-                item.label,
-                item.crop.as_deref().unwrap_or("")
-            );
         }
     }
     Ok(if report.status == "complete" { 0 } else { 2 })
+}
+
+/// The lines a person reads. The order matches the result screen.
+fn human_lines(report: &openworld_core::ScanReport) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(report.summary.clone());
+    if report.status == "incomplete"
+        && !report.message.is_empty()
+        && report.message != report.summary
+    {
+        lines.push(report.message.clone());
+    }
+    if let Some(banner) = &report.coverage_banner {
+        lines.push(banner.clone());
+    }
+    if let Some(frames) = &report.frames_note {
+        lines.push(frames.clone());
+    }
+    if let Some(classes) = &report.class_note {
+        lines.push(classes.clone());
+    }
+    if !report.bundle_name.is_empty() {
+        lines.push(format!("Bundle: {}", report.bundle_name));
+    }
+    if let Some(size) = &report.detection_note {
+        lines.push(size.clone());
+    }
+    if let Some(coverage) = &report.coverage_note {
+        lines.push(coverage.clone());
+    }
+    if !report.perception_note.is_empty() {
+        lines.push(report.perception_note.clone());
+    }
+    lines.extend(report.warnings.iter().cloned());
+    for candidate in &report.candidates {
+        lines.push(candidate.wording.clone());
+        if let Some(crop) = candidate.crop.as_ref().filter(|path| !path.is_empty()) {
+            lines.push("Crop".into());
+            lines.push(crop.clone());
+        }
+        if !candidate.frame_label.is_empty() {
+            lines.push(candidate.frame_label.clone());
+        }
+        if let Some(frame) = candidate.frame.as_ref().filter(|path| !path.is_empty()) {
+            lines.push(frame.clone());
+        }
+        if !candidate.uncertainty.is_empty() {
+            lines.push(candidate.uncertainty.clone());
+        }
+        let poster = if candidate.poster_title.is_empty() {
+            candidate.poster_class_label.clone()
+        } else if candidate.poster_class_label.is_empty() {
+            candidate.poster_title.clone()
+        } else {
+            format!(
+                "{} ({})",
+                candidate.poster_title, candidate.poster_class_label
+            )
+        };
+        if !poster.is_empty() {
+            lines.push(poster);
+        }
+        if !candidate.fbi_url.is_empty() {
+            lines.push("Open FBI page".into());
+            lines.push(candidate.fbi_url.clone());
+        }
+    }
+    if !report.inventory.is_empty() {
+        lines.push("Crops from this file.".into());
+        for item in &report.inventory {
+            if !item.frame_label.is_empty() {
+                lines.push(item.frame_label.clone());
+            }
+            lines.push(item.label.clone());
+            if let Some(crop) = item.crop.as_ref().filter(|path| !path.is_empty()) {
+                lines.push(crop.clone());
+            }
+        }
+    }
+    lines.extend(report.disclosure.iter().cloned());
+    lines
 }
 
 fn request(
@@ -1207,5 +1259,77 @@ mod cli_tests {
 
         let listed = run(Cli::parse_from(["openworld", "copy"])).unwrap();
         assert_eq!(listed, 0);
+    }
+
+    #[test]
+    fn the_human_report_lists_each_candidate_card() {
+        let dir = tempfile::tempdir().unwrap();
+        let demo_dir = dir.path().join("demo");
+        assert_eq!(demo(Path::new(&bundles()), &demo_dir, true).unwrap(), 0);
+        let bytes = std::fs::read(demo_dir.join("result/result.json")).unwrap();
+        let mut report: openworld_core::ScanReport = serde_json::from_slice(&bytes).unwrap();
+        report.warnings.push("The file timestamps disagree.".into());
+        let lines = human_lines(&report);
+        let at = |text: &str| {
+            lines
+                .iter()
+                .position(|line| line == text)
+                .unwrap_or_else(|| panic!("missing {text} in {lines:?}"))
+        };
+        let summary = at("Possible candidate. Not an identification.");
+        let warning = at("The file timestamps disagree.");
+        let face = at("Fixture subject A (Missing)");
+        let plate = at("Fixture vehicle C (Wanted)");
+        let crops = at("Crops from this file.");
+        let disclosure = at("Nothing is uploaded.");
+        assert!(summary < warning && warning < face.min(plate));
+        assert!(face.max(plate) < crops && crops < disclosure);
+        for poster in ["Fixture subject A (Missing)", "Fixture vehicle C (Wanted)"] {
+            let card = at(poster);
+            assert_eq!(lines[card + 1], "Open FBI page");
+            assert!(
+                lines[card + 2].starts_with("https://www.fbi.gov"),
+                "{}",
+                lines[card + 2]
+            );
+            assert!(
+                !lines[card - 1].contains("Possible candidate. Not an identification."),
+                "{}",
+                lines[card - 1]
+            );
+            assert!(lines[..card]
+                .iter()
+                .rev()
+                .take(5)
+                .any(|line| line == "Frame 1."));
+        }
+        assert!(lines.iter().any(|line| line == "Bundle: Fast"));
+        assert!(lines.iter().any(|line| line == "1 frame analyzed."));
+        assert!(lines.iter().any(|line| line == "Every decoded frame."));
+        assert!(lines.iter().all(|line| {
+            !line.starts_with("face  ")
+                && !line.starts_with("plate  ")
+                && !line.starts_with("vehicle  ")
+        }));
+
+        report.status = "incomplete".into();
+        report.summary = "Incomplete.".into();
+        report.message = "The file was not fully decoded.".into();
+        report.candidates.clear();
+        report.warnings.clear();
+        let unfinished = human_lines(&report);
+        assert_eq!(unfinished[0], "Incomplete.");
+        assert_eq!(unfinished[1], "The file was not fully decoded.");
+
+        let refused =
+            openworld_core::scan::refused("unreadable", "The file could not be read. Refusing.");
+        let refused_lines = human_lines(&refused);
+        assert_eq!(refused_lines[0], "The file could not be read. Refusing.");
+        assert!(refused_lines
+            .iter()
+            .all(|line| !line.starts_with("Bundle:")));
+        assert!(refused_lines
+            .iter()
+            .all(|line| line != "No candidate is not a clearance."));
     }
 }

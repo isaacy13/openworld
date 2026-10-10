@@ -15,12 +15,12 @@ use crate::hardware::Execution;
 use crate::posters::{normalize_plate, PackError, Poster, PosterPack};
 use crate::track::{ByteTrack, TrackClass, TrackDet};
 use image::RgbImage;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InventoryItem {
     pub kind: String,
     pub frame_index: u64,
@@ -34,7 +34,7 @@ pub struct InventoryItem {
     pub fiducial_id: Option<u16>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Candidate {
     pub wording: String,
     pub kind: String,
@@ -55,7 +55,7 @@ pub struct Candidate {
     pub leaving: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Comparison {
     pub frame_index: u64,
     pub poster_id: String,
@@ -65,7 +65,7 @@ pub struct Comparison {
     pub poster_fiducial_id: Option<u16>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanReport {
     pub status: String,
     pub refusal: Option<String>,
