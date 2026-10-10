@@ -881,6 +881,29 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun bothClassesOffKeepsAnalyzeOnThePage() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/blank-classes.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Analyze").assertIsEnabled()
+        model.includeMissing = false
+        model.includeWanted = false
+        model.refreshClassLine()
+        compose.onNodeWithText("Analyze").assertIsNotEnabled()
+        compose.onNodeWithText("Choose missing, wanted, or both.", substring = true).assertExists()
+        compose.onNodeWithText("Missing").assertExists()
+        compose.onNodeWithText("Wanted").assertExists()
+        compose.onAllNodesWithText("Missing.").assertCountEquals(0)
+        compose.onAllNodesWithText("Wanted.").assertCountEquals(0)
+    }
+
+    @Test
     fun theClassLineSitsAboveTheCandidate() {
         val model = FlowModel()
         model.step = Step.Results

@@ -157,6 +157,11 @@ final class OpenWorldUITests: XCTestCase {
         try MainActor.assumeIsolated {
             let model = try self.scan("scene", wanted: false)
             XCTAssertEqual(model.classArguments(), ["--no-wanted"])
+            XCTAssertEqual(model.classLine, "Missing.")
+            XCTAssertEqual(markedChoice("Missing", selected: model.includeMissing), "Missing. Selected.")
+            XCTAssertEqual(markedChoice("Wanted", selected: model.includeWanted), "Wanted")
+            XCTAssertNotEqual(markedChoice("Wanted", selected: false), "Wanted.")
+            XCTAssertTrue(model.showsAnalyze)
             XCTAssertEqual(model.report?.classNote, "Missing.")
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClass == "missing" } == true)
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" } == true)
@@ -167,6 +172,9 @@ final class OpenWorldUITests: XCTestCase {
             model.applyClassGate()
             XCTAssertEqual(model.classLine, "Choose missing, wanted, or both.")
             XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.showsAnalyze)
+            XCTAssertEqual(markedChoice("Missing", selected: false), "Missing")
+            XCTAssertEqual(markedChoice("Wanted", selected: false), "Wanted")
             _ = FlowView(model: model, importControl: self.control).body
         }
     }
@@ -295,6 +303,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.step, .estimate)
             XCTAssertNil(model.estimate)
             XCTAssertFalse(model.canAnalyze)
+            XCTAssertFalse(model.showsAnalyze)
             XCTAssertFalse(model.showBriefOnEstimate)
             XCTAssertTrue(model.error?.contains("Refusing") == true)
             XCTAssertFalse(model.error?.contains("Choose missing, wanted, or both.") == true)

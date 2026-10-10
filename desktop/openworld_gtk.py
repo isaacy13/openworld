@@ -1199,8 +1199,14 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(f"classes did not start on: {self.class_label.get_text()!r} {self._class_args()}")
             return False
         self.wanted_button.set_active(False)
-        if self.class_label.get_text() != "Missing." or self._class_args() != ["--no-wanted"] or not self.primary.get_sensitive():
-            self._exercise_fail(f"wanted off did not leave missing: {self.class_label.get_text()!r} {self._class_args()}")
+        if (
+            self.class_label.get_text() != "Missing."
+            or self.missing_button.get_label() != "Missing"
+            or self.wanted_button.get_label() != "Wanted"
+            or self._class_args() != ["--no-wanted"]
+            or not self.primary.get_sensitive()
+        ):
+            self._exercise_fail(f"wanted off did not leave missing: {self.class_label.get_text()!r} {self.missing_button.get_label()!r} {self.wanted_button.get_label()!r} {self._class_args()}")
             return False
         self.missing_button.set_active(False)
         if self.primary.get_sensitive() or not self.primary.get_visible() or self.class_label.get_text() != "Choose missing, wanted, or both.":

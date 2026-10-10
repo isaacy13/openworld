@@ -127,7 +127,7 @@ public final class FlowModel: ObservableObject {
         return "\(name). \(size). \(cover)"
     }
 
-    /// Missing and wanted start on. Analyze stays off when both are off.
+    /// Missing and wanted start on. Analyze stays on the page and does not run when both are off.
     public var classLine: String {
         switch (includeMissing, includeWanted) {
         case (true, true): return "Missing and wanted."
@@ -154,6 +154,9 @@ public final class FlowModel: ObservableObject {
     public var showBriefOnEstimate: Bool {
         estimate != nil && coverage == "measured"
     }
+
+    /// A refusal has no estimate, so Analyze is not on that page. Both classes off keeps the button.
+    public var showsAnalyze: Bool { estimate != nil }
 
     /// Back stays off while a scan is running.
     public var backEnabled: Bool { !scanning }
@@ -505,6 +508,14 @@ public struct FlowView: View {
     }
 
     private var estimate: some View {
+        #if os(Linux)
+        estimateColumn
+        #else
+        ScrollView { estimateColumn }
+        #endif
+    }
+
+    private var estimateColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
             Text(model.scanning ? "Scanning" : "Estimate").font(model.phone ? .largeTitle : .title)
@@ -531,8 +542,9 @@ public struct FlowView: View {
             } else if let error = model.error {
                 Text(error)
             }
-            if model.canAnalyze && !model.scanning {
-                prominent("Analyze") { model.startScan() }
+            if model.showsAnalyze {
+                prominent(model.scanning ? "Scanning" : "Analyze") { model.startScan() }
+                    .disabled(model.scanning || !model.canAnalyze)
             }
             if let notice = model.deleteNotice {
                 Text(notice).foregroundStyle(.orange)
@@ -765,7 +777,7 @@ public struct FlowView: View {
     @ViewBuilder
     private func classToggle(on: Bool, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(on ? "\(title). Selected." : "\(title).")
+            Text(markedChoice(title, selected: on))
         }
         .disabled(model.scanning)
     }

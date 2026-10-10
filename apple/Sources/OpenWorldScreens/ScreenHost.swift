@@ -118,6 +118,11 @@ enum ScreenCopy {
                 if let note = estimate.batteryNote { lines.append(note) }
                 lines.append(model.choiceLine)
                 lines.append(model.classLine)
+                lines.append(markedChoice("Missing", selected: model.includeMissing))
+                lines.append(markedChoice("Wanted", selected: model.includeWanted))
+                if model.showsAnalyze {
+                    lines.append(model.scanning ? "Scanning" : "Analyze")
+                }
             } else if let error = model.error {
                 lines.append(error)
             }
