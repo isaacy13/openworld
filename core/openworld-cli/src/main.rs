@@ -490,26 +490,40 @@ fn run(cli: Cli) -> Result<i32, String> {
                     }
                     Err(err) => {
                         let message = err.refusal();
-                        emit(cli.json, json!({ "status": "refused", "message": message }));
+                        emit(
+                            cli.json,
+                            json!({ "status": "refused", "summary": message, "message": message }),
+                        );
                         speak(cli.json, [message]);
                         Ok(2)
                     }
                 }
             }
             PosterCmd::WriteFixture { out } => {
-                let pack =
-                    write_fixture_pack(&out, SystemTime::now()).map_err(|e| e.to_string())?;
-                emit(
-                    cli.json,
-                    json!({
-                        "id": pack.id,
-                        "posters": pack.posters.len(),
-                        "perception": pack.perception,
-                        "note": "Fixture posters. Real FBI photos stay off.",
-                    }),
-                );
-                speak(cli.json, ["Fixture posters. Real FBI photos stay off."]);
-                Ok(0)
+                match write_fixture_pack(&out, SystemTime::now()) {
+                    Ok(pack) => {
+                        emit(
+                            cli.json,
+                            json!({
+                                "id": pack.id,
+                                "posters": pack.posters.len(),
+                                "perception": pack.perception,
+                                "note": "Fixture posters. Real FBI photos stay off.",
+                            }),
+                        );
+                        speak(cli.json, ["Fixture posters. Real FBI photos stay off."]);
+                        Ok(0)
+                    }
+                    Err(err) => {
+                        let message = err.refusal();
+                        emit(
+                            cli.json,
+                            json!({ "status": "refused", "summary": &message, "message": &message }),
+                        );
+                        speak(cli.json, [message]);
+                        Ok(2)
+                    }
+                }
             }
             PosterCmd::Update => {
                 let allowed = load_bundles(&bundles)
@@ -673,6 +687,15 @@ fn analyze(
         Some(path) => path,
         None => PathBuf::from(prompt("Poster pack directory:", json_mode)?),
     };
+    if let Err(err) = openworld_core::load_pack(&posters, SystemTime::now()) {
+        let code = match &err {
+            openworld_core::posters::PackError::Missing => "missing_pack",
+            openworld_core::posters::PackError::BadHash
+            | openworld_core::posters::PackError::Unreadable => "bad_hash",
+            openworld_core::posters::PackError::Expired => "expired_pack",
+        };
+        return finish_report(json_mode, &openworld_core::scan::refused(code, err.refusal()));
+    }
     let out = match out {
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:", json_mode)?),
@@ -1576,17 +1599,20 @@ mod cli_tests {
             .unwrap(),
             2
         );
-        assert!(run_cli(
-            true,
-            &[
-                "estimate",
-                "--input",
-                junk.to_str().unwrap(),
-                "--long-side",
-                "100"
-            ]
-        )
-        .is_err());
+        assert_eq!(
+            run_cli(
+                true,
+                &[
+                    "estimate",
+                    "--input",
+                    junk.to_str().unwrap(),
+                    "--long-side",
+                    "100"
+                ]
+            )
+            .unwrap(),
+            2
+        );
         assert_eq!(
             run_cli(
                 false,

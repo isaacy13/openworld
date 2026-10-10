@@ -562,3 +562,79 @@ fn a_bad_size_or_an_empty_catalog_stops_before_the_poster_pack() {
     assert_eq!(doc["message"], "Coverage must be complete or measured. Refusing.");
     assert!(err.is_empty(), "{err}");
 }
+
+#[test]
+fn a_missing_poster_pack_stops_before_the_estimate() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("notes.txt");
+    fs::write(&input, b"not a photo").unwrap();
+    let missing = dir.path().join("no-pack");
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles")
+        .arg(bundles())
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args([
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+        ])
+        .arg(&missing);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    let device = text
+        .lines()
+        .position(|line| line == "This file stays on this device.")
+        .expect("device");
+    let refusal = text
+        .lines()
+        .position(|line| line == "The poster pack is missing. Refusing.")
+        .expect("refusal");
+    assert!(device < refusal, "{text}");
+    assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
+    assert!(!text.contains("Result directory:"), "{text}");
+    assert!(!text.contains("Analyze? [y/N]:"), "{text}");
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--json")
+        .arg("--bundles")
+        .arg(bundles())
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args([
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+        ])
+        .arg(&missing);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "missing_pack");
+    assert_eq!(doc["message"], "The poster pack is missing. Refusing.");
+    assert!(!text.contains("This file stays on this device."), "{text}");
+
+    let blocked = dir.path().join("blocked");
+    fs::write(&blocked, b"not a directory").unwrap();
+    let mut cmd = Command::new(bin());
+    cmd.args(["posters", "write-fixture", "--out"]).arg(&blocked);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert_eq!(text.trim(), "The poster pack could not be read. Refusing.");
+    assert!(err.is_empty(), "{err}");
+}

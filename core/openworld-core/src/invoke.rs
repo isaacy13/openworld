@@ -110,7 +110,7 @@ fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
                 .flag("out")
                 .ok_or("A poster pack directory is required. Refusing.")?;
             let pack = write_fixture_pack(Path::new(out), SystemTime::now())
-                .map_err(|err| format!("{err}. Refusing."))?;
+                .map_err(|err| err.refusal())?;
             Ok(json!({
                 "id": pack.id,
                 "posters": pack.posters.len(),
@@ -146,7 +146,10 @@ fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
                     "perception": pack.perception,
                     "expires_at": pack.expires_at,
                 })),
-                Err(err) => Ok(json!({ "status": "refused", "message": err.to_string() })),
+                Err(err) => {
+                    let message = err.refusal();
+                    Ok(json!({ "status": "refused", "summary": message, "message": message }))
+                }
             }
         }
         _ => Err("The poster command is not recognized. Refusing.".into()),
@@ -609,6 +612,15 @@ mod tests {
             "--posters",
             "/tmp/openworld-no-such-pack",
         ]);
+        let missing_pack: Value = serde_json::from_str(&invoke_argv(&[
+            "posters".into(),
+            "check".into(),
+            "--posters".into(),
+            "/tmp/openworld-no-such-pack".into(),
+        ]))
+        .unwrap();
+        assert_eq!(missing_pack["message"], "The poster pack is missing. Refusing.");
+        assert_eq!(missing_pack["summary"], "The poster pack is missing. Refusing.");
 
         let dir = tempfile::tempdir().unwrap();
         let bundles = repo_bundles();
