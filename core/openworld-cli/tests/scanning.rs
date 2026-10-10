@@ -881,9 +881,8 @@ fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
 
     let (code, text, err) = catalog_run(false, &empty, &["measure"]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(missing), "{text}");
+    assert_eq!(text.trim(), missing, "{text}");
     assert!(err.is_empty(), "{err}");
-    assert!(!text.contains("Fast bundle is missing."), "{text}");
 
     let (code, text, err) = catalog_run(true, &empty, &["measure"]);
     assert_eq!(code, Some(2), "{err}\n{text}");
@@ -901,8 +900,7 @@ fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
         &["demo", "--out", demo.to_str().unwrap()],
     );
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(missing), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(text.trim(), missing, "{text}");
     assert!(!demo.exists());
 
     let scene = dir.path().join("scenes").join("still.png");
@@ -912,7 +910,7 @@ fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
         &["fixture-still", "--scene", "--out", scene.to_str().unwrap()],
     );
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(missing), "{text}");
+    assert_eq!(text.trim(), missing, "{text}");
     assert!(!scene.exists());
     assert!(!scene.parent().unwrap().exists());
 
@@ -947,6 +945,15 @@ fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
     .unwrap();
     let absent = "That bundle is not in the catalog. Refusing.";
     let demo = dir.path().join("accurate-demo");
+    let (code, text, err) = catalog_run(false, &accurate, &["demo", "--out", demo.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.trim(), absent, "{text}");
+    assert!(!demo.exists());
+
+    let (code, text, err) = catalog_run(false, &accurate, &["measure"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.trim(), absent, "{text}");
+
     let (code, text, err) = catalog_run(
         true,
         &accurate,
@@ -1100,17 +1107,14 @@ fn a_demo_file_refuses_before_it_scans() {
 
     let (code, text, err) = run(false, &["demo", "--out", blocked.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(created), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
-    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert_eq!(text.trim(), created, "{text}");
     assert!(err.is_empty(), "{err}");
     assert_eq!(fs::read(&blocked).unwrap(), b"keep");
 
     let nested = blocked.join("demo");
     let (code, text, err) = run(false, &["demo", "--out", nested.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(created), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(text.trim(), created, "{text}");
     assert_eq!(fs::read(&blocked).unwrap(), b"keep");
     assert!(!nested.exists());
 
@@ -1131,9 +1135,7 @@ fn a_demo_file_refuses_before_it_scans() {
     let pack = "The poster pack could not be read. Refusing.";
     let (code, text, err) = run(false, &["demo", "--out", out.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(pack), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
-    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert_eq!(text.trim(), pack, "{text}");
     assert!(err.is_empty(), "{err}");
     assert_eq!(fs::read(&posters).unwrap(), b"keep-pack");
 
@@ -1161,9 +1163,7 @@ fn a_still_that_cannot_be_written_uses_the_refusal() {
     fs::write(input.join("keep.txt"), b"keep").unwrap();
     let (code, text, err) = run(false, &["demo", "--out", out.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(still), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
-    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert_eq!(text.trim(), still, "{text}");
     assert!(err.is_empty(), "{err}");
     assert!(input.is_dir());
     assert_eq!(fs::read(input.join("keep.txt")).unwrap(), b"keep");
@@ -1182,7 +1182,7 @@ fn a_still_that_cannot_be_written_uses_the_refusal() {
     fs::create_dir(&folder).unwrap();
     let (code, text, err) = run(false, &["fixture-still", "--blank", "--out", folder.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(still), "{text}");
+    assert_eq!(text.trim(), still, "{text}");
     assert!(err.is_empty(), "{err}");
     assert!(folder.is_dir());
     assert!(fs::read_dir(&folder).unwrap().next().is_none());
@@ -1205,8 +1205,7 @@ fn a_still_that_cannot_be_written_uses_the_refusal() {
     fs::create_dir(&scene).unwrap();
     let (code, text, err) = run(false, &["fixture-still", "--scene", "--out", scene.to_str().unwrap()]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(still), "{text}");
-    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(text.trim(), still, "{text}");
     assert!(err.is_empty(), "{err}");
     assert!(scene.is_dir());
 }

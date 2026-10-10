@@ -495,7 +495,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                 );
                 Ok(0)
             }
-            Err(report) => finish_report(cli.json, &report),
+            Err(report) => finish_notice(cli.json, &report),
         },
         Cmd::Posters { action } => match action {
             PosterCmd::Check { posters } => {
@@ -858,7 +858,7 @@ fn fixture_still(
     }
     let fast = match require_fast(bundles) {
         Ok(bundle) => bundle,
-        Err(report) => return finish_report(json_mode, &report),
+        Err(report) => return finish_notice(json_mode, &report),
     };
     let ready = ensure_parent(out, json_mode)?;
     if ready != 0 {
@@ -948,7 +948,7 @@ fn ensure_parent(out: &Path, json_mode: bool) -> Result<i32, String> {
             && (openworld_core::scan::output_creation_blocked(parent).is_some()
                 || std::fs::create_dir_all(parent).is_err())
         {
-            return finish_report(
+            return finish_notice(
                 json_mode,
                 &openworld_core::scan::refused(
                     "unreadable",
@@ -977,7 +977,7 @@ fn write_still(saved: bool, json_mode: bool) -> Result<i32, String> {
     if saved {
         return Ok(0);
     }
-    finish_report(
+    finish_notice(
         json_mode,
         &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
     )
@@ -1008,13 +1008,13 @@ fn require_fast(bundles: &Path) -> Result<openworld_core::Bundle, openworld_core
 fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
     let fast = match require_fast(bundles) {
         Ok(bundle) => bundle,
-        Err(report) => return finish_report(json_mode, &report),
+        Err(report) => return finish_notice(json_mode, &report),
     };
     if let Some(message) = openworld_core::scan::output_creation_blocked(out) {
-        return finish_report(json_mode, &openworld_core::scan::refused("unreadable", message));
+        return finish_notice(json_mode, &openworld_core::scan::refused("unreadable", message));
     }
     if std::fs::create_dir_all(out).is_err() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused(
                 "unreadable",
@@ -1024,7 +1024,7 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
     }
     let input = out.join("input.png");
     if input.is_dir() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
         );
@@ -1039,12 +1039,12 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
                 | openworld_core::posters::PackError::Unreadable => "bad_hash",
                 openworld_core::posters::PackError::Expired => "expired_pack",
             };
-            return finish_report(json_mode, &openworld_core::scan::refused(code, err.refusal()));
+            return finish_notice(json_mode, &openworld_core::scan::refused(code, err.refusal()));
         }
     };
     let scene = demo_scene(fast.threshold);
     if scene.image.save(&input).is_err() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
         );
@@ -1115,7 +1115,7 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
     Ok(if report.status == "complete" { 0 } else { 2 })
 }
 
-/// A refusal before a scan result. The estimate and the bundle page show the sentence. They do not repeat the on-device lines.
+/// A refusal before a scan result. The estimate, a demo, a measure, and a fixture still show the sentence.
 fn finish_notice(json_mode: bool, report: &openworld_core::ScanReport) -> Result<i32, String> {
     emit(
         json_mode,
