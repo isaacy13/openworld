@@ -532,7 +532,14 @@ fn analyze(
 ) -> Result<i32, String> {
     let input = match input {
         Some(path) => path,
-        None => PathBuf::from(prompt("Photo or video path:")?),
+        None => {
+            if !json_mode {
+                for line in choose_lines() {
+                    println!("{line}");
+                }
+            }
+            PathBuf::from(prompt("Photo or video path:")?)
+        }
     };
     for line in device_lines(&input) {
         println!("{line}");
@@ -565,14 +572,8 @@ fn analyze(
         Some(value) => value,
         None => {
             if !json_mode {
-                println!("Detection size:");
-                for (id, label) in [
-                    ("320", "320 px on the long side"),
-                    ("480", "480 px on the long side"),
-                    ("640", "640 px on the long side"),
-                    ("full", "Full resolution"),
-                ] {
-                    println!("  {id} — {}", marked_name(label, id == "640"));
+                for line in size_menu_lines() {
+                    println!("{line}");
                 }
             }
             let entered = prompt("Detection long side (320, 480, 640, full) [640]:")?;
@@ -1107,6 +1108,29 @@ fn bundles_dir(flag: Option<PathBuf>) -> PathBuf {
     PathBuf::from("bundles")
 }
 
+fn choose_lines() -> Vec<String> {
+    vec![
+        "Choose a photo or video".into(),
+        openworld_core::copy::NO_CAMERA.into(),
+    ]
+}
+
+fn size_menu_lines() -> Vec<String> {
+    let mut lines = vec![
+        "Detection size:".into(),
+        openworld_core::copy::SIZE_HINT.into(),
+    ];
+    for (id, label) in [
+        ("320", "320 px on the long side"),
+        ("480", "480 px on the long side"),
+        ("640", "640 px on the long side"),
+        ("full", "Full resolution"),
+    ] {
+        lines.push(format!("  {id} — {}", marked_name(label, id == "640")));
+    }
+    lines
+}
+
 fn prompt(text: &str) -> Result<String, String> {
     print!("{text} ");
     io::stdout().flush().ok();
@@ -1157,6 +1181,8 @@ fn copy_lines(words: &serde_json::Value) -> Vec<String> {
         "suggest_computer",
         "not_measured",
         "estimate_caveat",
+        "no_camera",
+        "size_hint",
     ];
     let mut lines = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -1861,9 +1887,15 @@ mod cli_tests {
             "Nothing is uploaded.",
             "Not measured yet.",
             "Choose missing, wanted, or both.",
+            "Import a file you already have. There is no camera.",
         ] {
             assert!(lines.iter().any(|line| line == phrase), "{phrase} missing");
         }
+        assert!(lines.iter().any(|line| {
+            line.contains("A face under 64 px on that image is left out.")
+                && line.contains("the label is \"Not compared.\"")
+                && !line.contains("about 112")
+        }));
         let device = lines
             .iter()
             .position(|line| line == "This file stays on this device.")
@@ -1898,5 +1930,23 @@ mod cli_tests {
             marked_name("640 px on the long side", true),
             "640 px on the long side. Selected."
         );
+        assert_eq!(
+            choose_lines(),
+            vec![
+                "Choose a photo or video".to_string(),
+                "Import a file you already have. There is no camera.".to_string(),
+            ]
+        );
+        let size = size_menu_lines();
+        assert_eq!(size[0], "Detection size:");
+        assert!(size[1].contains("A face under 64 px on that image is left out."));
+        assert!(size[1].contains("the label is \"Not compared.\""));
+        assert!(!size[1].contains("about 112"));
+        let selected = size
+            .iter()
+            .position(|line| line == "  640 — 640 px on the long side. Selected.")
+            .expect("selected size");
+        assert!(1 < selected);
+        assert!(size.iter().any(|line| line == "  full — Full resolution"));
     }
 }

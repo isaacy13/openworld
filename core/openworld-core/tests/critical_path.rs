@@ -558,6 +558,15 @@ fn product_sentences_and_catalog_edges_stay_closed() {
         assert!(copy[key].as_str().unwrap().len() > 3, "{key}");
     }
     assert_eq!(copy["no_class"].as_str(), Some("No class was on."));
+    assert!(copy["size_hint"]
+        .as_str()
+        .unwrap()
+        .contains("A face under 64 px on that image is left out."));
+    assert!(!copy["size_hint"].as_str().unwrap().contains("about 112"));
+    assert_eq!(
+        copy["no_camera"].as_str(),
+        Some("Import a file you already have. There is no camera.")
+    );
     assert_eq!(openworld_core::copy::class_note(false, true), "Wanted.");
     assert_eq!(
         openworld_core::copy::estimate_class_line(true, true),
