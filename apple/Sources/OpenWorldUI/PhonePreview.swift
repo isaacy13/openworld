@@ -8,6 +8,10 @@ import OpenWorldContract
 public enum PhonePreview {
     public static func lines(screen: String, model: FlowModel) -> [String] {
         var lines = column(screen: screen, model: model)
+        if let notice = model.deleteNotice, !notice.isEmpty,
+           screen != "estimate", screen != "results", screen != "leaving" {
+            lines.insert(notice, at: 0)
+        }
         if model.showsTopError, let error = model.error {
             lines.insert(error, at: 0)
         }

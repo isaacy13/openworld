@@ -701,6 +701,13 @@ public struct FlowView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
             }
+            if let notice = model.deleteNotice, !notice.isEmpty,
+               model.step != .estimate, model.step != .results {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+            }
             Group {
             switch model.step {
             case .choose:

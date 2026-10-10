@@ -1379,6 +1379,44 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aNewFileOnTheDevicePageSaysWhenTheResultCannotBeDeleted() {
+        val model = FlowModel()
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val scene = still("blank")
+        val sceneUri = Uri.parse("content://app.openworld/${scene.name}")
+        shadowOf(resolver).registerInputStream(sceneUri, scene.inputStream())
+        model.choose(sceneUri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        val result = model.resultDir
+        assertNotNull(result)
+        val kept = model.fileName
+        repeat(4) { model.back() }
+        assertEquals(Step.Device, model.step)
+        result!!.setWritable(false)
+        try {
+            val next = still("blank")
+            val uri = Uri.parse("content://app.openworld/${next.name}")
+            shadowOf(resolver).registerInputStream(uri, next.inputStream())
+            model.choose(uri, resolver)
+            assertEquals(Step.Device, model.step)
+            assertEquals(kept, model.fileName)
+            assertEquals("The result could not be deleted.", model.pickNotice)
+            assertTrue(result.exists())
+            compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+            val shown = shownTexts()
+            assertEquals(0, shown.indexOf("The result could not be deleted."))
+            assertEquals(1, shown.count { it == "The result could not be deleted." })
+            assertTrue(shown.contains("This file stays on this device."))
+            assertTrue(shown.contains(kept))
+        } finally {
+            result.setWritable(true)
+            result.deleteRecursively()
+        }
+    }
+
+    @Test
     fun aNewFileThatCannotRemoveTheResultSaysSoOnce() {
         val model = FlowModel()
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver

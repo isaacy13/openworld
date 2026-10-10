@@ -1178,6 +1178,34 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testANewFileOnTheDevicePageSaysWhenTheResultCannotBeDeleted() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            let file = try XCTUnwrap(model.file)
+            model.goBack()
+            model.goBack()
+            model.goBack()
+            model.goBack()
+            XCTAssertEqual(model.step, .device)
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: result.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: result.path) }
+            let next = try self.still("blank")
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            let lines = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(lines.first, model.deleteNotice)
+            XCTAssertEqual(lines.dropFirst().first, "Back")
+            XCTAssertEqual(lines.filter { $0 == model.deleteNotice }.count, 1)
+            XCTAssertTrue(lines.contains(file.lastPathComponent))
+            XCTAssertFalse(lines.contains(next.lastPathComponent))
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testARefusedDeleteKeepsTheResultOnScreen() throws {
         try MainActor.assumeIsolated {
             let model = try self.scan("scene")

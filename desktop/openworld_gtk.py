@@ -1934,6 +1934,32 @@ class OpenWorld(Gtk.Application):
             return False
         headline = self.summary.get_text()
         scene = self.input_path
+        while self.stack.get_visible_child_name() != "device" and len(self.history) > 1:
+            self.go_back()
+        os.chmod(result, 0o555)
+        other = str(Path(scene or "").with_name("second-photo.png"))
+        shutil.copy(scene or "", other)
+        self.choose_file(other)
+        os.chmod(result, 0o755)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "device"
+            or self.input_path != scene
+            or self.pick_notice.get_text() != "The result could not be deleted."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or not (result / "result.json").is_file()
+        ):
+            self._exercise_fail(
+                "a file chosen from the device page hid a result that could not be deleted: "
+                f"{self.pick_notice.get_text()!r} {self.input_path!r}"
+            )
+            return False
+        self.pick_notice.set_visible(False)
+        self.delete_notice.set_visible(False)
+        self._go("results")
         missing_on_result = str(Path(scene or "").with_name("no-such-photo-on-results.png"))
         self.choose_file(missing_on_result)
         root = self.window.get_child()
