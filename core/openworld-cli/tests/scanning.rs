@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -337,4 +339,94 @@ fn analyze_yes_uses_the_preselected_choices() {
     assert_eq!(report["detection_note"], "640 px on the long side.");
     assert_eq!(report["coverage_note"], "Every decoded frame.");
     assert_eq!(report["class_note"], "Missing and wanted.");
+}
+
+#[test]
+fn a_missing_file_is_not_a_bad_codec() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-such-photo.png");
+    let folder = dir.path().join("not-a-file");
+    fs::create_dir(&folder).unwrap();
+    let blocked = dir.path().join("unreadable.bin");
+    fs::write(&blocked, b"x").unwrap();
+    let mut perms = fs::metadata(&blocked).unwrap().permissions();
+    perms.set_mode(0);
+    fs::set_permissions(&blocked, perms).unwrap();
+    for path in [&missing, &folder, &blocked] {
+        let (code, text, err) = run(
+            false,
+            &[
+                "estimate",
+                "--input",
+                path.to_str().unwrap(),
+                "--bundle",
+                "fast",
+                "--long-side",
+                "640",
+                "--coverage",
+                "complete",
+            ],
+        );
+        assert_eq!(code, Some(2), "{err}\n{text}");
+        assert_eq!(text.lines().next(), Some("The file could not be read. Refusing."), "{text}");
+        assert!(!text.contains("Bad codec"));
+        assert!(!text.contains("This file stays on this device."));
+    }
+    let junk = dir.path().join("notes.txt");
+    fs::write(&junk, b"not a photo\n").unwrap();
+    let (code, text, err) = run(
+        false,
+        &[
+            "estimate",
+            "--input",
+            junk.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert!(text.contains("Bad codec or unreadable file. Refusing."), "{text}");
+    let (code, text, err) = run(
+        false,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            missing.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some("The file could not be read. Refusing."), "{text}");
+    assert!(!text.contains("This file stays on this device."));
+    assert!(!err.contains("Poster pack"));
+    let (code, text, err) = run(
+        true,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            missing.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["message"], "The file could not be read. Refusing.");
+    assert!(!text.contains("This file stays on this device."));
 }

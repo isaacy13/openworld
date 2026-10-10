@@ -542,6 +542,12 @@ fn analyze(
             PathBuf::from(prompt("Photo or video path:", json_mode)?)
         }
     };
+    if !openworld_core::scan::input_readable(&input) {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused("unreadable", "The file could not be read. Refusing."),
+        );
+    }
     speak(json_mode, device_lines(&input));
     let all = load_bundles(bundles).map_err(|e| e.to_string())?;
     let bundle = match bundle {

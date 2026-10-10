@@ -413,7 +413,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
     assert!(refused.frames_note.is_none());
     assert!(refused.detection_note.is_none());
     assert!(refused.coverage_note.is_none());
-    assert!(refused.refusal == Some("bad_codec".into()) || refused.refusal == Some("bad_hash".into()));
+    assert_eq!(refused.refusal.as_deref(), Some("unreadable"));
+    assert_eq!(refused.summary, "The file could not be read. Refusing.");
 
     image.save(dir.path().join("in.png")).unwrap();
     let hashed = scan_path(

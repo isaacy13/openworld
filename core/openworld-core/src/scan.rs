@@ -200,6 +200,9 @@ fn open_models(bundle: &Bundle, pack: &PosterPack) -> Result<Option<FaceModels>,
 }
 
 pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanReport {
+    if req.frames_dir.is_none() && !input_readable(&req.input) {
+        return refused("unreadable", "The file could not be read. Refusing.");
+    }
     let bundle = match crate::bundle::load_bundles(&req.bundles_dir)
         .ok()
         .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
@@ -1075,6 +1078,9 @@ pub fn leave_prompt(url: &str) -> Result<LeavePrompt, String> {
 }
 
 pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, ScanReport> {
+    if req.media.is_none() && !input_readable(&req.input) {
+        return Err(refused("unreadable", "The file could not be read. Refusing."));
+    }
     let bundle = crate::bundle::load_bundles(&req.bundles_dir)
         .ok()
         .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
@@ -1110,6 +1116,14 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         execution: req.execution,
         form_factor: req.form_factor,
     }))
+}
+
+/// A regular file this process can open. A directory and a missing path are not.
+pub fn input_readable(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(meta) if meta.is_file() => fs::File::open(path).is_ok(),
+        _ => false,
+    }
 }
 
 fn media_duration(media: &MediaFacts) -> f64 {
