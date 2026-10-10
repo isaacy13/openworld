@@ -19,7 +19,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gio, GLib, Gtk
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 
 PHRASES = {
@@ -194,7 +195,9 @@ class OpenWorld(Gtk.Application):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         title = Gtk.Label(label=PHRASES["on_device"], xalign=0)
         title.add_css_class("title")
-        self.file_label = Gtk.Label(xalign=0)
+        self.file_label = Gtk.Label(xalign=0, wrap=True)
+        self.file_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.file_label.set_hexpand(True)
         self.file_label.add_css_class("section")
         self.warn_label = Gtk.Label(xalign=0, wrap=True)
         self.warn_label.add_css_class("warn")
@@ -1375,6 +1378,28 @@ class OpenWorld(Gtk.Application):
         ):
             self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r} {self.estimate_warn.get_text()!r}")
             return False
+        long_path = self.work / (("A" * 180) + ".png")
+        long_path.write_bytes(Path(path).read_bytes())
+        self.choose_file(str(long_path))
+        context = GLib.MainContext.default()
+        for _ in range(30):
+            context.iteration(False)
+        layout = self.file_label.get_layout()
+        line_count = layout.get_line_count() if layout is not None else 1
+        minimum = self.file_label.get_preferred_size().minimum_size.width
+        if (
+            not self.file_label.get_wrap()
+            or self.file_label.get_wrap_mode() != Pango.WrapMode.WORD_CHAR
+            or minimum > 400
+            or self.window.get_width() > 1200
+            or line_count < 2
+            or self.file_label.get_text() != long_path.name
+        ):
+            self._exercise_fail(
+                f"a long file name widened the window: {self.window.get_width()} {minimum} {line_count} {self.file_label.get_wrap()}"
+            )
+            return False
+        self.choose_file(path)
         missing = str(Path(path).with_name("no-such-photo.png"))
         self.choose_file(missing)
         folder = Path(path).with_name("not-a-file-dir")
