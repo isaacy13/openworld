@@ -150,8 +150,11 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert!(face.uncertainty.contains("Score "));
     assert!(face.uncertainty.contains("Fast keeps a candidate at"));
     assert!(!face.uncertainty.contains("Cosine"));
+    assert!(!face.uncertainty.contains(POSSIBLE_CANDIDATE));
     let plate = report.candidates.iter().find(|c| c.kind == "plate").unwrap();
     assert!(plate.uncertainty.contains("FIX123"));
+    assert!(plate.uncertainty.contains("That text is published on this poster."));
+    assert!(!plate.uncertainty.contains(POSSIBLE_CANDIDATE));
     assert_eq!(face.leaving, "You are leaving OpenWorld.");
     assert!(face.cosine.unwrap() >= bundle.threshold);
 }

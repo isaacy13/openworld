@@ -1379,6 +1379,11 @@ class OpenWorld(Gtk.Application):
         if "Score " not in card_text or "Cosine" in card_text or "FIX123" not in card_text:
             self._exercise_fail(f"the card did not explain the score and the plate: {card_text}")
             return False
+        for candidate in report.get("candidates") or []:
+            uncertainty = candidate.get("uncertainty") or ""
+            if PHRASES["possible"] in uncertainty:
+                self._exercise_fail(f"the score line repeated the candidate sentence: {uncertainty}")
+                return False
         if "(missing)" in card_text or "(wanted)" in card_text or "(Missing)" not in card_text or "(Wanted)" not in card_text:
             self._exercise_fail(f"a card showed the raw poster class: {card_text}")
             return False

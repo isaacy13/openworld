@@ -89,7 +89,9 @@ fn a_probe_that_matches_the_poster_is_a_candidate() {
     assert_eq!(engine.candidates[0].wording, POSSIBLE_CANDIDATE);
     assert!(engine.candidates[0].uncertainty.starts_with("Score "));
     assert!(engine.candidates[0].uncertainty.contains("Fast keeps a candidate at 0.55 and above."));
+    assert!(engine.candidates[0].uncertainty.ends_with("and above."));
     assert!(!engine.candidates[0].uncertainty.contains("Cosine"));
+    assert!(!engine.candidates[0].uncertainty.contains(POSSIBLE_CANDIDATE));
     assert_eq!(engine.candidates[0].leaving, crate::copy::LEAVING);
     assert!(engine.candidates[0]
         .fbi_url

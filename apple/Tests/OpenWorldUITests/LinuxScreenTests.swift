@@ -35,6 +35,8 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.report?.candidates.first?.fbiUrl.hasPrefix("https://www.fbi.gov") == true)
             XCTAssertTrue(model.report?.candidates.contains { $0.posterLine == "Fixture subject A (Missing)" } == true)
             XCTAssertTrue(model.report?.candidates.contains { $0.posterLine == "Fixture vehicle C (Wanted)" } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "face" && $0.uncertainty.contains("Score ") && $0.uncertainty.contains("keeps a candidate at") && !$0.uncertainty.contains(Copy.possible) } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "plate" && $0.uncertainty.contains("FIX123") && !$0.uncertainty.contains(Copy.possible) } == true)
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" || $0.posterClassLabel == "Wanted" } == true)
             let disclosure = model.report?.disclosure ?? []
             XCTAssertTrue(disclosure.contains("Nothing is uploaded."))

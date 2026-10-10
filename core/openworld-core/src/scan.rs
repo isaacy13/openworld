@@ -792,7 +792,7 @@ impl<'a> Engine<'a> {
                 track_id,
                 cosine: None,
                 threshold: self.bundle.threshold,
-                uncertainty: format!("The plate reads {text}. That text is published on this poster. {POSSIBLE_CANDIDATE}"),
+                uncertainty: format!("The plate reads {text}. That text is published on this poster."),
                 poster_id: poster.id.clone(),
                 poster_class: poster.class.as_str().into(),
                 poster_class_label: poster.class.label().into(),
@@ -925,7 +925,7 @@ fn strongest_cards(candidates: Vec<Candidate>) -> Vec<Candidate> {
 }
 
 fn face_uncertainty(score: f32, threshold: f32, bundle_name: &str) -> String {
-    format!("Score {score:.2}. {bundle_name} keeps a candidate at {threshold:.2} and above. {POSSIBLE_CANDIDATE}")
+    format!("Score {score:.2}. {bundle_name} keeps a candidate at {threshold:.2} and above.")
 }
 
 fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {
