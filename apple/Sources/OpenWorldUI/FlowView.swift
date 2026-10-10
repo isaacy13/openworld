@@ -423,7 +423,32 @@ public struct FlowView: View {
                 ForEach(model.report?.warnings ?? [], id: \.self) { line in
                     Text(line).foregroundStyle(.orange)
                 }
+                if model.report?.candidates.isEmpty == false {
+                    ForEach(model.report?.candidates ?? []) { candidate in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(candidate.wording).font(.headline)
+                            HStack(alignment: .top, spacing: 8) {
+                                labeledCrop(candidate.crop, "Crop")
+                                labeledCrop(candidate.frame, "Frame")
+                            }
+                            Text(candidate.uncertainty)
+                            Text("\(candidate.posterTitle) (\(candidate.posterClass))")
+                            prominent("Open FBI page") {
+                                model.requestLeave(candidate.fbiUrl)
+                            }
+                        }
+                        #if !os(Linux)
+                        .padding()
+                        .background(.quaternary.opacity(0.4))
+                        .clipShape(RoundedRectangle(cornerRadius: model.phone ? 12 : 8))
+                        #endif
+                    }
+                } else if model.report?.status == "complete" {
+                    Text(Copy.clearance)
+                }
                 if let items = model.report?.inventory, !items.isEmpty {
+                    Text("Crops from this file.")
+                        .font(model.phone ? .title3 : .headline)
                     #if os(Linux)
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(items) { item in
@@ -449,25 +474,6 @@ public struct FlowView: View {
                     }
                     #endif
                 }
-                if model.report?.candidates.isEmpty == false {
-                    ForEach(model.report?.candidates ?? []) { candidate in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(candidate.wording).font(.headline)
-                            Text(candidate.uncertainty)
-                            Text("\(candidate.posterTitle) (\(candidate.posterClass))")
-                            prominent("Open FBI page") {
-                                model.requestLeave(candidate.fbiUrl)
-                            }
-                        }
-                        #if !os(Linux)
-                        .padding()
-                        .background(.quaternary.opacity(0.4))
-                        .clipShape(RoundedRectangle(cornerRadius: model.phone ? 12 : 8))
-                        #endif
-                    }
-                } else if model.report?.status == "complete" {
-                    Text(Copy.clearance)
-                }
                 ForEach(model.report?.disclosure ?? [], id: \.self) { line in
                     Text(line).font(.footnote)
                 }
@@ -485,6 +491,16 @@ public struct FlowView: View {
             .padding()
     }
 
+
+    @ViewBuilder
+    private func labeledCrop(_ relative: String?, _ caption: String) -> some View {
+        if let relative, !relative.isEmpty {
+            VStack(spacing: 4) {
+                cropImage(relative)
+                Text(caption).font(.caption)
+            }
+        }
+    }
 
     @ViewBuilder
     private func cropImage(_ relative: String?) -> some View {

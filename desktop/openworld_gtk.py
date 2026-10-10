@@ -263,6 +263,9 @@ class OpenWorld(Gtk.Application):
         self.reason.set_visible(False)
         self.result_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note.add_css_class("dim")
+        self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0)
+        self.strip_heading.add_css_class("section")
+        self.strip_heading.set_visible(False)
         self.strip = Gtk.FlowBox()
         self.strip.set_max_children_per_line(6)
         self.strip.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -274,8 +277,9 @@ class OpenWorld(Gtk.Application):
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
         inner.append(self.reason)
-        inner.append(self.strip)
         inner.append(self.detail)
+        inner.append(self.strip_heading)
+        inner.append(self.strip)
         inner.append(self.result_note)
         scroll.set_child(inner)
         outer.append(scroll)
@@ -549,8 +553,10 @@ class OpenWorld(Gtk.Application):
 
     def _fill_strip(self, report: dict) -> None:
         self.strip.remove_all()
+        self.strip_heading.set_visible(False)
         if self.out_dir is None:
             return
+        shown = False
         for item in report.get("inventory") or []:
             rel = item.get("crop")
             if not rel:
@@ -567,6 +573,18 @@ class OpenWorld(Gtk.Application):
             box.append(picture)
             box.append(caption)
             self.strip.append(box)
+            shown = True
+        self.strip_heading.set_visible(shown)
+
+    def _labels_under(self, root: Gtk.Widget) -> list[str]:
+        labels: list[str] = []
+        if isinstance(root, Gtk.Label):
+            labels.append(root.get_text() or "")
+        child = root.get_first_child()
+        while child is not None:
+            labels.extend(self._labels_under(child))
+            child = child.get_next_sibling()
+        return labels
 
     def _button_labels(self, root: Gtk.Widget) -> list[str]:
         labels: list[str] = []
@@ -602,14 +620,18 @@ class OpenWorld(Gtk.Application):
         wording.add_css_class("section")
         box.append(wording)
         images = Gtk.Box(spacing=8)
-        for key in ("crop", "frame"):
+        for key, caption in (("crop", "Crop"), ("frame", "Frame")):
             rel = candidate.get(key)
             if rel and self.out_dir is not None:
                 path = self.out_dir / rel
                 if path.is_file():
+                    pair = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
                     picture = Gtk.Picture.new_for_filename(str(path))
                     picture.set_size_request(160, 120)
-                    images.append(picture)
+                    label = Gtk.Label(label=caption, xalign=0)
+                    pair.append(picture)
+                    pair.append(label)
+                    images.append(pair)
         box.append(images)
         uncertainty = Gtk.Label(label=candidate.get("uncertainty", ""), xalign=0, wrap=True)
         poster = Gtk.Label(
@@ -696,6 +718,7 @@ class OpenWorld(Gtk.Application):
 
     def _clear_results(self) -> None:
         self.strip.remove_all()
+        self.strip_heading.set_visible(False)
         child = self.detail.get_first_child()
         while child is not None:
             nxt = child.get_next_sibling()
@@ -910,6 +933,13 @@ class OpenWorld(Gtk.Application):
         expected = len(report.get("candidates") or [])
         if len(fbi_buttons) != expected or expected < 1:
             self._exercise_fail(f"expected {expected} FBI buttons, saw {fbi_buttons}")
+            return False
+        card_text = " ".join(self._labels_under(self.detail))
+        if card_text.count("Crop") < expected or card_text.count("Frame") < expected:
+            self._exercise_fail(f"a candidate card is missing its crop or frame: {card_text}")
+            return False
+        if self.strip_heading.get_text() != "Crops from this file." or not self.strip_heading.get_visible():
+            self._exercise_fail("the other crops are not labeled under the cards")
             return False
         result = self.out_dir
         if result is None or not (result / "result.json").is_file() or not self.delete_button.get_sensitive():

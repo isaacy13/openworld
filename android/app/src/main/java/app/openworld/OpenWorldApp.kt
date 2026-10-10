@@ -129,7 +129,20 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             style = MaterialTheme.typography.headlineMedium,
                         )
                         if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
+                        model.candidateRows.forEach { row ->
+                            Text(row.wording, style = MaterialTheme.typography.titleMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                evidencePicture(row.cropPath, "Crop")
+                                evidencePicture(row.framePath, "Frame")
+                            }
+                            if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
+                            if (row.title.isNotBlank()) {
+                                Text(if (row.posterClass.isBlank()) row.title else "${row.title} (${row.posterClass})")
+                            }
+                            Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
+                        }
                         if (model.strip.isNotEmpty()) {
+                            Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
                             Row(
                                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -150,14 +163,6 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             }
                         }
                         Text(model.detail)
-                        model.candidateRows.forEach { row ->
-                            Text(row.wording, style = MaterialTheme.typography.titleMedium)
-                            if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
-                            if (row.title.isNotBlank()) {
-                                Text(if (row.posterClass.isBlank()) row.title else "${row.title} (${row.posterClass})")
-                            }
-                            Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
-                        }
                         model.leaveNotice?.let { Text(it) }
                         if (model.resultDir != null) {
                             Button(onClick = model::deleteResult) { Text("Delete") }
@@ -185,6 +190,22 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun evidencePicture(path: String?, caption: String) {
+    if (path.isNullOrBlank()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val bitmap = BitmapFactory.decodeFile(path)
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = caption,
+                modifier = Modifier.size(112.dp),
+            )
+        }
+        Text(caption, style = MaterialTheme.typography.bodySmall)
     }
 }
 

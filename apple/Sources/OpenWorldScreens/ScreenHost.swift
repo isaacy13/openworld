@@ -133,19 +133,24 @@ enum ScreenCopy {
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
             if let note = model.report?.perceptionNote { lines.append(note) }
             lines.append(contentsOf: model.report?.warnings ?? [])
-            for item in model.report?.inventory ?? [] where !lines.contains(item.label) {
-                lines.append(item.label)
-            }
-            if model.resultDirectory != nil {
-                lines.append("Delete")
-            }
             if model.report?.candidates.isEmpty == false {
                 if let candidate = model.report?.candidates.first {
+                    if candidate.crop?.isEmpty == false { lines.append("Crop") }
+                    if candidate.frame?.isEmpty == false { lines.append("Frame") }
                     lines.append(candidate.posterTitle + " (" + candidate.posterClass + ")")
                 }
                 lines.append("Open FBI page")
             } else if model.report?.status == "complete" {
                 lines.append(Copy.clearance)
+            }
+            if model.report?.inventory.isEmpty == false {
+                lines.append("Crops from this file.")
+            }
+            for item in model.report?.inventory ?? [] where !lines.contains(item.label) {
+                lines.append(item.label)
+            }
+            if model.resultDirectory != nil {
+                lines.append("Delete")
             }
             if screen == "leaving" {
                 lines.append(Copy.leaving)
