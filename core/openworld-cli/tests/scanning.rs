@@ -953,6 +953,35 @@ fn a_zero_size_platform_decode_is_the_bad_codec_refusal() {
     assert!(err.is_empty(), "{err}");
 }
 
+#[test]
+fn an_empty_catalog_names_the_missing_program_on_bundles() {
+    let dir = tempfile::tempdir().unwrap();
+    let empty = dir.path().join("empty");
+    fs::create_dir(&empty).unwrap();
+    let sentence = "The scan program is not on this device. Refusing.";
+    let (code, text, err) = catalog_run(false, &empty, &["bundles"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines.first().copied(), Some("Model bundle"));
+    assert_eq!(
+        lines.iter().filter(|line| **line == sentence).count(),
+        1,
+        "{text}"
+    );
+    assert!(err.is_empty(), "{err}");
+
+    let (code, text, err) = catalog_run(true, &empty, &["bundles"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "missing_program");
+    assert_eq!(doc["summary"], sentence);
+    assert_eq!(doc["message"], sentence);
+    assert!(doc.get("bundles").is_none());
+    assert!(!text.contains("Model bundle"), "{text}");
+    assert!(err.is_empty(), "{err}");
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {

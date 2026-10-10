@@ -70,6 +70,14 @@ fn dispatch_with_progress(
     match parsed.cmd.as_str() {
         "bundles" => {
             let all = crate::load_bundles(&bundles).map_err(|err| err.refusal())?;
+            if all.is_empty() {
+                return Ok(json!({
+                    "status": "refused",
+                    "refusal": "missing_program",
+                    "summary": "The scan program is not on this device. Refusing.",
+                    "message": "The scan program is not on this device. Refusing.",
+                }));
+            }
             let rows: Vec<_> = all.iter().map(crate::bundle::row_json).collect();
             Ok(json!({ "bundles": rows }))
         }
@@ -435,6 +443,25 @@ mod tests {
             update["message"],
             "Real FBI photos stay off. Fast does not have a curve that allows them."
         );
+    }
+
+    #[test]
+    fn an_empty_catalog_names_the_missing_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = invoke_argv(&[
+            "--json".into(),
+            "--bundles".into(),
+            dir.path().display().to_string(),
+            "bundles".into(),
+        ]);
+        let listed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(listed["status"], "refused");
+        assert_eq!(listed["refusal"], "missing_program");
+        assert_eq!(
+            listed["message"],
+            "The scan program is not on this device. Refusing."
+        );
+        assert!(listed.get("bundles").is_none(), "{text}");
     }
 
     #[test]

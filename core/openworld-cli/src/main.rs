@@ -262,6 +262,25 @@ fn run(cli: Cli) -> Result<i32, String> {
             Ok(0)
         }
         Cmd::Bundles => match load_bundles(&bundles) {
+            Ok(all) if all.is_empty() => {
+                let message = "The scan program is not on this device. Refusing.";
+                emit(
+                    cli.json,
+                    json!({
+                        "status": "refused",
+                        "refusal": "missing_program",
+                        "summary": message,
+                        "message": message,
+                    }),
+                );
+                if !cli.json {
+                    for line in bundle_lines(&[]) {
+                        println!("{line}");
+                    }
+                    println!("{message}");
+                }
+                Ok(2)
+            }
             Ok(all) => {
                 let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
                 emit(cli.json, json!({ "bundles": rows }));
