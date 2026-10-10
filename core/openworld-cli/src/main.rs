@@ -838,9 +838,15 @@ fn fixture_still(
         return Err("Choose a scene or a blank still.".into());
     }
     if blank_canvas {
-        ensure_parent(out)?;
+        let ready = ensure_parent(out, json_mode)?;
+        if ready != 0 {
+            return Ok(ready);
+        }
         let image = blank(400, 320);
-        image.save(out).map_err(|e| e.to_string())?;
+        let written = write_still(!out.is_dir() && image.save(out).is_ok(), json_mode)?;
+        if written != 0 {
+            return Ok(written);
+        }
         emit(
             json_mode,
             json!({ "path": out, "blank": true, "width": 400, "height": 320 }),
@@ -854,10 +860,16 @@ fn fixture_still(
         Ok(bundle) => bundle,
         Err(report) => return finish_report(json_mode, &report),
     };
-    ensure_parent(out)?;
+    let ready = ensure_parent(out, json_mode)?;
+    if ready != 0 {
+        return Ok(ready);
+    }
     if scene {
         let layout = demo_scene(fast.threshold);
-        layout.image.save(out).map_err(|e| e.to_string())?;
+        let written = write_still(!out.is_dir() && layout.image.save(out).is_ok(), json_mode)?;
+        if written != 0 {
+            return Ok(written);
+        }
         emit(
             json_mode,
             json!({
@@ -886,7 +898,10 @@ fn fixture_still(
     }
     let mut image = blank(400, 320);
     fiducial::place(&mut image, &marker, px, py);
-    image.save(out).map_err(|e| e.to_string())?;
+    let written = write_still(!out.is_dir() && image.save(out).is_ok(), json_mode)?;
+    if written != 0 {
+        return Ok(written);
+    }
     emit(
         json_mode,
         json!({
@@ -924,13 +939,32 @@ fn find_origin(id: u16, w: u32, h: u32, threshold: f32, below: bool) -> Result<(
     }
 }
 
-fn ensure_parent(out: &Path) -> Result<(), String> {
+fn ensure_parent(out: &Path, json_mode: bool) -> Result<i32, String> {
     if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        if !parent.as_os_str().is_empty()
+            && (openworld_core::scan::output_creation_blocked(parent).is_some()
+                || std::fs::create_dir_all(parent).is_err())
+        {
+            return finish_report(
+                json_mode,
+                &openworld_core::scan::refused(
+                    "unreadable",
+                    "The output directory could not be created. Refusing.",
+                ),
+            );
         }
     }
-    Ok(())
+    Ok(0)
+}
+
+fn write_still(saved: bool, json_mode: bool) -> Result<i32, String> {
+    if saved {
+        return Ok(0);
+    }
+    finish_report(
+        json_mode,
+        &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
+    )
 }
 
 /// Fast is the bundle measure, demo, and a placed fixture still run.
@@ -972,6 +1006,13 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
             ),
         );
     }
+    let input = out.join("input.png");
+    if input.is_dir() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
+        );
+    }
     let posters = out.join("posters");
     let pack = match write_fixture_pack(&posters, SystemTime::now()) {
         Ok(pack) => pack,
@@ -986,8 +1027,12 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
         }
     };
     let scene = demo_scene(fast.threshold);
-    let input = out.join("input.png");
-    scene.image.save(&input).map_err(|e| e.to_string())?;
+    if scene.image.save(&input).is_err() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused("unreadable", "The still could not be written. Refusing."),
+        );
+    }
     let result = out.join("result");
     let req = request(
         bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true,

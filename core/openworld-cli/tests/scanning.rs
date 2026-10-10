@@ -1057,6 +1057,69 @@ fn a_demo_file_refuses_before_it_scans() {
     assert_eq!(fs::read(&posters).unwrap(), b"keep-pack");
 }
 
+#[test]
+fn a_still_that_cannot_be_written_uses_the_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = "The still could not be written. Refusing.";
+    let created = "The output directory could not be created. Refusing.";
+
+    let out = dir.path().join("demo");
+    fs::create_dir(&out).unwrap();
+    let input = out.join("input.png");
+    fs::create_dir(&input).unwrap();
+    fs::write(input.join("keep.txt"), b"keep").unwrap();
+    let (code, text, err) = run(false, &["demo", "--out", out.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(still), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(input.is_dir());
+    assert_eq!(fs::read(input.join("keep.txt")).unwrap(), b"keep");
+    assert!(!out.join("posters").exists());
+
+    let (code, text, err) = run(true, &["demo", "--out", out.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "unreadable");
+    assert_eq!(doc["summary"], still);
+    assert_eq!(doc["message"], still);
+    assert!(err.is_empty(), "{err}");
+
+    let folder = dir.path().join("folder");
+    fs::create_dir(&folder).unwrap();
+    let (code, text, err) = run(false, &["fixture-still", "--blank", "--out", folder.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(still), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(folder.is_dir());
+    assert!(fs::read_dir(&folder).unwrap().next().is_none());
+
+    let blocker = dir.path().join("not-a-dir");
+    fs::write(&blocker, b"keep").unwrap();
+    let nested = blocker.join("still.png");
+    let (code, text, err) = run(true, &["fixture-still", "--blank", "--out", nested.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "unreadable");
+    assert_eq!(doc["summary"], created);
+    assert_eq!(doc["message"], created);
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(fs::read(&blocker).unwrap(), b"keep");
+    assert!(!nested.exists());
+
+    let scene = dir.path().join("scene-dir");
+    fs::create_dir(&scene).unwrap();
+    let (code, text, err) = run(false, &["fixture-still", "--scene", "--out", scene.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(still), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(scene.is_dir());
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {
