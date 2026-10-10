@@ -604,10 +604,15 @@ class FlowModel {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
+                if (index >= 0 && !cursor.isNull(index)) {
+                    val name = cursor.getString(index)
+                    if (!name.isNullOrBlank()) return name
+                }
             }
         }
-        return uri.lastPathSegment ?: "file"
+        val segment = uri.lastPathSegment
+        if (!segment.isNullOrBlank()) return segment
+        return "file"
     }
 
     private fun originalModified(uri: Uri, resolver: ContentResolver): Long? {

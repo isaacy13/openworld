@@ -409,6 +409,37 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aBlankDisplayNameUsesTheNameInTheAddress() {
+        val file = still("blank")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val missing = chooseNamed(resolver, "content://app.openworld/named.png", file, null)
+        assertEquals(Step.Device, missing.step)
+        assertEquals("named.png", missing.fileName)
+        val blank = chooseNamed(resolver, "content://app.openworld/blank-name.png", file, "")
+        assertEquals(Step.Device, blank.step)
+        assertEquals("blank-name.png", blank.fileName)
+        val spaces = chooseNamed(resolver, "content://app.openworld", file, "   ")
+        assertEquals(Step.Device, spaces.step)
+        assertEquals("file", spaces.fileName)
+    }
+
+    private fun chooseNamed(resolver: android.content.ContentResolver, address: String, file: File, display: String?): FlowModel {
+        val model = FlowModel()
+        val uri = Uri.parse(address)
+        val cursor = object : RoboCursor() {
+            override fun close() {
+                moveToPosition(-1)
+            }
+        }
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME))
+        cursor.setResults(arrayOf(arrayOf<Any?>(display)))
+        shadowOf(resolver).setCursor(uri, cursor)
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        model.choose(uri, resolver)
+        return model
+    }
+
+    @Test
     fun oldFileWarningIsOnTheResult() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/old-blank.png")
@@ -1018,6 +1049,33 @@ class PhoneFlowTest {
 class PhoneScreenTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun aBlankFileNameLeavesNoLineUnderTheDeviceHeadline() {
+        val model = FlowModel()
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val uri = Uri.parse("content://app.openworld/named.png")
+        val cursor = object : RoboCursor() {
+            override fun close() {
+                moveToPosition(-1)
+            }
+        }
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME))
+        cursor.setResults(arrayOf(arrayOf<Any>("")))
+        shadowOf(resolver).setCursor(uri, cursor)
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("named.png").assertExists()
+        compose.onNodeWithText("Nothing is uploaded.").assertExists()
+        assertFalse(shownTexts().any { it.isBlank() })
+        model.fileName = ""
+        compose.waitForIdle()
+        compose.onNodeWithText("named.png").assertDoesNotExist()
+        compose.onNodeWithText("Nothing is uploaded.").assertExists()
+        assertFalse(shownTexts().any { it.isBlank() })
+    }
 
     @Test
     fun aCropAppearsOnTheEstimateWhileScanning() {

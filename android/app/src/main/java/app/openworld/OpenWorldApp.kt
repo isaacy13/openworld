@@ -89,7 +89,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     }
                     Step.Device -> {
                         Text("This file stays on this device.", style = MaterialTheme.typography.headlineMedium)
-                        Text(model.fileName, style = MaterialTheme.typography.titleMedium)
+                        if (model.fileName.isNotBlank()) {
+                            Text(model.fileName, style = MaterialTheme.typography.titleMedium)
+                        }
                         if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         disclosure.forEach { Text(it) }
                         Text("Fixture posters. Real FBI photos stay off.")
