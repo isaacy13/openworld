@@ -113,7 +113,9 @@ class FlowModel {
         }
         if (!removeResult(abandonUnmarked = true)) {
             copy.delete()
-            if (pickNotice == null) pickNotice = deleteNotice ?: "The result could not be deleted."
+            if (step != Step.Results && step != Step.Estimate && pickNotice == null) {
+                pickNotice = deleteNotice ?: "The result could not be deleted."
+            }
             return
         }
         pickNotice = null

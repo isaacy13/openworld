@@ -133,14 +133,25 @@ public final class FlowModel: ObservableObject {
         #if !os(Linux)
         _ = url.startAccessingSecurityScopedResource()
         #endif
+        guard !scanning else { return }
         var directory = ObjCBool(false)
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
         if !exists || directory.boolValue || !FileManager.default.isReadableFile(atPath: url.path) {
             error = "The file could not be read. Refusing."
             return
         }
+        guard releaseResult() else {
+            if error == "The file could not be read. Refusing." {
+                error = nil
+            }
+            return
+        }
         file = url
+        report = nil
         error = nil
+        leavingURL = nil
+        leaveError = nil
+        deleteNotice = nil
         if let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
            let modified = values.contentModificationDate,
            Date().timeIntervalSince(modified) > 30 * 24 * 3600 {
@@ -181,8 +192,19 @@ public final class FlowModel: ObservableObject {
     }
 
     /// A refusal the current page does not already print. An empty catalog prints its own line.
+    /// A file that cannot be read stays on the page that already has a file, and that sentence is first.
     public var showsTopError: Bool {
         guard let error, !error.isEmpty else { return false }
+        if error == "The file could not be read. Refusing." {
+            switch step {
+            case .estimate:
+                return estimate != nil
+            case .results:
+                return report != nil
+            default:
+                return true
+            }
+        }
         switch step {
         case .estimate, .results:
             return false
@@ -647,7 +669,7 @@ public struct FlowView: View {
                     }
                 }
             }
-            if model.bundles.isEmpty, let error = model.error {
+            if model.bundles.isEmpty, let error = model.error, error != "The file could not be read. Refusing." {
                 Text(error)
             }
             prominent("Continue") { model.step = .size }

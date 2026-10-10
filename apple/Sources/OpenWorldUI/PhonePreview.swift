@@ -35,7 +35,7 @@ public enum PhonePreview {
                 lines.append(row.bestFor)
                 lines.append(row.curveLine)
             }
-            if model.bundles.isEmpty, let error = model.error {
+            if model.bundles.isEmpty, let error = model.error, error != "The file could not be read. Refusing." {
                 lines.append(error)
             }
             lines.append("Continue")

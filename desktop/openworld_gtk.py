@@ -378,6 +378,8 @@ class OpenWorld(Gtk.Application):
         self.pick_notice.set_visible(True)
 
     def choose_file(self, path: str) -> None:
+        if self.scan_thread is not None and self.scan_thread.is_alive():
+            return
         try:
             info = os.stat(path)
         except OSError:
@@ -385,6 +387,13 @@ class OpenWorld(Gtk.Application):
             return
         if not stat.S_ISREG(info.st_mode) or not os.access(path, os.R_OK):
             self._refuse_pick()
+            return
+        if self.pick_notice.get_text() == "The file could not be read. Refusing.":
+            self.pick_notice.set_visible(False)
+        if not self.release_result():
+            if self.stack.get_visible_child_name() != "results":
+                self.pick_notice.set_text(self.delete_notice.get_text() or "The result could not be deleted.")
+                self.pick_notice.set_visible(True)
             return
         self.pick_notice.set_visible(False)
         self.input_path = path
@@ -1740,6 +1749,25 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail("no result to delete")
             return False
         headline = self.summary.get_text()
+        scene = self.input_path
+        missing_on_result = str(Path(scene or "").with_name("no-such-photo-on-results.png"))
+        self.choose_file(missing_on_result)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "results"
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or first is not self.pick_notice
+            or self.input_path != scene
+            or self.summary.get_text() != headline
+            or not self.delete_button.get_visible()
+            or not (result / "result.json").is_file()
+        ):
+            self._exercise_fail(
+                f"an unreadable file left the result: {self.pick_notice.get_text()!r} {self.summary.get_text()!r}"
+            )
+            return False
         saved = (result / "result.json").read_bytes()
         (result / "result.json").unlink()
         if (
@@ -1764,6 +1792,26 @@ class OpenWorld(Gtk.Application):
             or self.delete_notice.get_visible()
         ):
             self._exercise_fail("result remained after delete")
+            return False
+        kept = self.work / "kept-result"
+        kept.mkdir()
+        (kept / "result.json").write_text("{}\n")
+        self.out_dir = kept
+        self.summary.set_text(headline)
+        self._show_delete(True)
+        self._show("results")
+        self.choose_file(scene or "")
+        if (
+            self.stack.get_visible_child_name() != "device"
+            or self.input_path != scene
+            or kept.exists()
+            or self.out_dir is not None
+            or self.pick_notice.get_visible()
+            or self.delete_button.get_visible()
+        ):
+            self._exercise_fail(
+                f"a new file left the result with no Delete button: {self.stack.get_visible_child_name()!r} {kept.exists()}"
+            )
             return False
         blocked, opened = self.leave_decision("https://www.fbi.gov.evil.com/wanted")
         if opened is not None or "FBI page" not in blocked:

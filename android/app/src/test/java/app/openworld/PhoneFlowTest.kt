@@ -1271,6 +1271,97 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anUnreadableImportOnAResultStaysOnThatResult() {
+        val model = FlowModel()
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val scene = still("blank")
+        val sceneUri = Uri.parse("content://app.openworld/${scene.name}")
+        shadowOf(resolver).registerInputStream(sceneUri, scene.inputStream())
+        model.choose(sceneUri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        assertEquals(Step.Estimate, model.step)
+        val kept = model.fileName
+        model.choose(Uri.parse("content://app.openworld/missing-on-estimate.png"), resolver)
+        assertEquals(Step.Estimate, model.step)
+        assertEquals(kept, model.fileName)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        fun texts(): List<String> = compose.onAllNodes(SemanticsMatcher("has text") {
+            it.config.getOrNull(SemanticsProperties.Text) != null
+        }, useUnmergedTree = true).fetchSemanticsNodes().map { node ->
+            node.config[SemanticsProperties.Text].joinToString { it.text }
+        }
+        val estimate = texts()
+        val refusal = estimate.indexOf("The file could not be read. Refusing.")
+        val title = estimate.indexOf("Estimate")
+        assertTrue("$estimate", refusal >= 0 && title > refusal)
+        assertEquals(1, estimate.count { it == "The file could not be read. Refusing." })
+        assertTrue(estimate.contains("Analyze"))
+
+        model.analyze()
+        val result = model.resultDir
+        assertNotNull(result)
+        assertTrue(File(result!!, "result.json").isFile)
+        model.choose(Uri.parse("content://app.openworld/missing-on-result.png"), resolver)
+        compose.waitForIdle()
+        assertEquals(Step.Results, model.step)
+        assertEquals(kept, model.fileName)
+        assertTrue(File(result, "result.json").isFile)
+        val shown = texts()
+        val again = shown.indexOf("The file could not be read. Refusing.")
+        val headline = shown.indexOf(model.summary)
+        assertTrue("$shown", again >= 0 && headline > again)
+        assertEquals(1, shown.count { it == "The file could not be read. Refusing." })
+        compose.onNodeWithText("Delete").assertExists()
+
+        val next = still("blank")
+        val uri = Uri.parse("content://app.openworld/${next.name}")
+        shadowOf(resolver).registerInputStream(uri, next.inputStream())
+        model.choose(uri, resolver)
+        compose.waitForIdle()
+        assertEquals(Step.Device, model.step)
+        assertEquals(next.name, model.fileName)
+        assertNull(model.pickNotice)
+        assertNull(model.resultDir)
+        assertFalse(result.exists())
+    }
+
+    @Test
+    fun aNewFileThatCannotRemoveTheResultSaysSoOnce() {
+        val model = FlowModel()
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val scene = still("blank")
+        val sceneUri = Uri.parse("content://app.openworld/${scene.name}")
+        shadowOf(resolver).registerInputStream(sceneUri, scene.inputStream())
+        model.choose(sceneUri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        val result = model.resultDir
+        assertNotNull(result)
+        val kept = model.fileName
+        result!!.setWritable(false)
+        try {
+            val next = still("blank")
+            val uri = Uri.parse("content://app.openworld/${next.name}")
+            shadowOf(resolver).registerInputStream(uri, next.inputStream())
+            model.choose(uri, resolver)
+            assertEquals(Step.Results, model.step)
+            assertEquals(kept, model.fileName)
+            assertEquals("The result could not be deleted.", model.deleteNotice)
+            assertNull(model.pickNotice)
+            assertTrue(result.exists())
+            compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+            compose.onAllNodesWithText("The result could not be deleted.").assertCountEquals(1)
+            compose.onNodeWithText(model.summary).assertExists()
+        } finally {
+            result.setWritable(true)
+            result.deleteRecursively()
+        }
+    }
+
+    @Test
     fun resultsScreenShowsTheStripAndTheLeavePrompt() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/scene.png")

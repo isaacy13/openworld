@@ -546,6 +546,59 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnUnreadableFileKeepsThePageThatAlreadyHasAFile() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let file = try self.still("blank")
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.step, .estimate)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-estimate.png"))
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(estimate.dropFirst().first, "Back")
+            XCTAssertEqual(estimate.dropFirst(2).first, "Estimate")
+            XCTAssertEqual(estimate.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(estimate.contains("Analyze"))
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            let result = try XCTUnwrap(model.resultDirectory)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-result.png"))
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(lines.dropFirst().first, "Back")
+            XCTAssertEqual(lines.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(lines.contains("Delete"))
+            let next = try self.still("blank")
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, next.path)
+            XCTAssertNil(model.error)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertFalse(model.showsTopError)
+            let device = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(device.first, "Back")
+            XCTAssertFalse(device.contains("The file could not be read. Refusing."))
+            XCTAssertFalse(device.contains("Delete"))
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testWantedOffLeavesThatClassOutAndBothOffKeepsAnalyzeOff() throws {
         try MainActor.assumeIsolated {
             let model = try self.scan("scene", wanted: false)
