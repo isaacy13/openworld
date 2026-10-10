@@ -324,11 +324,13 @@ class OpenWorld(Gtk.Application):
     def load_bundles(self) -> None:
         payload = self._run_json(["--json", "--bundles", self.bundles, "bundles"])
         self.rows = payload.get("bundles", [])
+        previous = self.bundle_id
         while True:
             row = self.bundle_list.get_row_at_index(0)
             if row is None:
                 break
             self.bundle_list.remove(row)
+        kept = None
         selected = None
         for item in self.rows:
             row = Gtk.ListBoxRow()
@@ -348,10 +350,23 @@ class OpenWorld(Gtk.Application):
             box.append(curve)
             row.set_child(box)
             self.bundle_list.append(row)
+            if item.get("id") == previous:
+                kept = row
             if item.get("preselected"):
                 selected = row
-        if selected is not None:
-            self.bundle_list.select_row(selected)
+        chosen = kept or selected
+        if chosen is not None:
+            self.bundle_list.select_row(chosen)
+
+    def _bundle_row(self, bundle_id: str):
+        index = 0
+        while True:
+            row = self.bundle_list.get_row_at_index(index)
+            if row is None:
+                return None
+            if getattr(row, "bundle_id", None) == bundle_id:
+                return row
+            index += 1
 
     def _on_bundle_row(self, _list, row) -> None:
         if row is not None:
@@ -883,7 +898,36 @@ class OpenWorld(Gtk.Application):
         if not self.primary.get_sensitive() or self.stack.get_visible_child_name() != "device":
             self._exercise_fail("the next file kept Continue disabled")
             return False
+        self.bundle_id = "not-in-the-catalog"
         self.load_bundles()
+        if self.bundle_id != "fast":
+            self._exercise_fail(f"a missing bundle stayed selected: {self.bundle_id}")
+            return False
+        self._go("bundle")
+        accurate = self._bundle_row("accurate")
+        if accurate is None:
+            self._exercise_fail("Accurate is not in the catalog")
+            return False
+        self.bundle_list.select_row(accurate)
+        if self.bundle_id != "accurate":
+            self._exercise_fail(f"selecting Accurate left {self.bundle_id}")
+            return False
+        self.go_back()
+        if self.stack.get_visible_child_name() != "device":
+            self._exercise_fail("Back from the bundle page did not return to the file page")
+            return False
+        self.load_bundles()
+        if self.bundle_id != "accurate":
+            self._exercise_fail(f"Continue replaced the chosen bundle with {self.bundle_id}")
+            return False
+        fast = self._bundle_row("fast")
+        if fast is None:
+            self._exercise_fail("Fast is not in the catalog")
+            return False
+        self.bundle_list.select_row(fast)
+        if self.bundle_id != "fast":
+            self._exercise_fail(f"selecting Fast left {self.bundle_id}")
+            return False
         self._go("bundle")
         self.long_side = "640"
         self.coverage = "complete"

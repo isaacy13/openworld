@@ -256,6 +256,29 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun returningFromTheFilePageKeepsTheChosenBundle() {
+        val model = FlowModel()
+        choose(model, still("blank"))
+        model.continueFromDevice()
+        assertEquals("fast", model.bundleId)
+        model.bundleId = "accurate"
+        model.back()
+        assertEquals(Step.Device, model.step)
+        model.continueFromDevice()
+        assertEquals("accurate", model.bundleId)
+        assertEquals(Step.Bundle, model.step)
+        model.bundleId = "not-in-the-catalog"
+        model.continueFromDevice()
+        assertEquals("fast", model.bundleId)
+        model.bundleId = "accurate"
+        model.chooseAnother()
+        assertEquals("fast", model.bundleId)
+        assertEquals(Step.Choose, model.step)
+        model.continueFromDevice()
+        assertEquals("fast", model.bundleId)
+    }
+
+    @Test
     fun measuredCoverageWarnsBeforeAnalyze() {
         val model = FlowModel()
         choose(model, still("blank"))

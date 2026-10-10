@@ -58,7 +58,8 @@ public final class FlowModel: ObservableObject {
 
     public func loadBundles() {
         bundles = (try? core.bundlesJSON()) ?? []
-        if let selected = bundles.first(where: { $0.preselected }) {
+        if !bundles.contains(where: { $0.id == bundleID }),
+           let selected = bundles.first(where: { $0.preselected }) {
             bundleID = selected.id
         }
         step = .bundle

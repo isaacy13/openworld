@@ -76,8 +76,11 @@ class FlowModel {
                 }
             }
             bundleRows = parsed
-            val selected = (0 until (rows?.length() ?: 0)).firstOrNull { rows!!.getJSONObject(it).optBoolean("preselected") }
-            if (selected != null && rows != null) bundleId = rows.getJSONObject(selected).getString("id")
+            val ids = parsed.map { it.first }
+            if (bundleId !in ids) {
+                val selected = (0 until (rows?.length() ?: 0)).firstOrNull { rows!!.getJSONObject(it).optBoolean("preselected") }
+                if (selected != null && rows != null) bundleId = rows.getJSONObject(selected).getString("id")
+            }
         } catch (_: IOException) {
             bundleRows = emptyList()
         }

@@ -59,6 +59,30 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testReturningFromTheFilePageKeepsTheChosenBundle() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+            model.bundleID = "accurate"
+            model.goBack()
+            XCTAssertEqual(model.step, .device)
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "accurate")
+            XCTAssertEqual(model.step, .bundle)
+            model.bundleID = "not-in-the-catalog"
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+            model.bundleID = "accurate"
+            model.chooseAnother()
+            XCTAssertEqual(model.bundleID, "fast")
+            XCTAssertEqual(model.step, .choose)
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+        }
+    }
+
     func testBlankMeasuredOldFileIsAClearanceWithTheWarning() throws {
         try MainActor.assumeIsolated {
             let file = try self.still("blank")
