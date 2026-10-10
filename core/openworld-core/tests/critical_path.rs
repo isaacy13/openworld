@@ -551,6 +551,26 @@ fn the_output_directory_cannot_be_created_under_a_file() {
 }
 
 #[test]
+fn a_result_path_that_is_a_file_is_left_in_place() {
+    let dir = tempfile::tempdir().unwrap();
+    let posters = pack(dir.path());
+    let input = dir.path().join("blank.png");
+    blank(40, 40).save(&input).unwrap();
+    let blocker = dir.path().join("blocked");
+    fs::write(&blocker, b"keep").unwrap();
+    let mut req = request(dir.path(), input, "fast", posters, RequestExtra::default());
+    req.out_dir = blocker.clone();
+    let report = scan_path(&req, &mut |_| {});
+    assert_eq!(report.status, "refused");
+    assert_eq!(
+        report.summary,
+        "The output directory could not be created. Refusing."
+    );
+    assert_eq!(report.message, report.summary);
+    assert_eq!(fs::read(&blocker).unwrap(), b"keep");
+}
+
+#[test]
 fn the_output_directory_cannot_be_replaced_when_it_cannot_be_removed() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();

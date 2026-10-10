@@ -638,3 +638,145 @@ fn a_missing_poster_pack_stops_before_the_estimate() {
     assert_eq!(text.trim(), "The poster pack could not be read. Refusing.");
     assert!(err.is_empty(), "{err}");
 }
+
+#[test]
+fn a_result_file_stops_before_the_estimate() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("blank.png");
+    let (code, text, err) = run(
+        false,
+        &["fixture-still", "--blank", "--out", input.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let posters = dir.path().join("posters");
+    let (code, text, err) = run(
+        false,
+        &["posters", "write-fixture", "--out", posters.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let blocked = dir.path().join("result-file");
+    fs::write(&blocked, b"keep").unwrap();
+
+    let (code, text, err) = run(
+        false,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            input.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            blocked.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let device = text
+        .lines()
+        .position(|line| line == "This file stays on this device.")
+        .expect("device");
+    let refusal = text
+        .lines()
+        .position(|line| line == "The output directory could not be created. Refusing.")
+        .expect("refusal");
+    assert!(device < refusal, "{text}");
+    assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
+    assert!(!text.contains("Missing and wanted."), "{text}");
+    assert!(!text.contains("Analyze? [y/N]:"), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+
+    let nested = blocked.join("out");
+    let (code, text, err) = run(
+        false,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            input.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            nested.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert!(
+        text.contains("The output directory could not be created. Refusing."),
+        "{text}"
+    );
+    assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+
+    let (code, text, err) = run(
+        true,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            input.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            blocked.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "unreadable");
+    assert_eq!(
+        doc["message"],
+        "The output directory could not be created. Refusing."
+    );
+    assert!(!text.contains("This file stays on this device."), "{text}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+
+    let kept = dir.path().join("kept");
+    fs::create_dir(&kept).unwrap();
+    fs::write(kept.join("keep.txt"), b"stay").unwrap();
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles").arg(bundles()).args([
+        "analyze",
+        "--input",
+        input.to_str().unwrap(),
+        "--bundle",
+        "fast",
+        "--long-side",
+        "640",
+        "--coverage",
+        "complete",
+        "--no-wanted",
+        "--posters",
+        posters.to_str().unwrap(),
+        "--out",
+        kept.to_str().unwrap(),
+    ]);
+    cmd.stdin(std::process::Stdio::null());
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(0), "{err}\n{text}");
+    assert!(text.lines().any(|line| line == "Estimate"), "{text}");
+    assert!(text.contains("Not started."), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(fs::read(kept.join("keep.txt")).unwrap(), b"stay");
+}

@@ -700,6 +700,9 @@ fn analyze(
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:", json_mode)?),
     };
+    if let Some(message) = openworld_core::scan::output_creation_blocked(&out) {
+        return finish_report(json_mode, &openworld_core::scan::refused("unreadable", message));
+    }
     let (missing, wanted) = if yes || no_missing || no_wanted {
         (!no_missing, !no_wanted)
     } else {

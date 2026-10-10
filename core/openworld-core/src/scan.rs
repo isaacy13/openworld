@@ -1004,7 +1004,37 @@ fn detection_image(frame: &RgbImage, detection: DetectionSize) -> (RgbImage, Fra
     geom::resize_long_side(frame, target)
 }
 
+/// A result path that cannot become a directory, checked without creating or deleting anything.
+/// An existing directory is left for the scan, after Analyze is confirmed.
+pub fn output_creation_blocked(dir: &Path) -> Option<&'static str> {
+    const CREATED: &str = "The output directory could not be created. Refusing.";
+    if dir.as_os_str().is_empty() || is_file(dir) {
+        return Some(CREATED);
+    }
+    let mut cursor = dir.parent();
+    while let Some(parent) = cursor {
+        if parent.as_os_str().is_empty() {
+            break;
+        }
+        if is_file(parent) {
+            return Some(CREATED);
+        }
+        if parent.exists() {
+            break;
+        }
+        cursor = parent.parent();
+    }
+    None
+}
+
+fn is_file(path: &Path) -> bool {
+    path.exists() && !path.is_dir()
+}
+
 fn prepare_out(dir: &Path) -> Result<(), ScanReport> {
+    if let Some(message) = output_creation_blocked(dir) {
+        return Err(refused("unreadable", message));
+    }
     if dir.exists() {
         fs::remove_dir_all(dir).map_err(|_| refused("unreadable", "The output directory could not be replaced. Refusing."))?;
     }
