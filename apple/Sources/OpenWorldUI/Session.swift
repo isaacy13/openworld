@@ -59,6 +59,8 @@ struct CoreFailure: LocalizedError {
 struct CoreClient {
     var binary: String = CoreClient.findBinary()
     var bundles: String = CoreClient.findBundles()
+    /// The scan programs this window started. Closing another window does not stop them.
+    var programs = RunningProgram()
 
     /// The built `openworld` program, or the name on PATH when this is a packaged app.
     static func findBinary() -> String {
@@ -196,13 +198,13 @@ struct CoreClient {
         }
         let pipe = Pipe()
         let errors = Pipe()
-        let process = try RunningProgram.launch(binary, arguments: args) { process in
+        let process = try programs.launch(binary, arguments: args) { process in
             process.standardOutput = pipe
             if onProgress != nil {
                 process.standardError = errors
             }
         }
-        defer { RunningProgram.forget(process) }
+        defer { programs.forget(process) }
         if let onProgress {
             let reader = StderrLines(onProgress)
             let done = DispatchSemaphore(value: 0)
@@ -226,14 +228,23 @@ struct CoreClient {
     }
 }
 
-/// A scan program started by this app. Closing the window stops one that is still running.
-public enum RunningProgram {
-    private static let lock = NSLock()
-    private static var generation = 0
-    private static var processes: [Process] = []
+/// Closing a window stops that window. A panel, and any other window, stays open.
+public enum ScreenClose {
+    public static func stops(sameWindow: Bool, panel: Bool) -> Bool {
+        sameWindow && !panel
+    }
+}
+
+/// Scan programs started by one window. Closing that window stops these, including one that starts during the close.
+public final class RunningProgram: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+    private var processes: [Process] = []
+
+    public init() {}
 
     /// Starts a program and remembers it so a later close can stop it.
-    public static func launch(
+    public func launch(
         _ executable: String,
         arguments: [String],
         configure: (Process) -> Void = { _ in }
@@ -258,14 +269,14 @@ public enum RunningProgram {
         return process
     }
 
-    public static func forget(_ process: Process) {
+    public func forget(_ process: Process) {
         lock.lock()
         processes.removeAll { $0 === process }
         lock.unlock()
     }
 
     /// Stops a program that is still running, including one that starts during this call.
-    public static func stop() {
+    public func stop() {
         lock.lock()
         generation += 1
         let copy = processes

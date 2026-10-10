@@ -151,7 +151,9 @@ public final class FlowModel: ObservableObject {
     /// When set, the result folder is created here. A file at this path cannot hold that folder.
     public var scratchDirectory: URL?
     let phone: Bool
-    private let core = CoreClient()
+    /// Scan programs this window started. Another window has its own.
+    let programs: RunningProgram
+    private let core: CoreClient
     var scanRoot: URL?
     /// Set when the window closes, so a scan that finishes afterward does not return to the page.
     private var closed = false
@@ -166,6 +168,9 @@ public final class FlowModel: ObservableObject {
 
     public init(phone: Bool) {
         self.phone = phone
+        let programs = RunningProgram()
+        self.programs = programs
+        self.core = CoreClient(programs: programs)
     }
 
     public func choose(_ url: URL) {
@@ -460,7 +465,7 @@ public final class FlowModel: ObservableObject {
     public func closeWindow() {
         closed = true
         stopFlag.stop()
-        RunningProgram.stop()
+        programs.stop()
         if let scanRoot {
             try? FileManager.default.removeItem(at: scanRoot)
             self.scanRoot = nil
@@ -623,7 +628,7 @@ public final class FlowModel: ObservableObject {
     ) -> FinishedScan {
         do {
             // The fixture pack is written by the CLI before a real curve allows FBI photos.
-            try CoreClient().runPublic(posters: paths.posters)
+            try core.runPublic(posters: paths.posters)
             if stopped() { throw DecodeStopped() }
             let reel = try PlatformDecoder.writeFrames(url: file, directory: paths.frames, stopped: stopped)
             if stopped() { throw DecodeStopped() }

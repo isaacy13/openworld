@@ -123,15 +123,53 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testClosingOneWindowLeavesTheOtherWindowsScanRunning() throws {
+        let first = try still("blank")
+        let second = try still("blank")
+        let kept: Process = try MainActor.assumeIsolated {
+            let open = FlowModel(phone: false)
+            let closing = FlowModel(phone: false)
+            let kept = try open.programs.launch("/bin/sleep", arguments: ["30"])
+            let stopped = try closing.programs.launch("/bin/sleep", arguments: ["30"])
+            open.choose(first)
+            closing.closeWindow()
+            let deadline = Date().addingTimeInterval(2)
+            while stopped.isRunning && Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+            XCTAssertFalse(stopped.isRunning)
+            XCTAssertTrue(kept.isRunning)
+            open.choose(second)
+            XCTAssertEqual(open.file?.path, second.path)
+            XCTAssertEqual(open.step, .device)
+            return kept
+        }
+        defer {
+            if kept.isRunning {
+                kept.terminate()
+            }
+            kept.waitUntilExit()
+        }
+        XCTAssertTrue(kept.isRunning)
+    }
+
+    func testClosingAWindowStopsOnlyThatWindow() {
+        XCTAssertTrue(ScreenClose.stops(sameWindow: true, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: false, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: true, panel: true))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: false, panel: true))
+    }
+
     func testClosingTheWindowStopsAScanThatIsStillRunning() throws {
-        let process = try RunningProgram.launch("/bin/sleep", arguments: ["30"])
-        XCTAssertTrue(process.isRunning)
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-close-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        MainActor.assumeIsolated {
+        let process: Process = try MainActor.assumeIsolated {
             let model = FlowModel(phone: false)
             model.scanRoot = root
+            let process = try model.programs.launch("/bin/sleep", arguments: ["30"])
+            XCTAssertTrue(process.isRunning)
             model.closeWindow()
+            return process
         }
         let deadline = Date().addingTimeInterval(2)
         while process.isRunning && Date() < deadline {
@@ -139,7 +177,10 @@ final class OpenWorldUITests: XCTestCase {
         }
         XCTAssertFalse(process.isRunning)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
-        let later = try RunningProgram.launch("/bin/sleep", arguments: ["30"])
+        let later: Process = try MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            return try model.programs.launch("/bin/sleep", arguments: ["30"])
+        }
         defer {
             if later.isRunning {
                 later.terminate()

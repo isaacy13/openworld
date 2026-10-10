@@ -61,16 +61,33 @@ struct PhoneRoot: View {
 #endif
 
 #if os(macOS)
+final class HostWindowBox {
+    weak var window: NSWindow?
+}
+
+private struct HostWindowReader: NSViewRepresentable {
+    var box: HostWindowBox
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        box.window = view.window
+    }
+}
+
 struct MacRoot: View {
     @StateObject private var model = FlowModel(phone: false)
     @State private var showPicker = false
+    @State private var host = HostWindowBox()
 
     var body: some View {
         FlowView(model: model, importControl: AnyView(importButton))
             .frame(minWidth: 640, minHeight: 520)
+            .background(HostWindowReader(box: host))
             .onOpenURL { url in importShared(url, model: model) }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-                guard let window = note.object as? NSWindow, !(window is NSPanel) else { return }
+                guard let window = note.object as? NSWindow else { return }
+                guard ScreenClose.stops(sameWindow: window === host.window, panel: window is NSPanel) else { return }
                 model.closeWindow()
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
