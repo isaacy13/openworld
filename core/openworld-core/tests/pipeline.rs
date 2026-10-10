@@ -140,6 +140,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert_eq!(report.detection_note.as_deref(), Some("640 px on the long side."));
     assert!(!report.candidates.is_empty());
     assert!(report.candidates.iter().all(|candidate| candidate.frame_label == "Frame 1."));
+    assert!(report.inventory.iter().all(|item| item.frame_label == "Frame 1."));
     assert!(report.disclosure.iter().any(|l| l == "Nothing is uploaded."));
     assert!(report.disclosure.iter().any(|l| l == "Nobody is enrolled."));
     assert!(report.disclosure.iter().any(|l| l.contains("does not train")));
@@ -668,6 +669,8 @@ fn an_animated_png_keeps_a_face_that_is_not_on_the_first_frame() {
     assert!(!report.candidates.is_empty());
     assert!(report.candidates.iter().all(|candidate| candidate.frame_index == 1));
     assert!(report.candidates.iter().all(|candidate| candidate.frame_label == "Frame 2."));
+    assert!(report.inventory.iter().any(|item| item.frame_label == "Frame 2."));
+    assert!(report.inventory.iter().all(|item| item.frame_label == format!("Frame {}.", item.frame_index + 1)));
 }
 
 #[test]

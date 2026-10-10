@@ -104,6 +104,7 @@ public enum PhonePreview {
             if let items = model.report?.inventory, !items.isEmpty {
                 lines.append("Crops from this file.")
                 for item in items {
+                    lines.append(item.frameLabel)
                     lines.append(item.label)
                 }
             }

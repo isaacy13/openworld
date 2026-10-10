@@ -24,6 +24,7 @@ use std::time::{Duration, SystemTime};
 pub struct InventoryItem {
     pub kind: String,
     pub frame_index: u64,
+    pub frame_label: String,
     pub track_id: u64,
     pub det_short_px: u32,
     pub orig_short_px: u32,
@@ -534,6 +535,7 @@ impl<'a> Engine<'a> {
                 let item = InventoryItem {
                     kind: "vehicle".into(),
                     frame_index: index,
+                    frame_label: frame_label(index),
                     track_id,
                     det_short_px: hit.rect.short(),
                     orig_short_px: orig.short(),
@@ -566,6 +568,7 @@ impl<'a> Engine<'a> {
             let item = InventoryItem {
                 kind: "face".into(),
                 frame_index: index,
+                frame_label: frame_label(index),
                 track_id,
                 det_short_px: det_rect.short(),
                 orig_short_px: orig.short(),
@@ -599,6 +602,7 @@ impl<'a> Engine<'a> {
             let item = InventoryItem {
                 kind: "face".into(),
                 frame_index: index,
+                frame_label: frame_label(index),
                 track_id,
                 det_short_px: det_rect.short(),
                 orig_short_px: orig.short(),
@@ -664,6 +668,7 @@ impl<'a> Engine<'a> {
         let item = InventoryItem {
             kind: "face".into(),
             frame_index: index,
+            frame_label: frame_label(index),
             track_id,
             det_short_px: det_rect.short(),
             orig_short_px: orig.short(),
@@ -740,6 +745,7 @@ impl<'a> Engine<'a> {
         let item = InventoryItem {
             kind: "face".into(),
             frame_index: index,
+            frame_label: frame_label(index),
             track_id,
             det_short_px: det_rect.short(),
             orig_short_px: orig.short(),
@@ -771,6 +777,7 @@ impl<'a> Engine<'a> {
             let item = InventoryItem {
                 kind: "plate".into(),
                 frame_index: index,
+                frame_label: frame_label(index),
                 track_id,
                 det_short_px: det_rect.short(),
                 orig_short_px: orig.short(),
@@ -825,6 +832,7 @@ impl<'a> Engine<'a> {
         let item = InventoryItem {
             kind: "plate".into(),
             frame_index: index,
+            frame_label: frame_label(index),
             track_id,
             det_short_px: det_rect.short(),
             orig_short_px: orig.short(),

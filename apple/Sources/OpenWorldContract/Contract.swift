@@ -159,9 +159,11 @@ public struct InventoryItem: Decodable, Identifiable {
     public var label: String
     public var crop: String?
     public var frameIndex: Int
+    public var frameLabel: String
     enum CodingKeys: String, CodingKey {
         case kind, label, crop
         case frameIndex = "frame_index"
+        case frameLabel = "frame_label"
     }
 }
 

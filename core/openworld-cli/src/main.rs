@@ -803,8 +803,9 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
         }
         for item in &report.inventory {
             println!(
-                "{}  {}  {}",
+                "{}  {}  {}  {}",
                 item.kind,
+                item.frame_label,
                 item.label,
                 item.crop.as_deref().unwrap_or("")
             );

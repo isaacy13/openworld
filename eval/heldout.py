@@ -581,6 +581,9 @@ def main() -> int:
         found = report.get("candidates") or []
         if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later gif candidates were not on the middle frame: {found}")
+        crops = report.get("inventory") or []
+        if not crops or any(item.get("frame_label") != f"Frame {int(item.get('frame_index')) + 1}." for item in crops):
+            fail(f"later gif crops did not name their frame: {crops}")
         counts["gif_later_candidate"] += 1
 
         apng = root / "later.apng"
@@ -598,6 +601,9 @@ def main() -> int:
         found = report.get("candidates") or []
         if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later apng candidates were not on the middle frame: {found}")
+        crops = report.get("inventory") or []
+        if not crops or any(item.get("frame_label") != f"Frame {int(item.get('frame_index')) + 1}." for item in crops):
+            fail(f"later apng crops did not name their frame: {crops}")
         counts["apng_later_candidate"] += 1
 
         turned = root / "turned.jpg"
@@ -709,6 +715,9 @@ def main() -> int:
         found = report.get("candidates") or []
         if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later tiff candidates were not on the second page: {found}")
+        crops = report.get("inventory") or []
+        if not crops or any(item.get("frame_label") != f"Frame {int(item.get('frame_index')) + 1}." for item in crops):
+            fail(f"later tiff crops did not name their frame: {crops}")
         counts["tiff_later_candidate"] += 1
 
         width, height = png_size(scene)

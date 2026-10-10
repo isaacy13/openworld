@@ -747,6 +747,7 @@ public struct FlowView: View {
                         ForEach(items) { item in
                             VStack(spacing: 4) {
                                 cropImage(item.crop)
+                                Text(item.frameLabel)
                                 Text(item.label)
                             }
                         }
@@ -757,6 +758,8 @@ public struct FlowView: View {
                             ForEach(items) { item in
                                 VStack(spacing: 4) {
                                     cropImage(item.crop)
+                                    Text(item.frameLabel)
+                                        .font(.caption)
                                     Text(item.label)
                                         .font(.caption)
                                         .multilineTextAlignment(.center)

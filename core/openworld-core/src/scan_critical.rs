@@ -145,6 +145,11 @@ fn repeated_frames_of_one_track_keep_the_strongest_card() {
     assert_eq!(report.candidates.len(), 1);
     assert_eq!(report.candidates[0].frame_index, 1);
     assert_eq!(report.candidates[0].frame_label, "Frame 2.");
+    assert!(report.inventory.iter().any(|item| item.frame_label == "Frame 2."));
+    assert!(report
+        .inventory
+        .iter()
+        .all(|item| item.frame_label == format!("Frame {}.", item.frame_index + 1)));
     assert_eq!(report.candidates[0].track_id, 3);
     assert_eq!(report.candidates[0].poster_id, "fixture-missing-a");
     assert!(report.candidates[0].cosine.unwrap() > bundle.threshold);

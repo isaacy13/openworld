@@ -197,17 +197,18 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                model.strip.forEach { (label, path) ->
+                                model.strip.forEach { crop ->
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        val bitmap = BitmapFactory.decodeFile(path)
+                                        val bitmap = BitmapFactory.decodeFile(crop.path)
                                         if (bitmap != null) {
                                             Image(
                                                 bitmap = bitmap.asImageBitmap(),
-                                                contentDescription = label,
+                                                contentDescription = crop.label,
                                                 modifier = Modifier.size(112.dp),
                                             )
                                         }
-                                        Text(label, style = MaterialTheme.typography.bodySmall)
+                                        Text(crop.frameLabel, style = MaterialTheme.typography.bodySmall)
+                                        Text(crop.label, style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
                             }

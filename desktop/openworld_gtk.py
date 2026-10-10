@@ -735,9 +735,11 @@ class OpenWorld(Gtk.Application):
             picture = Gtk.Picture.new_for_filename(str(path))
             picture.set_size_request(112, 112)
             picture.set_can_shrink(False)
+            frame = Gtk.Label(label=item.get("frame_label") or "", xalign=0.5)
             caption = Gtk.Label(label=item.get("label", ""), wrap=True, justify=Gtk.Justification.CENTER)
             caption.set_max_width_chars(18)
             box.append(picture)
+            box.append(frame)
             box.append(caption)
             self.strip.append(box)
             shown = True
@@ -1363,6 +1365,8 @@ class OpenWorld(Gtk.Application):
                 ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
                 check=False,
             )
+            adjustment = self.results_scroll.get_vadjustment()
+            adjustment.set_value(max(0, adjustment.get_upper() - adjustment.get_page_size()))
             self._grab(result_shot)
         if report.get("status") != "complete":
             self._exercise_fail(report.get("message", "not complete"))
@@ -1372,6 +1376,10 @@ class OpenWorld(Gtk.Application):
             if phrase not in labels:
                 self._exercise_fail(f"strip missing {phrase}: {labels}")
                 return False
+        crops = [label for label in labels if not label.startswith("Frame ")]
+        if not crops or labels.count("Frame 1.") != len(crops):
+            self._exercise_fail(f"a crop did not name its frame: {labels}")
+            return False
         if self.scan_thread is not None or not self.back.get_sensitive():
             self._exercise_fail("results did not return control of the window")
             return False

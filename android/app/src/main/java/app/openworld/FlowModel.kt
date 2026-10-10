@@ -30,8 +30,14 @@ internal class ScanOutcome(
     val warnings: String = "",
     val detail: String = "",
     val rows: List<CandidateRow> = emptyList(),
-    val strip: List<Pair<String, String>> = emptyList(),
+    val strip: List<StripCrop> = emptyList(),
     val resultDir: File? = null,
+)
+
+class StripCrop(
+    val label: String,
+    val path: String,
+    val frameLabel: String,
 )
 
 class CandidateRow(
@@ -73,7 +79,7 @@ class FlowModel {
     private var scanRoot: File? = null
     var fbiUrl by mutableStateOf<String?>(null)
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
-    var strip by mutableStateOf(listOf<Pair<String, String>>())
+    var strip by mutableStateOf(listOf<StripCrop>())
     var liveCrops by mutableStateOf(listOf<Pair<String, String>>())
     var canAnalyze by mutableStateOf(true)
     var scanning by mutableStateOf(false)
@@ -449,14 +455,20 @@ class FlowModel {
                     )
                 }
             }
-            val pictures = mutableListOf<Pair<String, String>>()
+            val pictures = mutableListOf<StripCrop>()
             val inventory = json.optJSONArray("inventory")
             if (inventory != null) {
                 for (i in 0 until inventory.length()) {
                     val item = inventory.getJSONObject(i)
                     val crop = item.present("crop") ?: continue
                     val label = item.present("label") ?: continue
-                    pictures.add(label to File(out, crop).absolutePath)
+                    pictures.add(
+                        StripCrop(
+                            label = label,
+                            path = File(out, crop).absolutePath,
+                            frameLabel = item.present("frame_label") ?: "Frame",
+                        )
+                    )
                 }
             }
             ScanOutcome(
