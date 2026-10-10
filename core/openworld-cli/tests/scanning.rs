@@ -329,7 +329,7 @@ fn analyze_yes_uses_the_preselected_choices() {
     );
     assert_eq!(code, Some(0), "{err}\n{text}");
     assert!(!text.contains("Bundle [fast]:"));
-    assert!(!text.contains("Detection long side"));
+    assert!(!text.contains("Detection size (320"));
     assert!(!text.contains("Coverage (complete"));
     assert!(!err.contains("Bundle [fast]:"));
     assert!(text.lines().any(|line| line == "Estimate"));

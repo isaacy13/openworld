@@ -580,7 +580,7 @@ fn analyze(
                     println!("{line}");
                 }
             }
-            let entered = prompt("Detection long side (320, 480, 640, full) [640]:", json_mode)?;
+            let entered = prompt("Detection size (320, 480, 640, full) [640]:", json_mode)?;
             if entered.is_empty() {
                 "640".into()
             } else {
@@ -593,12 +593,8 @@ fn analyze(
         None if yes => "complete".into(),
         None => {
             if !json_mode {
-                println!("Coverage:");
-                for (id, label) in [
-                    ("complete", "Complete. Every decoded frame."),
-                    ("measured", "Measured. 5 frames a second, plus the tracker."),
-                ] {
-                    println!("  {id} — {}", marked_name(label, id == "complete"));
+                for line in coverage_menu_lines() {
+                    println!("{line}");
                 }
             }
             let entered = prompt("Coverage (complete, measured) [complete]:", json_mode)?;
@@ -1144,7 +1140,7 @@ fn choose_lines() -> Vec<String> {
 
 fn size_menu_lines() -> Vec<String> {
     let mut lines = vec![
-        "Detection size:".into(),
+        "Detection size".into(),
         openworld_core::copy::SIZE_HINT.into(),
     ];
     for (id, label) in [
@@ -1156,6 +1152,20 @@ fn size_menu_lines() -> Vec<String> {
         lines.push(format!("  {id} — {}", marked_name(label, id == "640")));
     }
     lines
+}
+
+fn coverage_menu_lines() -> Vec<String> {
+    vec![
+        "Coverage".into(),
+        format!(
+            "  complete — {}",
+            marked_name("Complete. Every decoded frame.", true)
+        ),
+        format!(
+            "  measured — {}",
+            marked_name("Measured. 5 frames a second, plus the tracker.", false)
+        ),
+    ]
 }
 
 fn prompt(text: &str, json_mode: bool) -> Result<String, String> {
@@ -1996,7 +2006,15 @@ mod cli_tests {
             ]
         );
         let size = size_menu_lines();
-        assert_eq!(size[0], "Detection size:");
+        assert_eq!(size[0], "Detection size");
+        assert_eq!(
+            coverage_menu_lines(),
+            vec![
+                "Coverage".to_string(),
+                "  complete — Complete. Every decoded frame. Selected.".to_string(),
+                "  measured — Measured. 5 frames a second, plus the tracker.".to_string(),
+            ]
+        );
         assert!(size[1].contains("A face under 64 px on that image is left out."));
         assert!(size[1].contains("the label is \"Not compared.\""));
         assert!(!size[1].contains("about 112"));
