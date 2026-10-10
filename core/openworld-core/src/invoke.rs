@@ -258,12 +258,12 @@ fn scan_request(bundles: &Path, parsed: &Parsed) -> Result<ScanRequest, String> 
     let form = parsed.flag("form_factor").unwrap_or("computer");
     let provider = parsed.flag("provider").unwrap_or("cpu");
     let detection =
-        DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
-    let coverage = Coverage::parse(coverage).ok_or("Coverage must be complete or measured.")?;
+        DetectionSize::parse(long_side).ok_or(crate::copy::BAD_DETECTION_SIZE)?;
+    let coverage = Coverage::parse(coverage).ok_or(crate::copy::BAD_COVERAGE)?;
     let form_factor = match form {
         "phone" => FormFactor::Phone,
         "computer" => FormFactor::Computer,
-        _ => return Err("Form factor must be phone or computer.".into()),
+        _ => return Err(crate::copy::BAD_FORM_FACTOR.into()),
     };
     let posters = PathBuf::from(parsed.flag("posters").unwrap_or("."));
     let out = PathBuf::from(parsed.flag("out").unwrap_or("."));

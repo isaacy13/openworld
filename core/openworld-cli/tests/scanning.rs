@@ -475,3 +475,90 @@ fn an_unreadable_catalog_is_a_refusal() {
     );
     assert!(!text.contains("This file stays on this device."), "{text}");
 }
+
+#[test]
+fn a_bad_size_or_an_empty_catalog_stops_before_the_poster_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("notes.txt");
+    fs::write(&input, b"not a photo").unwrap();
+    let empty = dir.path().join("empty-bundles");
+    fs::create_dir(&empty).unwrap();
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles")
+        .arg(&empty)
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args(["--bundle", "fast", "--long-side", "640", "--coverage", "complete"]);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert!(text.contains("This file stays on this device."), "{text}");
+    let device = text
+        .lines()
+        .position(|line| line == "This file stays on this device.")
+        .expect("device");
+    let refusal = text
+        .lines()
+        .position(|line| line == "The scan program is not on this device. Refusing.")
+        .expect("refusal");
+    assert!(device < refusal, "{text}");
+    assert!(!text.lines().any(|line| line == "Detection size"), "{text}");
+    assert!(!text.contains("Poster pack directory:"), "{text}");
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--json")
+        .arg("--bundles")
+        .arg(bundles())
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args(["--bundle", "fast", "--long-side", "999", "--coverage", "complete"]);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(
+        doc["message"],
+        "Detection size must be 320, 480, 640, or full. Refusing."
+    );
+    assert!(!text.contains("Poster pack directory:"), "{text}");
+    assert!(!text.contains("This file stays on this device."), "{text}");
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles")
+        .arg(bundles())
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args(["--bundle", "nope", "--long-side", "640", "--coverage", "weekly"]);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert!(text.contains("That bundle is not in the catalog. Refusing."), "{text}");
+    assert!(!text.contains("Coverage must be complete or measured. Refusing."), "{text}");
+    assert!(!text.contains("Poster pack directory:"), "{text}");
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--json").args([
+        "estimate",
+        "--input",
+        "missing.png",
+        "--bundle",
+        "fast",
+        "--long-side",
+        "640",
+        "--coverage",
+        "weekly",
+    ]);
+    cmd.arg("--bundles").arg(bundles());
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["message"], "Coverage must be complete or measured. Refusing.");
+    assert!(err.is_empty(), "{err}");
+}

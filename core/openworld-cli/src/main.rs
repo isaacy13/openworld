@@ -289,7 +289,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             no_wanted,
             media,
         } => {
-            let req = request(
+            let req = match request(
                 &bundles,
                 &input,
                 &bundle,
@@ -304,7 +304,15 @@ fn run(cli: Cli) -> Result<i32, String> {
                 None,
                 None,
                 media.facts()?,
-            )?;
+            ) {
+                Ok(req) => req,
+                Err(message) => {
+                    return finish_report(
+                        cli.json,
+                        &openworld_core::scan::refused("bad_request", &message),
+                    );
+                }
+            };
             match estimate_for(&req) {
                 Ok(est) => {
                     emit(
@@ -348,7 +356,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             media,
             progress,
         } => {
-            let req = request(
+            let req = match request(
                 &bundles,
                 &input,
                 &bundle,
@@ -363,7 +371,15 @@ fn run(cli: Cli) -> Result<i32, String> {
                 abort_after_frames,
                 frames,
                 media.facts()?,
-            )?;
+            ) {
+                Ok(req) => req,
+                Err(message) => {
+                    return finish_report(
+                        cli.json,
+                        &openworld_core::scan::refused("bad_request", &message),
+                    );
+                }
+            };
             scan_and_report(cli.json, progress, &req)
         }
         Cmd::Analyze {
@@ -568,6 +584,15 @@ fn analyze(
         }
     };
     speak(json_mode, device_lines(&input));
+    if all.is_empty() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused(
+                "missing_program",
+                "The scan program is not on this device. Refusing.",
+            ),
+        );
+    }
     let bundle = match bundle {
         Some(id) => id,
         None if yes => all
@@ -589,6 +614,15 @@ fn analyze(
             }
         }
     };
+    if !all.iter().any(|item| item.id == bundle) {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused(
+                "bundle_not_found",
+                "That bundle is not in the catalog. Refusing.",
+            ),
+        );
+    }
     let long_side = match long_side {
         Some(value) => value,
         None if yes => "640".into(),
@@ -606,6 +640,12 @@ fn analyze(
             }
         }
     };
+    if openworld_core::DetectionSize::parse(&long_side).is_none() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused("bad_request", openworld_core::copy::BAD_DETECTION_SIZE),
+        );
+    }
     let coverage = match coverage {
         Some(value) => value,
         None if yes => "complete".into(),
@@ -623,6 +663,12 @@ fn analyze(
             }
         }
     };
+    if openworld_core::Coverage::parse(&coverage).is_none() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused("bad_request", openworld_core::copy::BAD_COVERAGE),
+        );
+    }
     let posters = match posters {
         Some(path) => path,
         None => PathBuf::from(prompt("Poster pack directory:", json_mode)?),
@@ -641,7 +687,7 @@ fn analyze(
         }
         (prompt_on("Missing", json_mode)?, prompt_on("Wanted", json_mode)?)
     };
-    let req = request(
+    let req = match request(
         bundles,
         &input,
         &bundle,
@@ -656,7 +702,12 @@ fn analyze(
         None,
         None,
         None,
-    )?;
+    ) {
+        Ok(req) => req,
+        Err(message) => {
+            return finish_report(json_mode, &openworld_core::scan::refused("bad_request", &message));
+        }
+    };
     match estimate_for(&req) {
         Ok(est) => {
             let name = all
@@ -1088,12 +1139,12 @@ fn request(
     media: Option<MediaFacts>,
 ) -> Result<ScanRequest, String> {
     let detection =
-        DetectionSize::parse(long_side).ok_or("Detection size must be 320, 480, 640, or full.")?;
-    let coverage = Coverage::parse(coverage).ok_or("Coverage must be complete or measured.")?;
+        DetectionSize::parse(long_side).ok_or(openworld_core::copy::BAD_DETECTION_SIZE)?;
+    let coverage = Coverage::parse(coverage).ok_or(openworld_core::copy::BAD_COVERAGE)?;
     let form_factor = match form_factor {
         "phone" => FormFactor::Phone,
         "computer" => FormFactor::Computer,
-        _ => return Err("Form factor must be phone or computer.".into()),
+        _ => return Err(openworld_core::copy::BAD_FORM_FACTOR.into()),
     };
     Ok(ScanRequest {
         input: input.to_path_buf(),
