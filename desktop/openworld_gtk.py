@@ -110,6 +110,8 @@ class OpenWorld(Gtk.Application):
         self.posters: Path | None = None
         self.scan_thread: threading.Thread | None = None
         self.scan_proc: subprocess.Popen[str] | None = None
+        self.closed = False
+        self._scan_lock = threading.Lock()
 
     def do_activate(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self, title="OpenWorld")
@@ -801,7 +803,8 @@ class OpenWorld(Gtk.Application):
             text=True,
             start_new_session=True,
         )
-        self.scan_proc = proc
+        if not self._own_scan_process(proc):
+            return
 
         def on_line(line: str) -> None:
             line = line.strip()
@@ -825,6 +828,8 @@ class OpenWorld(Gtk.Application):
                 self.scan_proc = None
 
     def _add_crop(self, event: dict) -> bool:
+        if self.closed:
+            return False
         kind = event.get("kind")
         label = event.get("label") or ""
         rel = event.get("crop")
@@ -870,6 +875,8 @@ class OpenWorld(Gtk.Application):
         }
 
     def _show_report(self, report: dict) -> bool:
+        if self.closed:
+            return False
         self.scan_thread = None
         # The unread-file sentence was about a file this scan did not use.
         if self.pick_notice.get_text() == "The file could not be read. Refusing.":
@@ -1134,22 +1141,42 @@ class OpenWorld(Gtk.Application):
     def _remove_work(self) -> None:
         shutil.rmtree(self.work, ignore_errors=True)
 
+    def _own_scan_process(self, proc: subprocess.Popen[str]) -> bool:
+        """Keep a scan that started while the window is open. Stop one that starts as it closes."""
+        with self._scan_lock:
+            if self.closed:
+                owned = False
+            else:
+                self.scan_proc = proc
+                owned = True
+        if not owned:
+            self._end_process(proc)
+        return owned
+
+    def _end_process(self, proc: subprocess.Popen[str]) -> None:
+        if proc.poll() is not None:
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                proc.kill()
+            proc.wait(timeout=2)
+
     def _stop_scan(self) -> None:
         """Closing the window stops a scan that is still running, so its folder can be removed."""
-        proc = self.scan_proc
-        if proc is not None and proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                proc.terminate()
-            try:
-                proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    proc.kill()
-                proc.wait(timeout=2)
+        with self._scan_lock:
+            self.closed = True
+            proc = self.scan_proc
+            self.scan_proc = None
+        if proc is not None:
+            self._end_process(proc)
         thread = self.scan_thread
         if thread is not None and thread.daemon and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=2)

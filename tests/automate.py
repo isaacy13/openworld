@@ -75,6 +75,7 @@ def desktop() -> None:
                 "OPENWORLD_STATUS": str(status),
             }
         )
+        run([sys.executable, str(ROOT / "tests/desktop_close.py")])
         print("+ desktop window", flush=True)
         subprocess.run([sys.executable, str(ROOT / "desktop/openworld_gtk.py")], cwd=ROOT, env=env, check=True)
         payload = json.loads(status.read_text())
