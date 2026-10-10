@@ -49,6 +49,10 @@ public enum PhonePreview {
             return lines
         case "estimate":
             var lines = ["Back", model.scanning ? "Scanning" : "Estimate"]
+            if model.scanning, !model.liveCrops.isEmpty {
+                lines.append("Crops from this file.")
+                lines.append(contentsOf: model.liveCrops.map(\.label))
+            }
             if let warning = model.estimateWarning { lines.append(warning) }
             if let estimate = model.estimate {
                 lines.append(estimate.human)

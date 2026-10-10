@@ -49,10 +49,14 @@ object Core {
         return "bundles"
     }
 
-    fun json(args: List<String>): JSONObject {
+    fun json(args: List<String>, onProgress: ((String) -> Unit)? = null): JSONObject {
         if (linked) {
             val request = JSONObject().put("argv", JSONArray(args)).toString()
-            val stdout = nativeCommand(request)
+            val stdout = if (onProgress != null) {
+                nativeCommandProgress(request, ScanProgressRelay(onProgress))
+            } else {
+                nativeCommand(request)
+            }
             if (stdout.isBlank()) {
                 throw IOException("The scan library returned nothing. Refusing.")
             }
@@ -61,8 +65,20 @@ object Core {
         val process = ProcessBuilder(listOf(binary()) + args)
             .redirectErrorStream(false)
             .start()
+        val stderr = if (onProgress != null) {
+            Thread {
+                process.errorStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        if (line.isNotBlank()) onProgress(line)
+                    }
+                }
+            }.also { it.start() }
+        } else {
+            null
+        }
         val stdout = process.inputStream.bufferedReader().readText()
         val code = process.waitFor()
+        stderr?.join()
         if (stdout.isBlank()) {
             throw IOException("The scan program is not on this device. Refusing.")
         }
@@ -76,4 +92,17 @@ object Core {
     fun linkedLibrary(): Boolean = linked
 
     private external fun nativeCommand(request: String): String
+
+    private external fun nativeCommandProgress(request: String, progress: ScanProgress): String
+}
+
+/** One crop JSON line from `ow_command_progress`, on the scan thread. */
+interface ScanProgress {
+    fun onLine(line: String)
+}
+
+private class ScanProgressRelay(private val onProgress: (String) -> Unit) : ScanProgress {
+    override fun onLine(line: String) {
+        onProgress(line)
+    }
 }

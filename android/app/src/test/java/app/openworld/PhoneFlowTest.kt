@@ -857,6 +857,53 @@ class PhoneScreenTest {
     val compose = createComposeRule()
 
     @Test
+    fun aCropAppearsOnTheEstimateWhileScanning() {
+        val model = FlowModel()
+        model.progressSeen = java.util.concurrent.CountDownLatch(1)
+        model.progressGate = java.util.concurrent.CountDownLatch(1)
+        val uri = Uri.parse("content://app.openworld/scene-progress.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("scene").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Analyze").performClick()
+        val deadline = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < deadline && model.liveCrops.isEmpty()) {
+            compose.waitForIdle()
+            Thread.sleep(20)
+        }
+        assertTrue(model.liveCrops.isNotEmpty())
+        assertEquals(Step.Estimate, model.step)
+        assertTrue(model.scanning)
+        val label = model.liveCrops.first().first
+        assertTrue(
+            label,
+            label == "Possible candidate. Not an identification." ||
+                label == "Not compared." ||
+                label == "A vehicle is not a person." ||
+                label == "This plate text is not published on a poster." ||
+                label == "The plate could not be read." ||
+                label == "No poster publishes a plate." ||
+                label == "Below the locked cutoff. Not a candidate." ||
+                label == "This face could not be scored.",
+        )
+        compose.onAllNodesWithText("Scanning").assertCountEquals(2)
+        compose.onNodeWithText("Crops from this file.").assertExists()
+        compose.onNodeWithText(label).assertExists()
+        compose.onNodeWithText("Back").assertIsNotEnabled()
+        model.back()
+        assertEquals(Step.Estimate, model.step)
+        model.progressGate?.countDown()
+        waitForScan(compose, model)
+        compose.onAllNodesWithText("Scanning").assertCountEquals(0)
+        assertEquals("Possible candidate. Not an identification.", model.summary)
+        assertTrue(compose.onAllNodesWithText("Possible candidate. Not an identification.").fetchSemanticsNodes().size >= 2)
+    }
+
+    @Test
     fun analyzeSaysScanningUntilTheResultIsReady() {
         val model = FlowModel()
         val gate = java.util.concurrent.CountDownLatch(1)

@@ -191,6 +191,71 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testACropAppearsOnTheEstimateWhileScanning() async throws {
+        let file = try self.still("scene")
+        let seen = DispatchSemaphore(value: 0)
+        let hold = DispatchSemaphore(value: 0)
+        let model = await MainActor.run { () -> FlowModel in
+            let model = FlowModel(phone: true)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.progressSeen = seen
+            model.progressHold = hold
+            model.startScan()
+            XCTAssertTrue(model.scanning)
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertFalse(model.backEnabled)
+            return model
+        }
+        let appeared = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            DispatchQueue.global().async {
+                continuation.resume(returning: seen.wait(timeout: .now() + 30) == .success)
+            }
+        }
+        XCTAssertTrue(appeared)
+        await MainActor.run {
+            XCTAssertFalse(model.liveCrops.isEmpty)
+            XCTAssertTrue(model.scanning)
+            XCTAssertEqual(model.step, .estimate)
+            let label = model.liveCrops[0].label
+            let known = [
+                Copy.possible,
+                Copy.notCompared,
+                "A vehicle is not a person.",
+                "This plate text is not published on a poster.",
+                "The plate could not be read.",
+                "No poster publishes a plate.",
+                "Below the locked cutoff. Not a candidate.",
+                "This face could not be scored.",
+            ]
+            XCTAssertTrue(known.contains(label), label)
+            let lines = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(lines.first, "Back")
+            XCTAssertTrue(lines.contains("Scanning"))
+            XCTAssertTrue(lines.contains("Crops from this file."))
+            XCTAssertTrue(lines.contains(label))
+            let crops = lines.firstIndex(of: "Crops from this file.")
+            let title = lines.firstIndex(of: "Scanning")
+            XCTAssertEqual(title, 1)
+            XCTAssertEqual(crops, 2)
+            _ = FlowView(model: model, importControl: self.control).body
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            hold.signal()
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while await MainActor.run(body: { model.scanning }) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        await MainActor.run {
+            XCTAssertFalse(model.scanning)
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, Copy.possible)
+        }
+    }
+
     func testAnUnreadableFileStaysOffTheNextPage() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)

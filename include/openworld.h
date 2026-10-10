@@ -10,6 +10,9 @@
  */
 
 char *ow_command(const char *request_json);
+/* When argv contains --progress, each crop is one JSON line. The callback runs on the caller's thread. */
+typedef void (*ow_progress_fn)(const char *json_line, void *user);
+char *ow_command_progress(const char *request_json, ow_progress_fn progress, void *user);
 char *ow_scan_request(const char *request_json);
 void ow_string_free(char *ptr);
 

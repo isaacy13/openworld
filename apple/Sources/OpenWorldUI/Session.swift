@@ -85,8 +85,8 @@ struct CoreClient {
         return "Refusing."
     }
 
-    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool, missing: Bool = true, wanted: Bool = true) throws -> ScanReport {
-        let data = try run(PhoneArguments.scan(
+    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool, missing: Bool = true, wanted: Bool = true, onProgress: ((String) -> Void)? = nil) throws -> ScanReport {
+        var args = PhoneArguments.scan(
             catalog: bundles,
             input: input.path,
             bundle: bundle,
@@ -99,12 +99,16 @@ struct CoreClient {
             media: facts.media,
             missing: missing,
             wanted: wanted
-        ))
+        )
+        if onProgress != nil {
+            args.append("--progress")
+        }
+        let data = try run(args, onProgress: onProgress)
         return try JSONDecoder().decode(ScanReport.self, from: data)
     }
 
-    func run(_ args: [String]) throws -> Data {
-        if let linked = LinkedCore.invoke(args) {
+    func run(_ args: [String], onProgress: ((String) -> Void)? = nil) throws -> Data {
+        if let linked = LinkedCore.invoke(args, onProgress: onProgress) {
             return linked
         }
         let process = Process()
@@ -112,9 +116,63 @@ struct CoreClient {
         process.arguments = args
         let pipe = Pipe()
         process.standardOutput = pipe
+        let errors = Pipe()
+        if onProgress != nil {
+            process.standardError = errors
+        }
         try process.run()
+        if let onProgress {
+            let reader = StderrLines(onProgress)
+            let done = DispatchSemaphore(value: 0)
+            Thread {
+                let handle = errors.fileHandleForReading
+                while true {
+                    let chunk = handle.availableData
+                    if chunk.isEmpty { break }
+                    reader.append(chunk)
+                }
+                reader.finish()
+                done.signal()
+            }.start()
+            let stdout = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            done.wait()
+            return stdout
+        }
         process.waitUntilExit()
         return pipe.fileHandleForReading.readDataToEndOfFile()
+    }
+}
+
+/// Progress lines from the program's stderr. One thread reads it.
+private final class StderrLines: @unchecked Sendable {
+    private var pending = Data()
+    private let onLine: (String) -> Void
+
+    init(_ onLine: @escaping (String) -> Void) {
+        self.onLine = onLine
+    }
+
+    func append(_ data: Data) {
+        pending.append(data)
+        while let newline = pending.firstIndex(of: 10) {
+            let chunk = Data(pending.prefix(upTo: newline))
+            pending.removeSubrange(pending.startIndex...newline)
+            emit(chunk)
+        }
+    }
+
+    func finish() {
+        emit(pending)
+        pending.removeAll()
+    }
+
+    private func emit(_ data: Data) {
+        guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            return
+        }
+        onLine(text)
     }
 }
 

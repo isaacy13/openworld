@@ -25,6 +25,33 @@ public enum Step {
     case choose, device, bundle, size, estimate, results
 }
 
+public struct LiveCrop: Identifiable, Equatable {
+    public let id: Int
+    public let label: String
+    public let path: String
+}
+
+/// The first crop may wait so a test can read the estimate before the scan finishes.
+private final class ProgressOnce: @unchecked Sendable {
+    let seen: DispatchSemaphore?
+    let hold: DispatchSemaphore?
+    private let lock = NSLock()
+    private var claimed = false
+
+    init(seen: DispatchSemaphore?, hold: DispatchSemaphore?) {
+        self.seen = seen
+        self.hold = hold
+    }
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if claimed { return false }
+        claimed = true
+        return true
+    }
+}
+
 private struct ScanPaths: Sendable {
     var root: URL
     var posters: URL
@@ -60,6 +87,11 @@ public final class FlowModel: ObservableObject {
     @Published public var error: String?
     @Published public var canAnalyze = true
     @Published public var scanning = false
+    @Published public var liveCrops: [LiveCrop] = []
+    /// Signaled on the main thread after the first crop is on the estimate.
+    public var progressSeen: DispatchSemaphore?
+    /// The scan thread waits here after the first crop so a test can read the estimate.
+    public var progressHold: DispatchSemaphore?
     let phone: Bool
     private let core = CoreClient()
     private var scanRoot: URL?
@@ -218,6 +250,7 @@ public final class FlowModel: ObservableObject {
         guard !scanning, canAnalyze, let file else { return }
         guard releaseResult() else { return }
         scanning = true
+        liveCrops = []
         let paths = makeScanPaths()
         let core = core
         let bundleID = bundleID
@@ -226,6 +259,8 @@ public final class FlowModel: ObservableObject {
         let phone = phone
         let missing = includeMissing
         let wanted = includeWanted
+        let gate = ProgressOnce(seen: progressSeen, hold: progressHold)
+        let result = paths.result
         Task.detached {
             let outcome = Self.finishedScan(
                 core: core,
@@ -236,12 +271,57 @@ public final class FlowModel: ObservableObject {
                 phone: phone,
                 missing: missing,
                 wanted: wanted,
-                paths: paths
+                paths: paths,
+                onProgress: { line in
+                    Self.deliverCrop(line: line, directory: result, gate: gate, model: self)
+                }
             )
             await MainActor.run {
                 self.apply(outcome)
+                self.liveCrops = []
                 self.scanning = false
             }
+        }
+    }
+
+    func appendLiveCrop(label: String, path: String) {
+        liveCrops.append(LiveCrop(id: liveCrops.count, label: label, path: path))
+    }
+
+    /// Hop the crop onto the main thread, then let only the first one wait for the test.
+    nonisolated private static func deliverCrop(line: String, directory: URL, gate: ProgressOnce, model: FlowModel) {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+        let kind = object["kind"] as? String ?? ""
+        guard kind == "face" || kind == "plate" || kind == "vehicle",
+              let label = object["label"] as? String, !label.isEmpty,
+              let relative = object["crop"] as? String, !relative.isEmpty else {
+            return
+        }
+        let path = directory.appendingPathComponent(relative).path
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                model.appendLiveCrop(label: label, path: path)
+            }
+            return
+        }
+        let first = gate.claim()
+        let posted = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                model.appendLiveCrop(label: label, path: path)
+            }
+            if first {
+                gate.seen?.signal()
+            }
+            posted.signal()
+        }
+        posted.wait()
+        if first {
+            _ = gate.hold?.wait(timeout: .now() + 30)
         }
     }
 
@@ -283,7 +363,8 @@ public final class FlowModel: ObservableObject {
         phone: Bool,
         missing: Bool,
         wanted: Bool,
-        paths: ScanPaths
+        paths: ScanPaths,
+        onProgress: ((String) -> Void)? = nil
     ) -> FinishedScan {
         do {
             // The fixture pack is written by the CLI before a real curve allows FBI photos.
@@ -300,7 +381,8 @@ public final class FlowModel: ObservableObject {
                 out: paths.result,
                 phone: phone,
                 missing: missing,
-                wanted: wanted
+                wanted: wanted,
+                onProgress: onProgress
             )
             return FinishedScan(report: report, error: nil, keepRoot: true, root: paths.root, result: paths.result)
         } catch {
@@ -530,6 +612,16 @@ public struct FlowView: View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
             Text(model.scanning ? "Scanning" : "Estimate").font(model.phone ? .largeTitle : .title)
+            if model.scanning, !model.liveCrops.isEmpty {
+                Text("Crops from this file.")
+                    .font(model.phone ? .title3 : .headline)
+                ForEach(model.liveCrops) { crop in
+                    VStack(spacing: 4) {
+                        liveImage(crop.path)
+                        Text(crop.label)
+                    }
+                }
+            }
             if let warning = model.estimateWarning {
                 Text(warning).foregroundStyle(.orange)
             }
@@ -695,6 +787,27 @@ public struct FlowView: View {
                 Text(caption).font(.caption)
             }
         }
+    }
+
+    @ViewBuilder
+    private func liveImage(_ path: String) -> some View {
+        #if os(macOS)
+        if let image = NSImage(contentsOfFile: path) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 112, height: 112)
+        }
+        #elseif os(iOS)
+        if let image = UIImage(contentsOfFile: path) {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 112, height: 112)
+        }
+        #else
+        Color.clear.frame(width: 112, height: 112)
+        #endif
     }
 
     @ViewBuilder

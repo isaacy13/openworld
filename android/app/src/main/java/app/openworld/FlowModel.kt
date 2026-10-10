@@ -14,6 +14,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 enum class Step { Choose, Device, Bundle, Size, Estimate, Results }
 
@@ -72,9 +73,15 @@ class FlowModel {
     var fbiUrl by mutableStateOf<String?>(null)
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<Pair<String, String>>())
+    var liveCrops by mutableStateOf(listOf<Pair<String, String>>())
     var canAnalyze by mutableStateOf(true)
     var scanning by mutableStateOf(false)
     var scanGate: CountDownLatch? = null
+    /** Counted down on the main thread after the first crop is on the estimate. */
+    var progressSeen: CountDownLatch? = null
+    /** The scan thread waits here after the first crop so a test can read the estimate. */
+    var progressGate: CountDownLatch? = null
+    private val progressOnce = AtomicBoolean(false)
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
     private var localCopy: File? = null
 
@@ -304,17 +311,22 @@ class FlowModel {
         if (scanning || !canAnalyze || file == null) return
         if (!removeResult(abandonUnmarked = true)) return
         scanning = true
+        liveCrops = emptyList()
+        progressOnce.set(false)
         val bundle = bundleId
         val side = longSide
         val cover = coverage
         val missing = includeMissing
         val wanted = includeWanted
         val gate = scanGate
+        val seen = progressSeen
+        val hold = progressGate
         Thread({
             gate?.await(30, TimeUnit.SECONDS)
-            val outcome = computeScan(file, bundle, side, cover, missing, wanted)
+            val outcome = computeScan(file, bundle, side, cover, missing, wanted, reportProgress = true, seen = seen, hold = hold)
             Handler(Looper.getMainLooper()).post {
                 applyScan(outcome)
+                liveCrops = emptyList()
                 scanning = false
             }
         }, "openworld-scan").start()
@@ -347,7 +359,17 @@ class FlowModel {
         return args
     }
 
-    private fun computeScan(file: File, bundle: String, side: String, cover: String, missing: Boolean, wanted: Boolean): ScanOutcome {
+    private fun computeScan(
+        file: File,
+        bundle: String,
+        side: String,
+        cover: String,
+        missing: Boolean,
+        wanted: Boolean,
+        reportProgress: Boolean = false,
+        seen: CountDownLatch? = null,
+        hold: CountDownLatch? = null,
+    ): ScanOutcome {
         val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
         val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
         if (root == null || !root.mkdirs()) {
@@ -363,19 +385,23 @@ class FlowModel {
             Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
             val frames = File(root, "openworld-frames")
             val reel = PlatformDecode.writeFrames(file, frames)
-            val json = Core.json(
-                listOf(
-                    "--json", "--bundles", Core.bundlesDir(), "scan",
-                    "--input", file.absolutePath,
-                    "--bundle", bundle,
-                    "--long-side", side,
-                    "--coverage", cover,
-                    "--posters", posters.absolutePath,
-                    "--out", out.absolutePath,
-                    "--form-factor", "phone",
-                    "--provider", "cpu",
-                ) + classArgs(missing, wanted) + reel.arguments(reel.directory)
-            )
+            val args = listOf(
+                "--json", "--bundles", Core.bundlesDir(), "scan",
+                "--input", file.absolutePath,
+                "--bundle", bundle,
+                "--long-side", side,
+                "--coverage", cover,
+                "--posters", posters.absolutePath,
+                "--out", out.absolutePath,
+                "--form-factor", "phone",
+                "--provider", "cpu",
+            ) + classArgs(missing, wanted) + reel.arguments(reel.directory) +
+                if (reportProgress) listOf("--progress") else emptyList()
+            val json = if (reportProgress) {
+                Core.json(args) { line -> noteProgress(line, out, seen, hold) }
+            } else {
+                Core.json(args)
+            }
             val status = json.optString("status")
             val summary = json.present("summary") ?: when (status) {
                 "complete" -> "No candidate is not a clearance."
@@ -445,6 +471,29 @@ class FlowModel {
             root.deleteRecursively()
             decodeFailure(err.message)
         }
+    }
+
+    private fun noteProgress(line: String, out: File, seen: CountDownLatch?, hold: CountDownLatch?) {
+        if (Looper.myLooper() == Looper.getMainLooper()) return
+        val event = try {
+            JSONObject(line)
+        } catch (_: Exception) {
+            return
+        }
+        val kind = event.optString("kind")
+        if (kind != "face" && kind != "plate" && kind != "vehicle") return
+        val label = event.optString("label")
+        val relative = event.optString("crop")
+        if (label.isBlank() || relative.isBlank()) return
+        val path = File(out, relative)
+        if (!path.isFile) return
+        val absolute = path.absolutePath
+        val first = progressOnce.compareAndSet(false, true)
+        Handler(Looper.getMainLooper()).post {
+            liveCrops = liveCrops + (label to absolute)
+            if (first) seen?.countDown()
+        }
+        if (first) hold?.await(30, TimeUnit.SECONDS)
     }
 
     private fun applyScan(outcome: ScanOutcome) {

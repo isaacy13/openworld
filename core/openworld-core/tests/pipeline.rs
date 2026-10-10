@@ -122,10 +122,17 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     posters::write_fixture_pack(&pack_dir, now()).unwrap();
     let pack = posters::load_pack(&pack_dir, now()).unwrap();
     let scene = demo_scene(bundle.threshold);
+    let input = dir.path().join("scene.png");
+    scene.image.save(&input).unwrap();
     let mut opts = opts(DetectionSize::Px(640), Coverage::Complete);
     opts.fps = 0.0;
     opts.out_dir = Some(dir.path().join("out"));
-    let report = scan_images(&[scene.image], &bundle, &pack, &opts, &mut |_| {});
+    let mut progress_labels = Vec::new();
+    let report = scan_images(&[scene.image], &bundle, &pack, &opts, &mut |event| {
+        progress_labels.push(event.label);
+    });
+    assert!(progress_labels.iter().any(|label| label == VEHICLE_NOT_PERSON), "{progress_labels:?}");
+    assert!(progress_labels.iter().any(|label| label == NOT_COMPARED), "{progress_labels:?}");
     assert_eq!(report.status, "complete");
     assert_eq!(report.bundle_name, "Fast");
     assert_eq!(report.class_note.as_deref(), Some("Missing and wanted."));
@@ -155,6 +162,31 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert!(plate.uncertainty.contains("FIX123"));
     assert!(plate.uncertainty.contains("That text is published on this poster."));
     assert!(!plate.uncertainty.contains(POSSIBLE_CANDIDATE));
+    let mut named = Vec::new();
+    let report_text = openworld_core::invoke::invoke_argv_progress(
+        &[
+            "--json".into(),
+            "--progress".into(),
+            "--bundles".into(),
+            repo().join("bundles").to_string_lossy().into(),
+            "scan".into(),
+            "--input".into(),
+            input.to_string_lossy().into(),
+            "--bundle".into(),
+            "fast".into(),
+            "--long-side".into(),
+            "640".into(),
+            "--coverage".into(),
+            "complete".into(),
+            "--posters".into(),
+            pack_dir.to_string_lossy().into(),
+            "--out".into(),
+            dir.path().join("progress-out").to_string_lossy().into(),
+        ],
+        &mut |event| named.push(event.label),
+    );
+    assert!(named.iter().any(|label| label == VEHICLE_NOT_PERSON), "{named:?}");
+    assert!(report_text.contains("Possible candidate. Not an identification."));
     assert_eq!(face.leaving, "You are leaving OpenWorld.");
     assert!(face.cosine.unwrap() >= bundle.threshold);
 }

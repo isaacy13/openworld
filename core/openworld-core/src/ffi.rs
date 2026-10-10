@@ -5,10 +5,9 @@
 
 use crate::estimate::{Coverage, DetectionSize, FormFactor};
 use crate::hardware::resolve_execution;
-use crate::invoke::invoke_json;
 use crate::scan::{scan_path, MediaFacts, ScanRequest};
 use serde_json::Value;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -26,12 +25,36 @@ pub extern "C" fn ow_string_free(ptr: *mut c_char) {
 /// Shell argument list as `{"argv":[...]}`. Same JSON the CLI prints. The caller frees with `ow_string_free`.
 #[no_mangle]
 pub extern "C" fn ow_command(request: *const c_char) -> *mut c_char {
+    ow_command_progress(request, None, std::ptr::null_mut())
+}
+
+pub type OwProgressFn = Option<extern "C" fn(*const c_char, *mut c_void)>;
+
+/// `ow_command`, and when argv contains `--progress` each crop JSON line is passed to `progress` before the report returns.
+/// The callback runs on the caller's thread. `user` is not retained after this function returns.
+#[no_mangle]
+pub extern "C" fn ow_command_progress(
+    request: *const c_char,
+    progress: OwProgressFn,
+    user: *mut c_void,
+) -> *mut c_char {
     let report = std::panic::catch_unwind(|| {
         if request.is_null() {
             return r#"{"status":"refused","summary":"The scan request was empty. Refusing."}"#.to_string();
         }
         let text = unsafe { CStr::from_ptr(request) }.to_string_lossy();
-        invoke_json(&text)
+        crate::invoke::invoke_json_progress(&text, &mut |event| {
+            let Some(progress) = progress else {
+                return;
+            };
+            let Ok(line) = serde_json::to_string(&event) else {
+                return;
+            };
+            let Ok(c_line) = CString::new(line) else {
+                return;
+            };
+            progress(c_line.as_ptr(), user);
+        })
     })
     .unwrap_or_else(|_| r#"{"status":"refused","summary":"The scan stopped. Refusing.","message":"The scan stopped. Refusing."}"#.to_string());
     CString::new(report)

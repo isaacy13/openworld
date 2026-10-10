@@ -14,6 +14,10 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub fn invoke_json(text: &str) -> String {
+    invoke_json_progress(text, &mut |_| {})
+}
+
+pub fn invoke_json_progress(text: &str, progress: &mut dyn FnMut(crate::scan::Progress)) -> String {
     let value: Value = match serde_json::from_str(text) {
         Ok(value) => value,
         Err(_) => return refused("The scan request was not JSON. Refusing."),
@@ -28,11 +32,16 @@ pub fn invoke_json(text: &str) -> String {
         };
         args.push(text.to_string());
     }
-    invoke_argv(&args)
+    invoke_argv_progress(&args, progress)
 }
 
 pub fn invoke_argv(args: &[String]) -> String {
-    match dispatch(args) {
+    invoke_argv_progress(args, &mut |_| {})
+}
+
+/// Same as [`invoke_argv`]. When the argument list includes `--progress`, each crop is passed to `progress` before the report returns.
+pub fn invoke_argv_progress(args: &[String], progress: &mut dyn FnMut(crate::scan::Progress)) -> String {
+    match dispatch_with_progress(args, progress) {
         Ok(value) => value.to_string(),
         Err(message) => refused(&message),
     }
@@ -42,7 +51,10 @@ fn refused(message: &str) -> String {
     json!({ "status": "refused", "summary": message, "message": message }).to_string()
 }
 
-fn dispatch(args: &[String]) -> Result<Value, String> {
+fn dispatch_with_progress(
+    args: &[String],
+    progress: &mut dyn FnMut(crate::scan::Progress),
+) -> Result<Value, String> {
     let parsed = parse_args(args)?;
     let bundles = bundles_dir(parsed.bundles.clone());
     match parsed.cmd.as_str() {
@@ -60,7 +72,11 @@ fn dispatch(args: &[String]) -> Result<Value, String> {
         }
         "scan" => {
             let req = scan_request(&bundles, &parsed)?;
-            let report = scan_path(&req, &mut |_| {});
+            let report = if parsed.progress {
+                scan_path(&req, progress)
+            } else {
+                scan_path(&req, &mut |_| {})
+            };
             serde_json::to_value(&report).map_err(|err| err.to_string())
         }
         "posters" => posters(&bundles, &parsed),
@@ -150,6 +166,7 @@ struct Parsed {
     action: Option<String>,
     flags: HashMap<String, String>,
     bools: HashSet<String>,
+    progress: bool,
 }
 
 impl Parsed {
@@ -162,10 +179,16 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
     let mut bundles = None;
     let mut cmd = String::new();
     let mut rest = Vec::new();
+    let mut progress = false;
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
-        if arg == "--json" || arg == "--progress" {
+        if arg == "--json" {
+            index += 1;
+            continue;
+        }
+        if arg == "--progress" {
+            progress = true;
             index += 1;
             continue;
         }
@@ -198,6 +221,7 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
         action,
         flags,
         bools,
+        progress,
     })
 }
 

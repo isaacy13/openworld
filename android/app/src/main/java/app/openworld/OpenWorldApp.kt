@@ -119,6 +119,22 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     }
                     Step.Estimate -> {
                         Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
+                        if (model.scanning && model.liveCrops.isNotEmpty()) {
+                            Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
+                            model.liveCrops.forEach { (label, path) ->
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val bitmap = BitmapFactory.decodeFile(path)
+                                    if (bitmap != null) {
+                                        Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = label,
+                                            modifier = Modifier.size(112.dp),
+                                        )
+                                    }
+                                    Text(label)
+                                }
+                            }
+                        }
                         if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         Text(model.estimateText)
                         if (model.estimateOk) {
