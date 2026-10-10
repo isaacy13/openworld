@@ -2261,6 +2261,56 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun aShareAddressOpensThatFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/address.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri.toString())
+        }
+        deliverShare(intent)
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("address.png").assertExists()
+    }
+
+    @Test
+    fun aShareClipOpensThatFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/clipped.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            clipData = android.content.ClipData.newRawUri("clipped.png", uri)
+        }
+        deliverShare(intent)
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("clipped.png").assertExists()
+    }
+
+    @Test
+    fun aShareWithNoFileSaysSo() {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "hello")
+        }
+        deliverShare(intent)
+        compose.onNodeWithText("The file could not be read. Refusing.").assertExists()
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+    }
+
+    private fun deliverShare(intent: Intent) {
+        compose.runOnUiThread {
+            val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+            method.isAccessible = true
+            method.invoke(compose.activity, intent)
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
     fun aShareReusesTheOpenWindow() {
         val info = compose.activity.packageManager.getActivityInfo(compose.activity.componentName, 0)
         assertEquals(ActivityInfo.LAUNCH_SINGLE_TASK, info.launchMode)

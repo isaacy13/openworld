@@ -105,6 +105,12 @@ class FlowModel : ViewModel() {
     /** When set, the next scan writes the fixture pack here. A file at this path is refused. */
     internal var fixturePackDirectory: File? = null
 
+    /** A share that is not a file. The page already open stays. */
+    fun noteUnreadableShare() {
+        if (abandoned.get() || scanning) return
+        pickNotice = "The file could not be read. Refusing."
+    }
+
     fun choose(uri: Uri, resolver: ContentResolver) {
         if (abandoned.get()) return
         if (scanning) return
