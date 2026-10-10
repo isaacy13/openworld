@@ -14,7 +14,7 @@ use openworld_core::scan::{
 use openworld_core::scene::demo_scene;
 use openworld_core::{load_bundles, measure_fast};
 use serde_json::json;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -1286,11 +1286,18 @@ fn class_refusal(json_mode: bool) -> Result<i32, String> {
             "message": message,
         }),
     );
-    if !json_mode {
+    // The question has no newline. A terminal already moved when the answer was entered.
+    // A pipe did not, so the sentence would stay on the question line.
+    if prompt_needs_a_new_line(json_mode, io::stdin().is_terminal()) {
         println!();
     }
     speak(json_mode, [message]);
     Ok(2)
+}
+
+/// A pipe needs a newline after the question. A terminal already printed one.
+fn prompt_needs_a_new_line(json_mode: bool, terminal: bool) -> bool {
+    !json_mode && !terminal
 }
 
 fn class_menu_lines() -> Vec<String> {
@@ -2163,6 +2170,10 @@ mod cli_tests {
             parse_class_answer("maybe").unwrap_err(),
             "Choose missing, wanted, or both."
         );
+        assert!(!prompt_needs_a_new_line(false, true));
+        assert!(prompt_needs_a_new_line(false, false));
+        assert!(!prompt_needs_a_new_line(true, false));
+        assert!(!prompt_needs_a_new_line(true, true));
     }
 
     #[test]

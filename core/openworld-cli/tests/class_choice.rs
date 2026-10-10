@@ -174,6 +174,11 @@ fn a_bad_class_answer_stops_before_the_estimate() {
     assert!(text
         .lines()
         .any(|line| line == "Choose missing, wanted, or both."));
+    assert!(
+        text.contains("Missing? [Y/n]: \nChoose missing, wanted, or both.\n"),
+        "{text:?}"
+    );
+    assert!(!text.contains("\n\nChoose missing, wanted, or both."), "{text:?}");
     assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
     assert!(!text.contains("Wanted?"), "{text}");
     assert!(!text.contains("Analyze?"), "{text}");
