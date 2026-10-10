@@ -892,10 +892,12 @@ class OpenWorld(Gtk.Application):
                 wrap=True,
             )
             box.append(poster)
-        button = Gtk.Button(label="Open FBI page")
-        button.set_halign(Gtk.Align.START)
-        button.connect("clicked", lambda *_c, url=candidate.get("fbi_url", ""): self.confirm_leave(url))
-        box.append(button)
+        url = candidate.get("fbi_url") or ""
+        if url:
+            button = Gtk.Button(label="Open FBI page")
+            button.set_halign(Gtk.Align.START)
+            button.connect("clicked", lambda *_c, url=url: self.confirm_leave(url))
+            box.append(button)
         frame.set_child(box)
         return frame
 
@@ -1473,6 +1475,33 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(
                 f"a warning was mixed into the class line: {self.context_note.get_text()!r} {self.warning_note.get_text()!r}"
             )
+            return False
+        self._clear_results()
+        self._show_report(
+            {
+                "status": "complete",
+                "summary": PHRASES["possible"],
+                "candidates": [
+                    {
+                        "wording": PHRASES["possible"],
+                        "uncertainty": "Score 0.90.",
+                        "poster_title": "Fixture subject A",
+                        "poster_class_label": "Missing",
+                        "fbi_url": "",
+                    }
+                ],
+                "inventory": [],
+                "disclosure": ["Nothing is uploaded."],
+            }
+        )
+        labels = self._labels_under(self.detail)
+        buttons = self._button_labels(self.detail)
+        if (
+            PHRASES["possible"] not in labels
+            or "Fixture subject A (Missing)" not in labels
+            or "Open FBI page" in buttons
+        ):
+            self._exercise_fail(f"a candidate with no page lost its card: {labels!r} {buttons!r}")
             return False
         blocker = self.work / "posters"
         blocker.write_bytes(b"keep")

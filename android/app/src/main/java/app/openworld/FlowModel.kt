@@ -462,26 +462,7 @@ class FlowModel {
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))
             }
-            val rows = mutableListOf<CandidateRow>()
-            val candidates = json.optJSONArray("candidates")
-            if (candidates != null) {
-                for (i in 0 until candidates.length()) {
-                    val item = candidates.getJSONObject(i)
-                    val page = item.present("fbi_url") ?: continue
-                    rows.add(
-                        CandidateRow(
-                            wording = item.present("wording") ?: "Possible candidate. Not an identification.",
-                            uncertainty = item.present("uncertainty") ?: "",
-                            title = item.present("poster_title") ?: "",
-                            posterClassLabel = item.present("poster_class_label") ?: "",
-                            url = page,
-                            cropPath = item.present("crop")?.let { File(out, it).absolutePath },
-                            framePath = item.present("frame")?.let { File(out, it).absolutePath },
-                            frameLabel = item.present("frame_label") ?: "Frame",
-                        )
-                    )
-                }
-            }
+            val rows = candidateRowsFrom(json.optJSONArray("candidates"), out)
             val pictures = mutableListOf<StripCrop>()
             val inventory = json.optJSONArray("inventory")
             if (inventory != null) {
@@ -639,6 +620,27 @@ class FlowModel {
         }
         return modified
     }
+}
+
+internal fun candidateRowsFrom(candidates: org.json.JSONArray?, out: File): List<CandidateRow> {
+    if (candidates == null) return emptyList()
+    val rows = mutableListOf<CandidateRow>()
+    for (i in 0 until candidates.length()) {
+        val item = candidates.getJSONObject(i)
+        rows.add(
+            CandidateRow(
+                wording = item.present("wording") ?: "Possible candidate. Not an identification.",
+                uncertainty = item.present("uncertainty") ?: "",
+                title = item.present("poster_title") ?: "",
+                posterClassLabel = item.present("poster_class_label") ?: "",
+                url = item.present("fbi_url") ?: "",
+                cropPath = item.present("crop")?.let { File(out, it).absolutePath },
+                framePath = item.present("frame")?.let { File(out, it).absolutePath },
+                frameLabel = item.present("frame_label") ?: "Frame",
+            )
+        )
+    }
+    return rows
 }
 
 private fun JSONObject.present(key: String): String? {

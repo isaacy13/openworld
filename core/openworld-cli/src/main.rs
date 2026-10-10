@@ -1767,6 +1767,15 @@ mod cli_tests {
         untitled.candidates[0].poster_title = "Fixture subject A".into();
         untitled.candidates[0].poster_class_label.clear();
         assert!(human_lines(&untitled).iter().any(|line| line == "Fixture subject A"));
+        let mut unpaged = report.clone();
+        unpaged.candidates[0].fbi_url.clear();
+        let quiet = human_lines(&unpaged);
+        let card = quiet
+            .iter()
+            .position(|line| line == "Fixture subject A (Missing)")
+            .expect("card");
+        assert_ne!(quiet.get(card + 1).map(String::as_str), Some("Open FBI page"));
+        assert!(quiet.iter().any(|line| line == "Possible candidate. Not an identification."));
 
         assert!(lines.iter().any(|line| line == "1 frame analyzed."));
         assert!(lines.iter().any(|line| line == "Every decoded frame."));

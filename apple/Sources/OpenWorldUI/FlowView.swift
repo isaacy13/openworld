@@ -794,8 +794,10 @@ public struct FlowView: View {
                             if !candidate.posterLine.isEmpty {
                                 Text(candidate.posterLine)
                             }
-                            prominent("Open FBI page") {
-                                model.requestLeave(candidate.fbiUrl)
+                            if !candidate.fbiUrl.isEmpty {
+                                prominent("Open FBI page") {
+                                    model.requestLeave(candidate.fbiUrl)
+                                }
                             }
                         }
                         #if !os(Linux)

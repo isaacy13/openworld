@@ -1182,6 +1182,28 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aCandidateWithoutAPageKeepsTheCard() {
+        val out = File(System.getProperty("java.io.tmpdir") ?: ".", "openworld-rows")
+        val candidates = org.json.JSONArray(
+            """[{"wording":"Possible candidate. Not an identification.","uncertainty":"Score 0.90.","poster_title":"Fixture subject A","poster_class_label":"Missing","fbi_url":"","frame_label":"Frame 1."}]"""
+        )
+        val rows = candidateRowsFrom(candidates, out)
+        assertEquals(1, rows.size)
+        assertEquals("", rows[0].url)
+        assertEquals("Possible candidate. Not an identification.", rows[0].wording)
+        assertEquals("Fixture subject A", rows[0].title)
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "Possible candidate. Not an identification."
+        model.candidateRows = rows
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Fixture subject A (Missing)").assertExists()
+        compose.onAllNodesWithText("Open FBI page").assertCountEquals(0)
+        compose.onAllNodesWithText("Possible candidate. Not an identification.").assertCountEquals(2)
+    }
+
+    @Test
     fun aRefusedEstimateDoesNotAskForAClass() {
         val model = FlowModel()
         model.step = Step.Estimate

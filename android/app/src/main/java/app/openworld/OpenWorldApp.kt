@@ -206,7 +206,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
                             val poster = posterLine(row.title, row.posterClassLabel)
                             if (poster.isNotBlank()) Text(poster)
-                            Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
+                            if (row.url.isNotBlank()) {
+                                Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
+                            }
                         }
                         if (model.strip.isNotEmpty()) {
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)

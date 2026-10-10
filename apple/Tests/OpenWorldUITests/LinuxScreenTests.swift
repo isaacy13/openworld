@@ -291,6 +291,21 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testACandidateWithoutAPageKeepsTheCard() throws {
+        try MainActor.assumeIsolated {
+            var report = try JSONDecoder().decode(ScanReport.self, from: Data(reportJSON.utf8))
+            report.candidates[0].fbiUrl = ""
+            let model = FlowModel(phone: true)
+            model.report = report
+            model.step = .results
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertTrue(lines.contains("Possible candidate. Not an identification."))
+            XCTAssertTrue(lines.contains("Fixture subject A (Missing)"))
+            XCTAssertFalse(lines.contains("Open FBI page"))
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testAPosterPackFileRefusesBeforeTheScan() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data("keep".utf8).write(to: blocker)
