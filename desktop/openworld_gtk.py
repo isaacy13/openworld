@@ -269,6 +269,9 @@ class OpenWorld(Gtk.Application):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         title = Gtk.Label(label="Estimate", xalign=0)
         title.add_css_class("title")
+        self.estimate_warn = Gtk.Label(xalign=0, wrap=True)
+        self.estimate_warn.add_css_class("warn")
+        self.estimate_warn.set_visible(False)
         self.estimate_body = Gtk.Label(xalign=0, wrap=True)
         self.missing_button = Gtk.CheckButton(label="Missing")
         self.wanted_button = Gtk.CheckButton(label="Wanted")
@@ -278,6 +281,7 @@ class OpenWorld(Gtk.Application):
         self.wanted_button.connect("toggled", self._on_class)
         self.class_label = Gtk.Label(label="Missing and wanted.", xalign=0, wrap=True)
         box.append(title)
+        box.append(self.estimate_warn)
         box.append(self.estimate_body)
         box.append(self.missing_button)
         box.append(self.wanted_button)
@@ -375,8 +379,12 @@ class OpenWorld(Gtk.Application):
         age = time.time() - os.stat(path).st_mtime
         if age > 30 * 24 * 3600:
             self.warn_label.set_text(PHRASES["old"])
+            self.estimate_warn.set_text(PHRASES["old"])
+            self.estimate_warn.set_visible(True)
         else:
             self.warn_label.set_text("")
+            self.estimate_warn.set_text("")
+            self.estimate_warn.set_visible(False)
         self.can_analyze = True
         self.history = ["choose"]
         self._go("device")
@@ -936,6 +944,8 @@ class OpenWorld(Gtk.Application):
         self.warning_note.set_visible(False)
         self.file_label.set_text("")
         self.warn_label.set_text("")
+        self.estimate_warn.set_text("")
+        self.estimate_warn.set_visible(False)
         self.coverage = "complete"
         self.complete_button.set_active(True)
         self.include_missing = True
@@ -1073,14 +1083,14 @@ class OpenWorld(Gtk.Application):
         aged = time.time() - 40 * 24 * 3600
         os.utime(path, (aged, aged))
         self.choose_file(path)
-        if self.warn_label.get_text() != PHRASES["old"]:
-            self._exercise_fail(f"old file warning missing: {self.warn_label.get_text()!r}")
+        if self.warn_label.get_text() != PHRASES["old"] or self.estimate_warn.get_text() != PHRASES["old"] or not self.estimate_warn.get_visible():
+            self._exercise_fail(f"old file warning missing: {self.warn_label.get_text()!r} {self.estimate_warn.get_text()!r}")
             return False
         now = time.time()
         os.utime(path, (now, now))
         self.choose_file(path)
-        if self.warn_label.get_text():
-            self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r}")
+        if self.warn_label.get_text() or self.estimate_warn.get_text() or self.estimate_warn.get_visible():
+            self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r} {self.estimate_warn.get_text()!r}")
             return False
         missing = str(Path(path).with_name("no-such-photo.png"))
         self.choose_file(missing)

@@ -158,6 +158,9 @@ public final class FlowModel: ObservableObject {
     /// A refusal has no estimate, so Analyze is not on that page. Both classes off keeps the button.
     public var showsAnalyze: Bool { estimate != nil }
 
+    /// The file page and the estimate both warn. The result repeats it after the scan.
+    public var estimateWarning: String? { oldFile ? Copy.oldFile : nil }
+
     /// Back stays off while a scan is running.
     public var backEnabled: Bool { !scanning }
 
@@ -436,6 +439,14 @@ public struct FlowView: View {
     }
 
     private var device: some View {
+        #if os(Linux)
+        deviceColumn
+        #else
+        ScrollView { deviceColumn }
+        #endif
+    }
+
+    private var deviceColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
             Text(Copy.onDevice).font(model.phone ? .largeTitle : .title)
@@ -450,19 +461,25 @@ public struct FlowView: View {
             }
             Text("Fixture posters. Real FBI photos stay off.")
                 .foregroundStyle(.secondary)
-            Spacer()
             prominent("Continue") { model.loadBundles() }
         }
         .padding()
     }
 
     private var bundles: some View {
+        #if os(Linux)
+        bundleColumn
+        #else
+        ScrollView { bundleColumn }
+        #endif
+    }
+
+    private var bundleColumn: some View {
         VStack(alignment: .leading, spacing: 8) {
             backControl
             Text("Model bundle").font(model.phone ? .largeTitle : .title)
             Text("Scores are not comparable across bundles. Results name the bundle you pick.")
                 .foregroundStyle(.secondary)
-            #if os(Linux)
             ForEach(model.bundles) { row in
                 Button(action: { model.bundleID = row.id }) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -472,26 +489,20 @@ public struct FlowView: View {
                     }
                 }
             }
-            #else
-            List(model.bundles) { row in
-                Button {
-                    model.bundleID = row.id
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(markedChoice(row.name, selected: row.id == model.bundleID)).font(.headline)
-                        Text(row.bestFor)
-                        Text(row.curveLine).foregroundStyle(.secondary)
-                    }
-                }
-                .listRowBackground(row.id == model.bundleID ? Color.accentColor.opacity(0.15) : Color.clear)
-            }
-            #endif
             prominent("Continue") { model.step = .size }
         }
         .padding(model.phone ? 0 : 8)
     }
 
     private var size: some View {
+        #if os(Linux)
+        sizeColumn
+        #else
+        ScrollView { sizeColumn }
+        #endif
+    }
+
+    private var sizeColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
             backControl
             Text("Detection size").font(model.phone ? .largeTitle : .title)
@@ -519,6 +530,9 @@ public struct FlowView: View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
             Text(model.scanning ? "Scanning" : "Estimate").font(model.phone ? .largeTitle : .title)
+            if let warning = model.estimateWarning {
+                Text(warning).foregroundStyle(.orange)
+            }
             if let estimate = model.estimate {
                 Text(estimate.human).font(.headline)
                 Text(estimate.caveat).foregroundStyle(.secondary)

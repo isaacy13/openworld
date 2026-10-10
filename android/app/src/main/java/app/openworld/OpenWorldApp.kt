@@ -35,6 +35,8 @@ private object ProductCopy {
     const val leaving = "You are leaving OpenWorld."
 }
 
+private val warningColor = Color(0xFF8A5A00)
+
 private val disclosure = listOf(
     "Nothing is uploaded.",
     "Nobody is enrolled.",
@@ -72,7 +74,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Device -> {
                         Text("This file stays on this device.", style = MaterialTheme.typography.headlineMedium)
                         Text(model.fileName, style = MaterialTheme.typography.titleMedium)
-                        if (model.oldFile) Text("This file is older than about 30 days.")
+                        if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         disclosure.forEach { Text(it) }
                         Text("Fixture posters. Real FBI photos stay off.")
                         Button(onClick = model::continueFromDevice) { Text("Continue") }
@@ -117,6 +119,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     }
                     Step.Estimate -> {
                         Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
+                        if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                         Text(model.estimateText)
                         if (model.estimateOk) {
                             Row {
@@ -159,7 +162,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         )
                         if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
                         if (model.context.isNotBlank()) Text(model.context)
-                        if (model.warnings.isNotBlank()) Text(model.warnings, color = Color(0xFF8A5A00))
+                        if (model.warnings.isNotBlank()) Text(model.warnings, color = warningColor)
                         model.candidateRows.forEach { row ->
                             Text(row.wording, style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

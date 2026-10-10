@@ -111,6 +111,7 @@ enum ScreenCopy {
             ]
         case "estimate":
             var lines = ["Estimate"]
+            if let warning = model.estimateWarning { lines.append(warning) }
             if let estimate = model.estimate {
                 lines.append(estimate.human)
                 lines.append(estimate.caveat)

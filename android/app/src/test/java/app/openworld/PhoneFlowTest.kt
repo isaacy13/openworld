@@ -904,6 +904,32 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anOldFileStaysAWarningOnTheEstimate() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/old-estimate.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val cursor = object : RoboCursor() {
+            override fun close() {
+                moveToPosition(-1)
+            }
+        }
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME, "last_modified"))
+        cursor.setResults(
+            arrayOf(arrayOf<Any>("old-estimate.png", System.currentTimeMillis() - 40L * 24 * 60 * 60 * 1000))
+        )
+        shadowOf(resolver).setCursor(uri, cursor)
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("This file is older than about 30 days.").assertExists()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("This file is older than about 30 days.").assertExists()
+        compose.onNodeWithText("Analyze").assertIsEnabled()
+    }
+
+    @Test
     fun theClassLineSitsAboveTheCandidate() {
         val model = FlowModel()
         model.step = Step.Results
