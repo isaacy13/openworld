@@ -488,12 +488,23 @@ class OpenWorld(Gtk.Application):
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         self._clear_results()
+        self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
         self.summary.set_text("Scanning")
         self.delete_button.set_sensitive(False)
         self._go("results")
         self.primary.set_label("Scanning")
         self.primary.set_sensitive(False)
         self.back.set_sensitive(False)
+        shot = os.environ.get("OPENWORLD_SCANNING_SHOT")
+        if shot:
+            context = GLib.MainContext.default()
+            deadline = time.time() + 0.4
+            while time.time() < deadline:
+                context.iteration(False)
+                time.sleep(0.05)
+            self._grab(shot)
         self.posters = self.work / "posters"
         self.out_dir = self.work / "result"
         subprocess.check_call(
@@ -1041,7 +1052,24 @@ class OpenWorld(Gtk.Application):
         if "Fast. 640 px on the long side. Every decoded frame." not in text or "Bundle fast" in text or "Coverage complete" in text:
             self._exercise_fail(f"estimate did not repeat the choice in plain words: {text}")
             return False
+        self.result_note.set_text(PHRASES["clearance"])
+        self.reason.set_text("The file was not fully decoded.")
+        self.reason.set_visible(True)
         self.start_scan()
+        if (
+            self.summary.get_text() != "Scanning"
+            or self.result_note.get_text()
+            or self.reason.get_text()
+            or self.reason.get_visible()
+            or self.primary.get_label() != "Scanning"
+            or self.primary.get_sensitive()
+            or self.back.get_sensitive()
+            or self.stack.get_visible_child_name() != "results"
+        ):
+            self._exercise_fail(
+                f"Scanning kept the previous result: {self.summary.get_text()!r} {self.result_note.get_text()!r} {self.reason.get_text()!r}"
+            )
+            return False
         GLib.timeout_add(200, self._exercise_wait, 0)
         return False
 
