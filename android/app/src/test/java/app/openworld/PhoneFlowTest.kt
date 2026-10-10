@@ -54,6 +54,22 @@ import java.io.File
 @Config(sdk = [34], qualifiers = "w360dp-h800dp")
 class PhoneFlowTest {
     @Test
+    fun stoppingTheScanProgramEndsThatProcess() {
+        val process = Core.startProgram(listOf("sleep", "30"))
+        assertTrue(process.isAlive)
+        Core.stopRunning()
+        assertTrue(process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS))
+        assertFalse(process.isAlive)
+        val later = Core.startProgram(listOf("sleep", "30"))
+        try {
+            assertTrue(later.isAlive)
+        } finally {
+            later.destroyForcibly()
+            later.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
     fun inProcessLibraryAgreesWithTheSceneScan() {
         val required = System.getenv("OPENWORLD_REQUIRE_LINKED") == "1"
         if (!Core.linkedLibrary()) {
@@ -2017,6 +2033,8 @@ private class PhoneWindowRule : ExternalResource() {
     }
 
     override fun after() {
+        if (!::controller.isInitialized) return
+        if (controller.get().isDestroyed) return
         controller.pause().stop().destroy()
     }
 }
@@ -2029,6 +2047,28 @@ class PhoneLaunchTest {
     @get:Rule
     val compose = AndroidComposeTestRule<ExternalResource, MainActivity>(window) { _ ->
         window.activity
+    }
+
+    @Test
+    fun closingThePhoneStopsAScanThatIsStillRunning() {
+        val copy = File.createTempFile("openworld", null)
+        copy.writeBytes(byteArrayOf(1, 2, 3))
+        val work = File(System.getProperty("java.io.tmpdir"), "openworld-close-" + System.nanoTime())
+        check(work.mkdirs())
+        val model = phoneModel(compose.activity)
+        val localCopy = FlowModel::class.java.getDeclaredField("localCopy")
+        localCopy.isAccessible = true
+        localCopy.set(model, copy)
+        val scanRoot = FlowModel::class.java.getDeclaredField("scanRoot")
+        scanRoot.isAccessible = true
+        scanRoot.set(model, work)
+        val process = Core.startProgram(listOf("sleep", "30"))
+        assertTrue(process.isAlive)
+        window.controller.pause().stop().destroy()
+        assertTrue(process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS))
+        assertFalse(process.isAlive)
+        assertFalse(copy.exists())
+        assertFalse(work.exists())
     }
 
     @Test

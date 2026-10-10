@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Runs the Rust library when libopenworld_jni is packaged, and otherwise the openworld program.
@@ -70,28 +71,71 @@ object Core {
             }
             return parseAnswer(args, stdout)
         }
-        val process = ProcessBuilder(listOf(binary()) + args)
+        val process = startProgram(listOf(binary()) + args)
+        try {
+            val stderr = if (onProgress != null) {
+                Thread {
+                    process.errorStream.bufferedReader().useLines { lines ->
+                        lines.forEach { line ->
+                            if (line.isNotBlank()) onProgress(line)
+                        }
+                    }
+                }.also { it.start() }
+            } else {
+                null
+            }
+            val stdout = process.inputStream.bufferedReader().readText()
+            val code = process.waitFor()
+            stderr?.join()
+            val parsed = parseAnswer(args, stdout)
+            if (code != 0 && !parsed.has("status") && !parsed.has("human")) {
+                throw IOException(parsed.optString("message", "Refusing."))
+            }
+            return parsed
+        } finally {
+            untrackProgram(process)
+        }
+    }
+
+    private val programGeneration = AtomicInteger()
+    private val runningPrograms = mutableListOf<Process>()
+    private val programLock = Any()
+
+    /** Starts a program and remembers it so closing the app can stop it. */
+    internal fun startProgram(command: List<String>): Process {
+        val seen = programGeneration.get()
+        val process = ProcessBuilder(command)
             .redirectErrorStream(false)
             .start()
-        val stderr = if (onProgress != null) {
-            Thread {
-                process.errorStream.bufferedReader().useLines { lines ->
-                    lines.forEach { line ->
-                        if (line.isNotBlank()) onProgress(line)
-                    }
-                }
-            }.also { it.start() }
-        } else {
-            null
+        synchronized(programLock) {
+            if (programGeneration.get() != seen) {
+                process.destroy()
+                process.destroyForcibly()
+            } else {
+                runningPrograms.add(process)
+            }
         }
-        val stdout = process.inputStream.bufferedReader().readText()
-        val code = process.waitFor()
-        stderr?.join()
-        val parsed = parseAnswer(args, stdout)
-        if (code != 0 && !parsed.has("status") && !parsed.has("human")) {
-            throw IOException(parsed.optString("message", "Refusing."))
+        return process
+    }
+
+    private fun untrackProgram(process: Process) {
+        synchronized(programLock) {
+            runningPrograms.remove(process)
         }
-        return parsed
+    }
+
+    /** Stops a scan program that is still running, including one that starts during this call. */
+    fun stopRunning() {
+        programGeneration.incrementAndGet()
+        val copy = synchronized(programLock) {
+            val snapshot = runningPrograms.toList()
+            runningPrograms.clear()
+            snapshot
+        }
+        for (process in copy) {
+            process.destroy()
+            process.destroyForcibly()
+        }
     }
 
     private fun parseAnswer(args: List<String>, stdout: String): JSONObject {

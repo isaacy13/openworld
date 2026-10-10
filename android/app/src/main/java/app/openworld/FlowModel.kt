@@ -95,6 +95,7 @@ class FlowModel {
     /** The scan thread waits here after the first crop so a test can read the estimate. */
     var progressGate: CountDownLatch? = null
     private val progressOnce = AtomicBoolean(false)
+    private val abandoned = AtomicBoolean(false)
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
     var bundleNotice by mutableStateOf<String?>(null)
     private var localCopy: File? = null
@@ -365,13 +366,32 @@ class FlowModel {
         val hold = progressGate
         Thread({
             gate?.await(30, TimeUnit.SECONDS)
+            if (abandoned.get()) {
+                Handler(Looper.getMainLooper()).post { scanning = false }
+                return@Thread
+            }
             val outcome = computeScan(file, bundle, side, cover, missing, wanted, reportProgress = true, seen = seen, hold = hold)
             Handler(Looper.getMainLooper()).post {
-                applyScan(outcome)
-                liveCrops = emptyList()
+                if (!abandoned.get()) {
+                    applyScan(outcome)
+                    liveCrops = emptyList()
+                } else {
+                    outcome.root?.deleteRecursively()
+                }
                 scanning = false
             }
         }, "openworld-scan").start()
+    }
+
+    /** Closing the app stops a scan that is still running and removes that temporary folder. */
+    fun abandonScan() {
+        abandoned.set(true)
+        Core.stopRunning()
+        discardImport()
+        val root = scanRoot
+        scanRoot = null
+        resultDir = null
+        root?.deleteRecursively()
     }
 
     fun analyze() {
