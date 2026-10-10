@@ -85,7 +85,7 @@ struct CoreClient {
         return "Refusing."
     }
 
-    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool) throws -> ScanReport {
+    func scan(input: URL, bundle: String, longSide: String, coverage: String, posters: URL, frames: URL, facts: PlatformDecoder.Facts, out: URL, phone: Bool, missing: Bool = true, wanted: Bool = true) throws -> ScanReport {
         let data = try run(PhoneArguments.scan(
             catalog: bundles,
             input: input.path,
@@ -96,7 +96,9 @@ struct CoreClient {
             frames: frames.path,
             out: out.path,
             phone: phone,
-            media: facts.media
+            media: facts.media,
+            missing: missing,
+            wanted: wanted
         ))
         return try JSONDecoder().decode(ScanReport.self, from: data)
     }

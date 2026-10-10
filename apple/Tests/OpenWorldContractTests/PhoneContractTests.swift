@@ -170,6 +170,22 @@ final class PhoneContractTests: XCTestCase {
                 "--frames", "/frames",
             ]
         )
+        XCTAssertFalse(args.contains("--no-wanted"))
+        let missingOnly = PhoneArguments.scan(
+            catalog: "/bundles",
+            input: "/in.png",
+            bundle: "fast",
+            longSide: "640",
+            coverage: "measured",
+            posters: "/posters",
+            frames: "/frames",
+            out: "/out",
+            phone: true,
+            media: media,
+            wanted: false
+        )
+        XCTAssertTrue(missingOnly.contains("--no-wanted"))
+        XCTAssertFalse(missingOnly.contains("--no-missing"))
     }
 
     private func scan(_ kind: String, coverage: String = "complete", containerUnix: Int? = nil) throws -> ScanReport {

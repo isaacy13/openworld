@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -117,6 +118,28 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Estimate -> {
                         Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
                         Text(model.estimateText)
+                        Row {
+                            Checkbox(
+                                checked = model.includeMissing,
+                                onCheckedChange = {
+                                    model.includeMissing = it
+                                    model.refreshClassLine()
+                                },
+                                enabled = !model.scanning,
+                            )
+                            Text("Missing", modifier = Modifier.padding(top = 12.dp))
+                        }
+                        Row {
+                            Checkbox(
+                                checked = model.includeWanted,
+                                onCheckedChange = {
+                                    model.includeWanted = it
+                                    model.refreshClassLine()
+                                },
+                                enabled = !model.scanning,
+                            )
+                            Text("Wanted", modifier = Modifier.padding(top = 12.dp))
+                        }
                         Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
                             Text(if (model.scanning) "Scanning" else "Analyze")
                         }

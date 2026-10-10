@@ -252,8 +252,23 @@ class PhoneFlowTest {
         assertFalse(model.estimateText.contains("A computer will finish this sooner."))
         assertFalse(model.estimateText.lineSequence().any { it == "null" })
         assertTrue(model.estimateText.contains("Fast. 640 px on the long side. Every decoded frame."))
+        assertTrue(model.estimateText.contains("Missing and wanted."))
         assertFalse(model.estimateText.contains("Bundle fast"))
         assertFalse(model.estimateText.contains("Coverage complete"))
+        model.includeWanted = false
+        model.refreshClassLine()
+        assertTrue(model.canAnalyze)
+        assertEquals(listOf("--no-wanted"), model.classArgs())
+        assertTrue(model.estimateText.contains("Missing."))
+        model.includeMissing = false
+        model.refreshClassLine()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("Choose missing, wanted, or both."))
+        model.includeMissing = true
+        model.includeWanted = true
+        model.refreshClassLine()
+        assertTrue(model.canAnalyze)
+        assertTrue(model.classArgs().isEmpty())
     }
 
     @Test

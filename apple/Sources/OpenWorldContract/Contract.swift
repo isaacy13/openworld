@@ -61,7 +61,7 @@ public enum PhoneArguments {
         return args
     }
 
-    public static func scan(catalog: String, input: String, bundle: String, longSide: String, coverage: String, posters: String, frames: String, out: String, phone: Bool, media: MediaArguments) -> [String] {
+    public static func scan(catalog: String, input: String, bundle: String, longSide: String, coverage: String, posters: String, frames: String, out: String, phone: Bool, media: MediaArguments, missing: Bool = true, wanted: Bool = true) -> [String] {
         var args = [
             "--json", "--bundles", catalog, "scan",
             "--input", input,
@@ -73,6 +73,8 @@ public enum PhoneArguments {
             "--form-factor", phone ? "phone" : "computer",
             "--provider", "cpu",
         ]
+        if !missing { args.append("--no-missing") }
+        if !wanted { args.append("--no-wanted") }
         args.append(contentsOf: media.arguments(framesDirectory: frames))
         return args
     }

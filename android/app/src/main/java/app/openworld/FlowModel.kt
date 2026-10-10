@@ -48,7 +48,11 @@ class FlowModel {
     var bundleId by mutableStateOf("fast")
     var longSide by mutableStateOf("640")
     var coverage by mutableStateOf("complete")
+    var includeMissing by mutableStateOf(true)
+    var includeWanted by mutableStateOf(true)
     var estimateText by mutableStateOf("")
+    private var estimateOk = false
+    private var estimateBody = ""
     var summary by mutableStateOf("")
     var status by mutableStateOf("")
     var incompleteReason by mutableStateOf("")
@@ -152,6 +156,10 @@ class FlowModel {
         bundleId = "fast"
         longSide = "640"
         coverage = "complete"
+        includeMissing = true
+        includeWanted = true
+        estimateOk = false
+        estimateBody = ""
         estimateText = ""
         summary = ""
         status = ""
@@ -248,10 +256,13 @@ class FlowModel {
                 ) + facts.arguments(null)
             )
             if (json.optString("status") == "refused") {
-                estimateText = json.optString("message", "Refusing.")
+                estimateOk = false
+                estimateBody = json.optString("message", "Refusing.")
+                estimateText = estimateBody
                 canAnalyze = false
             } else {
-                estimateText = listOfNotNull(
+                estimateOk = true
+                estimateBody = listOfNotNull(
                     json.present("human"),
                     json.present("caveat"),
                     json.present("device_note"),
@@ -261,7 +272,7 @@ class FlowModel {
                     if (coverage == "measured") "A brief face can be missed." else null,
                     choiceLine(),
                 ).joinToString("\n")
-                canAnalyze = true
+                refreshClassLine()
             }
         } catch (err: IOException) {
             estimateText = err.message ?: "The scan program is not on this device. Refusing."
@@ -278,10 +289,12 @@ class FlowModel {
         val bundle = bundleId
         val side = longSide
         val cover = coverage
+        val missing = includeMissing
+        val wanted = includeWanted
         val gate = scanGate
         Thread({
             gate?.await(30, TimeUnit.SECONDS)
-            val outcome = computeScan(file, bundle, side, cover)
+            val outcome = computeScan(file, bundle, side, cover, missing, wanted)
             Handler(Looper.getMainLooper()).post {
                 applyScan(outcome)
                 scanning = false
@@ -293,10 +306,29 @@ class FlowModel {
         val file = localCopy ?: return
         if (!canAnalyze) return
         if (!removeResult()) return
-        applyScan(computeScan(file, bundleId, longSide, coverage))
+        applyScan(computeScan(file, bundleId, longSide, coverage, includeMissing, includeWanted))
     }
 
-    private fun computeScan(file: File, bundle: String, side: String, cover: String): ScanOutcome {
+    fun classLine(): String = when {
+        includeMissing && includeWanted -> "Missing and wanted."
+        includeMissing -> "Missing."
+        includeWanted -> "Wanted."
+        else -> "Choose missing, wanted, or both."
+    }
+
+    fun refreshClassLine() {
+        estimateText = if (estimateBody.isEmpty()) classLine() else estimateBody + "\n" + classLine()
+        if (estimateOk) canAnalyze = includeMissing || includeWanted
+    }
+
+    fun classArgs(missing: Boolean = includeMissing, wanted: Boolean = includeWanted): List<String> {
+        val args = mutableListOf<String>()
+        if (!missing) args.add("--no-missing")
+        if (!wanted) args.add("--no-wanted")
+        return args
+    }
+
+    private fun computeScan(file: File, bundle: String, side: String, cover: String, missing: Boolean, wanted: Boolean): ScanOutcome {
         val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
         val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
         if (root == null || !root.mkdirs()) {
@@ -319,7 +351,7 @@ class FlowModel {
                     "--out", out.absolutePath,
                     "--form-factor", "phone",
                     "--provider", "cpu",
-                ) + reel.arguments(reel.directory)
+                ) + classArgs(missing, wanted) + reel.arguments(reel.directory)
             )
             val status = json.optString("status")
             val summary = json.present("summary") ?: when (status) {

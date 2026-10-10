@@ -64,6 +64,9 @@ class OpenWorld(Gtk.Application):
         self.bundle_id = "fast"
         self.long_side = "640"
         self.coverage = "complete"
+        self.include_missing = True
+        self.include_wanted = True
+        self.estimate_ok = False
         self.can_analyze = True
         self.rows: list[dict] = []
         self.out_dir: Path | None = None
@@ -260,8 +263,18 @@ class OpenWorld(Gtk.Application):
         title = Gtk.Label(label="Estimate", xalign=0)
         title.add_css_class("title")
         self.estimate_body = Gtk.Label(xalign=0, wrap=True)
+        self.missing_button = Gtk.CheckButton(label="Missing")
+        self.wanted_button = Gtk.CheckButton(label="Wanted")
+        self.missing_button.set_active(True)
+        self.wanted_button.set_active(True)
+        self.missing_button.connect("toggled", self._on_class)
+        self.wanted_button.connect("toggled", self._on_class)
+        self.class_label = Gtk.Label(label="Missing and wanted.", xalign=0, wrap=True)
         box.append(title)
         box.append(self.estimate_body)
+        box.append(self.missing_button)
+        box.append(self.wanted_button)
+        box.append(self.class_label)
         return box
 
     def _results_page(self) -> Gtk.Widget:
@@ -451,8 +464,11 @@ class OpenWorld(Gtk.Application):
         )
         if payload.get("status") == "refused":
             self.estimate_body.set_text(payload.get("message", "Refusing."))
+            self.estimate_ok = False
             self.can_analyze = False
+            self._apply_class_gate()
             return
+        self.estimate_ok = True
         self.can_analyze = True
         lines = [payload.get("human", ""), payload.get("caveat", "")]
         if payload.get("device_note"):
@@ -467,6 +483,36 @@ class OpenWorld(Gtk.Application):
             lines.append(PHRASES["brief"])
         lines.append(self.choice_line())
         self.estimate_body.set_text("\n".join(line for line in lines if line))
+        self._apply_class_gate()
+
+    def _on_class(self, *_args: object) -> None:
+        self.include_missing = self.missing_button.get_active()
+        self.include_wanted = self.wanted_button.get_active()
+        self._apply_class_gate()
+        if self.stack.get_visible_child_name() == "estimate" and self.scan_thread is None:
+            self.primary.set_sensitive(self.can_analyze)
+
+    def class_line(self) -> str:
+        if self.include_missing and self.include_wanted:
+            return "Missing and wanted."
+        if self.include_missing:
+            return "Missing."
+        if self.include_wanted:
+            return "Wanted."
+        return "Choose missing, wanted, or both."
+
+    def _apply_class_gate(self) -> None:
+        self.class_label.set_text(self.class_line())
+        if self.estimate_ok:
+            self.can_analyze = self.include_missing or self.include_wanted
+
+    def _class_args(self) -> list[str]:
+        args: list[str] = []
+        if not self.include_missing:
+            args.append("--no-missing")
+        if not self.include_wanted:
+            args.append("--no-wanted")
+        return args
 
     def choice_line(self) -> str:
         name = self.bundle_id
@@ -512,10 +558,11 @@ class OpenWorld(Gtk.Application):
             stdout=subprocess.DEVNULL,
         )
         out_dir = self.out_dir
-        self.scan_thread = threading.Thread(target=self._scan_worker, args=(out_dir,), daemon=True)
+        classes = self._class_args()
+        self.scan_thread = threading.Thread(target=self._scan_worker, args=(out_dir, classes), daemon=True)
         self.scan_thread.start()
 
-    def _scan_worker(self, out_dir: Path) -> None:
+    def _scan_worker(self, out_dir: Path, classes: list[str]) -> None:
         proc = subprocess.Popen(
             [
                 self.bin,
@@ -535,6 +582,7 @@ class OpenWorld(Gtk.Application):
                 str(self.posters),
                 "--out",
                 str(out_dir),
+                *classes,
                 "--form-factor",
                 "computer",
                 "--provider",
@@ -830,6 +878,12 @@ class OpenWorld(Gtk.Application):
         self.warn_label.set_text("")
         self.coverage = "complete"
         self.complete_button.set_active(True)
+        self.include_missing = True
+        self.include_wanted = True
+        self.missing_button.set_active(True)
+        self.wanted_button.set_active(True)
+        self.estimate_ok = False
+        self.class_label.set_text("Missing and wanted.")
         self.long_side = "640"
         self.size_buttons["640"].set_active(True)
         self.bundle_id = "fast"
@@ -1057,6 +1111,22 @@ class OpenWorld(Gtk.Application):
             return False
         if "Fast. 640 px on the long side. Every decoded frame." not in text or "Bundle fast" in text or "Coverage complete" in text:
             self._exercise_fail(f"estimate did not repeat the choice in plain words: {text}")
+            return False
+        if self.class_label.get_text() != "Missing and wanted." or self._class_args():
+            self._exercise_fail(f"classes did not start on: {self.class_label.get_text()!r} {self._class_args()}")
+            return False
+        self.wanted_button.set_active(False)
+        if self.class_label.get_text() != "Missing." or self._class_args() != ["--no-wanted"] or not self.primary.get_sensitive():
+            self._exercise_fail(f"wanted off did not leave missing: {self.class_label.get_text()!r} {self._class_args()}")
+            return False
+        self.missing_button.set_active(False)
+        if self.primary.get_sensitive() or self.class_label.get_text() != "Choose missing, wanted, or both.":
+            self._exercise_fail(f"both classes off still offered Analyze: {self.class_label.get_text()!r}")
+            return False
+        self.missing_button.set_active(True)
+        self.wanted_button.set_active(True)
+        if not self.primary.get_sensitive() or self.class_label.get_text() != "Missing and wanted." or self._class_args():
+            self._exercise_fail("restoring both classes left Analyze off")
             return False
         self.result_note.set_text(PHRASES["clearance"])
         self.reason.set_text("The file was not fully decoded.")

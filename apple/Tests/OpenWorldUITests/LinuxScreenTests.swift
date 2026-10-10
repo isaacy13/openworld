@@ -150,6 +150,21 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testWantedOffLeavesThatClassOutAndBothOffKeepsAnalyzeOff() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene", wanted: false)
+            XCTAssertEqual(model.classArguments(), ["--no-wanted"])
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClass == "missing" } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "face" } == true)
+            XCTAssertFalse(model.report?.candidates.contains { $0.kind == "plate" } == true)
+            model.includeMissing = false
+            model.applyClassGate()
+            XCTAssertEqual(model.classLine, "Choose missing, wanted, or both.")
+            XCTAssertFalse(model.canAnalyze)
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testBlankMeasuredOldFileIsAClearanceWithTheWarning() throws {
         try MainActor.assumeIsolated {
             let file = try self.still("blank")
@@ -566,12 +581,13 @@ final class OpenWorldUITests: XCTestCase {
     }
 
     @MainActor
-    private func scan(_ kind: String, coverage: String = "complete") throws -> FlowModel {
+    private func scan(_ kind: String, coverage: String = "complete", wanted: Bool = true) throws -> FlowModel {
         let model = FlowModel(phone: true)
         model.choose(try still(kind))
         model.loadBundles()
         model.longSide = "640"
         model.coverage = coverage
+        model.includeWanted = wanted
         model.loadEstimate()
         XCTAssertNotNil(model.estimate)
         model.analyze()

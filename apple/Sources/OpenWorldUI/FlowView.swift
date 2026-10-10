@@ -48,6 +48,8 @@ public final class FlowModel: ObservableObject {
     @Published public var bundleID = "fast"
     @Published public var longSide = "640"
     @Published public var coverage = "complete"
+    @Published public var includeMissing = true
+    @Published public var includeWanted = true
     @Published public var estimate: Estimate?
     @Published public var report: ScanReport?
     @Published public var resultDirectory: URL?
@@ -108,7 +110,7 @@ public final class FlowModel: ObservableObject {
         do {
             estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
             error = nil
-            canAnalyze = true
+            canAnalyze = includeMissing || includeWanted
         } catch {
             estimate = nil
             canAnalyze = false
@@ -123,6 +125,29 @@ public final class FlowModel: ObservableObject {
         let size = longSide == "full" ? "Full resolution" : "\(longSide) px on the long side"
         let cover = coverage == "measured" ? "5 frames a second, plus the tracker." : "Every decoded frame."
         return "\(name). \(size). \(cover)"
+    }
+
+    /// Missing and wanted start on. Analyze stays off when both are off.
+    public var classLine: String {
+        switch (includeMissing, includeWanted) {
+        case (true, true): return "Missing and wanted."
+        case (true, false): return "Missing."
+        case (false, true): return "Wanted."
+        default: return "Choose missing, wanted, or both."
+        }
+    }
+
+    public func applyClassGate() {
+        if estimate != nil {
+            canAnalyze = includeMissing || includeWanted
+        }
+    }
+
+    public func classArguments() -> [String] {
+        var args: [String] = []
+        if !includeMissing { args.append("--no-missing") }
+        if !includeWanted { args.append("--no-wanted") }
+        return args
     }
 
     /// The measured banner belongs on an estimate that can run.
@@ -170,6 +195,8 @@ public final class FlowModel: ObservableObject {
         coverage = "complete"
         longSide = "640"
         bundleID = "fast"
+        includeMissing = true
+        includeWanted = true
         step = .choose
     }
 
@@ -177,7 +204,7 @@ public final class FlowModel: ObservableObject {
         guard canAnalyze, let file else { return }
         guard removeResult() else { return }
         let paths = makeScanPaths()
-        apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, paths: paths))
+        apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, missing: includeMissing, wanted: includeWanted, paths: paths))
     }
 
     /// Leaves the estimate page in place and says Scanning until the result is ready.
@@ -191,6 +218,8 @@ public final class FlowModel: ObservableObject {
         let longSide = longSide
         let coverage = coverage
         let phone = phone
+        let missing = includeMissing
+        let wanted = includeWanted
         Task.detached {
             let outcome = Self.finishedScan(
                 core: core,
@@ -199,6 +228,8 @@ public final class FlowModel: ObservableObject {
                 longSide: longSide,
                 coverage: coverage,
                 phone: phone,
+                missing: missing,
+                wanted: wanted,
                 paths: paths
             )
             await MainActor.run {
@@ -244,6 +275,8 @@ public final class FlowModel: ObservableObject {
         longSide: String,
         coverage: String,
         phone: Bool,
+        missing: Bool,
+        wanted: Bool,
         paths: ScanPaths
     ) -> FinishedScan {
         do {
@@ -259,7 +292,9 @@ public final class FlowModel: ObservableObject {
                 frames: reel.directory ?? paths.frames,
                 facts: reel,
                 out: paths.result,
-                phone: phone
+                phone: phone,
+                missing: missing,
+                wanted: wanted
             )
             return FinishedScan(report: report, error: nil, keepRoot: true, root: paths.root, result: paths.result)
         } catch {
@@ -469,6 +504,15 @@ public struct FlowView: View {
                 Text(model.choiceLine)
                 if model.showBriefOnEstimate {
                     Text(Copy.brief)
+                }
+                Text(model.classLine)
+                classToggle(on: model.includeMissing, title: "Missing") {
+                    model.includeMissing.toggle()
+                    model.applyClassGate()
+                }
+                classToggle(on: model.includeWanted, title: "Wanted") {
+                    model.includeWanted.toggle()
+                    model.applyClassGate()
                 }
             } else if let error = model.error {
                 Text(error)
@@ -699,6 +743,13 @@ public struct FlowView: View {
     #endif
 
     @ViewBuilder
+    private func classToggle(on: Bool, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(on ? "\(title). Selected." : "\(title).")
+        }
+        .disabled(model.scanning)
+    }
+
     private var backControl: some View {
         Button(action: { model.goBack() }) { Text("Back") }
             .disabled(!model.backEnabled)
