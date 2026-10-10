@@ -1000,6 +1000,63 @@ fn a_poster_update_prints_the_refusal() {
     assert!(err.is_empty(), "{err}");
 }
 
+#[test]
+fn a_demo_file_refuses_before_it_scans() {
+    let dir = tempfile::tempdir().unwrap();
+    let blocked = dir.path().join("demo-file");
+    fs::write(&blocked, b"keep").unwrap();
+    let created = "The output directory could not be created. Refusing.";
+
+    let (code, text, err) = run(false, &["demo", "--out", blocked.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(created), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+
+    let nested = blocked.join("demo");
+    let (code, text, err) = run(false, &["demo", "--out", nested.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(created), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+    assert!(!nested.exists());
+
+    let (code, text, err) = run(true, &["demo", "--out", blocked.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "unreadable");
+    assert_eq!(doc["summary"], created);
+    assert_eq!(doc["message"], created);
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+
+    let out = dir.path().join("demo-dir");
+    fs::create_dir(&out).unwrap();
+    let posters = out.join("posters");
+    fs::write(&posters, b"keep-pack").unwrap();
+    let pack = "The poster pack could not be read. Refusing.";
+    let (code, text, err) = run(false, &["demo", "--out", out.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(pack), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(!text.contains("No candidate is not a clearance."), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(fs::read(&posters).unwrap(), b"keep-pack");
+
+    let (code, text, err) = run(true, &["demo", "--out", out.to_str().unwrap()]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "bad_hash");
+    assert_eq!(doc["summary"], pack);
+    assert_eq!(doc["message"], pack);
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(fs::read(&posters).unwrap(), b"keep-pack");
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {

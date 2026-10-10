@@ -960,9 +960,31 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
         Ok(bundle) => bundle,
         Err(report) => return finish_report(json_mode, &report),
     };
-    std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
+    if let Some(message) = openworld_core::scan::output_creation_blocked(out) {
+        return finish_report(json_mode, &openworld_core::scan::refused("unreadable", message));
+    }
+    if std::fs::create_dir_all(out).is_err() {
+        return finish_report(
+            json_mode,
+            &openworld_core::scan::refused(
+                "unreadable",
+                "The output directory could not be created. Refusing.",
+            ),
+        );
+    }
     let posters = out.join("posters");
-    let pack = write_fixture_pack(&posters, SystemTime::now()).map_err(|e| e.to_string())?;
+    let pack = match write_fixture_pack(&posters, SystemTime::now()) {
+        Ok(pack) => pack,
+        Err(err) => {
+            let code = match &err {
+                openworld_core::posters::PackError::Missing => "missing_pack",
+                openworld_core::posters::PackError::BadHash
+                | openworld_core::posters::PackError::Unreadable => "bad_hash",
+                openworld_core::posters::PackError::Expired => "expired_pack",
+            };
+            return finish_report(json_mode, &openworld_core::scan::refused(code, err.refusal()));
+        }
+    };
     let scene = demo_scene(fast.threshold);
     let input = out.join("input.png");
     scene.image.save(&input).map_err(|e| e.to_string())?;
