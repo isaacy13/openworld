@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 
 enum class Step { Choose, Device, Bundle, Size, Estimate, Results }
 
-private class ScanOutcome(
+internal class ScanOutcome(
     val earlyReturn: Boolean = false,
     val estimateText: String? = null,
     val canAnalyze: Boolean? = null,
@@ -347,7 +347,11 @@ class FlowModel {
         val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
         val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
         if (root == null || !root.mkdirs()) {
-            return ScanOutcome(earlyReturn = true, estimateText = "The output directory could not be created.", canAnalyze = false)
+            return ScanOutcome(
+                earlyReturn = true,
+                estimateText = "The output directory could not be created. Refusing.",
+                canAnalyze = false,
+            )
         }
         return try {
             val posters = File(root, "openworld-posters")
@@ -433,22 +437,17 @@ class FlowModel {
             )
         } catch (err: IOException) {
             root.deleteRecursively()
-            val message = err.message ?: "Incomplete."
-            val status = if (message.contains("Refusing")) "refused" else "incomplete"
-            val summary = if (message.contains("Refusing")) message else "Incomplete."
-            ScanOutcome(
-                status = status,
-                summary = summary,
-                incompleteReason = if (status == "incomplete" && message != summary) message else "",
-                detail = if (status == "incomplete" && message != summary) "" else message,
-            )
+            decodeFailure(err.message)
         }
     }
 
     private fun applyScan(outcome: ScanOutcome) {
         if (outcome.earlyReturn) {
-            estimateText = outcome.estimateText ?: estimateText
-            outcome.canAnalyze?.let { canAnalyze = it }
+            val message = outcome.estimateText ?: "The output directory could not be created. Refusing."
+            estimateOk = false
+            estimateBody = message
+            estimateText = message
+            canAnalyze = false
             return
         }
         scanRoot = outcome.root
@@ -465,6 +464,18 @@ class FlowModel {
         leaveNotice = null
         deleteNotice = null
         step = Step.Results
+    }
+
+    internal fun decodeFailure(message: String?): ScanOutcome {
+        val text = message?.takeIf { it.isNotBlank() } ?: "Incomplete."
+        val status = if (text.contains("Refusing")) "refused" else "incomplete"
+        val summary = if (status == "refused") text else "Incomplete."
+        return ScanOutcome(
+            status = status,
+            summary = summary,
+            incompleteReason = if (status == "incomplete" && text != summary) text else "",
+            detail = "",
+        )
     }
 
     private fun discardImport() {

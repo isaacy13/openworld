@@ -1052,6 +1052,56 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aMissingOutputDirectoryRefusesTheEstimate() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/no-output.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        assertTrue(model.estimateOk)
+        val blocker = File.createTempFile("ow-not-a-dir", "")
+        val previous = System.getProperty("java.io.tmpdir")
+        System.setProperty("java.io.tmpdir", blocker.absolutePath)
+        try {
+            model.analyze()
+        } finally {
+            if (previous != null) System.setProperty("java.io.tmpdir", previous)
+            blocker.delete()
+        }
+        assertEquals(Step.Estimate, model.step)
+        assertFalse(model.estimateOk)
+        assertFalse(model.canAnalyze)
+        assertEquals("The output directory could not be created. Refusing.", model.estimateText)
+        model.refreshClassLine()
+        assertEquals("The output directory could not be created. Refusing.", model.estimateText)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("The output directory could not be created. Refusing.").assertExists()
+        compose.onAllNodesWithText("Analyze").assertCountEquals(0)
+        compose.onAllNodesWithText("Missing").assertCountEquals(0)
+        compose.onAllNodesWithText("Wanted").assertCountEquals(0)
+    }
+
+    @Test
+    fun aDecodeFailureDoesNotRepeatTheRefusal() {
+        val model = FlowModel()
+        val outcome = model.decodeFailure("Bad codec or unreadable file. Refusing.")
+        model.step = Step.Results
+        model.summary = outcome.summary
+        model.status = outcome.status
+        model.detail = outcome.detail
+        model.incompleteReason = outcome.incompleteReason
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onAllNodesWithText("Bad codec or unreadable file. Refusing.").assertCountEquals(1)
+        compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        val stopped = model.decodeFailure("The file was not fully decoded.")
+        assertEquals("Incomplete.", stopped.summary)
+        assertEquals("The file was not fully decoded.", stopped.incompleteReason)
+        assertEquals("", stopped.detail)
+    }
+
+    @Test
     fun deleteRemovesTheResultFromTheScreen() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/delete.png")
