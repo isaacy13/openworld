@@ -983,7 +983,7 @@ fn estimate_lines(
     wanted: bool,
     old_file: bool,
 ) -> Vec<String> {
-    let mut lines = Vec::new();
+    let mut lines = vec!["Estimate".to_string()];
     if old_file {
         lines.push(openworld_core::copy::OLD_FILE.to_string());
     }
@@ -1690,9 +1690,10 @@ mod cli_tests {
             true,
             false,
         );
-        assert_eq!(lines[0], measured.human);
+        assert_eq!(lines[0], "Estimate");
+        assert_eq!(lines[1], measured.human);
         assert_eq!(
-            lines[1],
+            lines[2],
             "This is a planning estimate, not a thermal measurement."
         );
         let choice = lines
@@ -1729,8 +1730,9 @@ mod cli_tests {
             true,
             true,
         );
-        assert_eq!(aged[0], "This file is older than about 30 days.");
-        assert_eq!(aged[1], measured.human);
+        assert_eq!(aged[0], "Estimate");
+        assert_eq!(aged[1], "This file is older than about 30 days.");
+        assert_eq!(aged[2], measured.human);
         assert!(aged
             .iter()
             .all(|line| line != "The file timestamps disagree."));

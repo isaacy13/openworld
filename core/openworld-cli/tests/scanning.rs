@@ -129,15 +129,16 @@ fn an_old_file_is_warned_before_the_estimate() {
     let (code, text, err) = run(false, &["estimate", "--input", still.to_str().unwrap()]);
     assert_eq!(code, Some(0), "{err}");
     let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines.first(), Some(&"Estimate"));
     assert_eq!(
-        lines.first(),
+        lines.get(1),
         Some(&"This file is older than about 30 days.")
     );
     let caveat = lines
         .iter()
         .position(|line| *line == "This is a planning estimate, not a thermal measurement.")
         .expect("caveat");
-    assert!(caveat > 0);
+    assert!(caveat > 1);
     assert!(lines
         .iter()
         .all(|line| *line != "The file timestamps disagree."));
