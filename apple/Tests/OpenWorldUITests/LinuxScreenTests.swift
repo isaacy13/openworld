@@ -15,6 +15,16 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testASharedNameKeepsCharactersThatSplitAQuery() throws {
+        let name = "a&b=c+d?#.png"
+        let url = try XCTUnwrap(SharedImport.url(fileName: name))
+        XCTAssertEqual(SharedImport.fileName(from: url), name)
+        XCTAssertEqual(SharedImport.fileName(from: URL(string: "https://example.com/?name=a&b.png")!), nil)
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "a b.png"))), "a b.png")
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "100%.png"))), "100%.png")
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "plain.png"))), "plain.png")
+    }
+
     func testALongFileNameBreaksBetweenCharacters() {
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)

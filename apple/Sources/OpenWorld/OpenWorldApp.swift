@@ -84,12 +84,7 @@ struct MacRoot: View {
 
 @MainActor
 private func importShared(_ url: URL, model: FlowModel) {
-    guard url.scheme == "openworld" else { return }
-    let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-        .queryItems?
-        .first { $0.name == "name" }?
-        .value
-    guard let name,
+    guard let name = SharedImport.fileName(from: url),
           let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.openworld")
     else { return }
     model.choose(container.appendingPathComponent(name))

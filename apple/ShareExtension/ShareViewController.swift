@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import OpenWorldUI
 import UIKit
 import UniformTypeIdentifiers
 
@@ -33,8 +34,7 @@ final class ShareViewController: UIViewController {
                 if let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
                     try? FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: dest.path)
                 }
-                let open = URL(string: "openworld://import?name=\(dest.lastPathComponent.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
-                if let open {
+                if let open = SharedImport.url(fileName: dest.lastPathComponent) {
                     self.extensionContext?.open(open) { _ in self.finish() }
                     return
                 }
