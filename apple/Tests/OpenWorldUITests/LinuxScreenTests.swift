@@ -89,6 +89,25 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(order, ["claim", "open"])
     }
 
+    func testACropThatArrivesAsTheWindowClosesStaysOffThePage() {
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.appendLiveCrop(
+                label: "Possible candidate. Not an identification.",
+                frameLabel: "Frame 1.",
+                path: "/tmp/open.png"
+            )
+            XCTAssertEqual(model.liveCrops.map(\.path), ["/tmp/open.png"])
+            model.closeWindow()
+            model.appendLiveCrop(
+                label: "Possible candidate. Not an identification.",
+                frameLabel: "Frame 2.",
+                path: "/tmp/late.png"
+            )
+            XCTAssertEqual(model.liveCrops.map(\.path), ["/tmp/open.png"])
+        }
+    }
+
     func testAFileChosenAsTheWindowClosesStaysOffThePage() throws {
         let first = try still("blank")
         let second = try still("blank")

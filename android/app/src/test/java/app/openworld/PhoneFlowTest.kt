@@ -164,6 +164,38 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aCropThatArrivesAsThePhoneClosesStaysOffThePage() {
+        val model = FlowModel()
+        val crop = File.createTempFile("openworld-crop", ".png")
+        crop.writeBytes(byteArrayOf(1))
+        val out = crop.parentFile!!
+        fun arrive(frame: String) {
+            val payload = """{"kind":"face","label":"Possible candidate. Not an identification.","crop":"${crop.name}","frame_label":"$frame"}"""
+            val thread = Thread {
+                val method = FlowModel::class.java.getDeclaredMethod(
+                    "noteProgress",
+                    String::class.java,
+                    File::class.java,
+                    java.util.concurrent.CountDownLatch::class.java,
+                    java.util.concurrent.CountDownLatch::class.java,
+                )
+                method.isAccessible = true
+                method.invoke(model, payload, out, null, null)
+            }
+            thread.start()
+            thread.join(5000)
+            assertFalse(thread.isAlive)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        }
+        arrive("Frame 1.")
+        assertEquals(listOf("Frame 1."), model.liveCrops.map { it.frameLabel })
+        model.abandonScan()
+        arrive("Frame 2.")
+        assertEquals(listOf("Frame 1."), model.liveCrops.map { it.frameLabel })
+        crop.delete()
+    }
+
+    @Test
     fun aFileChosenAsThePhoneClosesStaysOffThePage() {
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
         val first = still("blank")

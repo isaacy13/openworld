@@ -570,7 +570,9 @@ class FlowModel : ViewModel() {
         val frameLabel = event.optString("frame_label").ifBlank { "Frame" }
         val first = progressOnce.compareAndSet(false, true)
         Handler(Looper.getMainLooper()).post {
-            liveCrops = liveCrops + LiveCrop(label, absolute, frameLabel)
+            if (!abandoned.get()) {
+                liveCrops = liveCrops + LiveCrop(label, absolute, frameLabel)
+            }
             if (first) seen?.countDown()
         }
         if (first) hold?.await(30, TimeUnit.SECONDS)

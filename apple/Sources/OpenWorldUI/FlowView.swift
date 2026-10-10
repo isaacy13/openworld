@@ -519,6 +519,7 @@ public final class FlowModel: ObservableObject {
     }
 
     func appendLiveCrop(label: String, frameLabel: String, path: String) {
+        guard !closed else { return }
         liveCrops.append(LiveCrop(id: liveCrops.count, label: label, frameLabel: frameLabel, path: path))
     }
 
