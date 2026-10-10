@@ -2,7 +2,7 @@
 import Foundation
 import OpenWorldContract
 
-/// The words the Linux phone preview prints, in the same order as the phone column.
+/// The words on each phone page, in column order.
 /// Every line is kept. A short list used to drop the size rules and Analyze.
 @MainActor
 public enum PhonePreview {
@@ -160,7 +160,7 @@ public enum PhonePreview {
         return lines
     }
 
-    /// Wrapped the way the terminal preview prints a phone column. Nothing is dropped.
+    /// The column broken to a width. Nothing is dropped.
     public static func wrapped(screen: String, model: FlowModel, width: Int = 34) -> [String] {
         lines(screen: screen, model: model).flatMap { wrap($0, width: width) }
     }

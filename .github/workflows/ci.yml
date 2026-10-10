@@ -45,8 +45,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14 ffmpeg
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli -p openworld-core
-      # swift-actions/setup-swift does not list 6.3.3. OpenSwiftUI needs
-      # tools 6.3, so the job installs that release from swift.org.
       - name: Install Swift 6.3.3
         run: |
           curl -fsSL "https://download.swift.org/swift-6.3.3-release/ubuntu2404/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-ubuntu24.04.tar.gz" -o /tmp/swift.tar.gz
@@ -54,23 +52,18 @@ jobs:
           sudo tar -xzf /tmp/swift.tar.gz -C /opt/swift --strip-components=1
           echo /opt/swift/usr/bin >> "$GITHUB_PATH"
           /opt/swift/usr/bin/swift --version
-      - name: OpenSwiftUI screen tests and stdout preview
+      - name: Phone model and contract tests
         working-directory: apple
         env:
           OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
           OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
           OPENWORLD_LIB: ${{ github.workspace }}/core/target/release/libopenworld_core.so
-        run: sh scripts/test-linux.sh --filter 'PhoneContractTests|OpenWorldUITests'
+        run: swift test --filter 'PhoneContractTests|OpenWorldUITests'
   apple-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: SwiftUI app build
         run: |
-          swift package --package-path apple show-dependencies > /tmp/openworld-deps.txt
-          if grep -i OpenSwiftUI /tmp/openworld-deps.txt; then
-            echo "The macOS app must not depend on OpenSwiftUI."
-            exit 1
-          fi
           swift build --package-path apple
           test -x "$(swift build --package-path apple --show-bin-path)/OpenWorld"

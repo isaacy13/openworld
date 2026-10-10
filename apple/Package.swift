@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import PackageDescription
 
-// The iPhone and Mac app imports SwiftUI. That executable exists only when this
-// package is built on macOS. Linux CI compiles the same screens against
-// OpenSwiftUI. The Linux program OpenWorldScreens is that test renderer, not the app.
+// The iPhone and Mac app imports SwiftUI. That executable is built on macOS.
+// Linux CI compiles the phone model and its tests. It does not build the app.
 let contract = Target.target(name: "OpenWorldContract", path: "Sources/OpenWorldContract")
 let contractTests = Target.testTarget(
     name: "OpenWorldContractTests",
@@ -15,40 +14,18 @@ let contractTests = Target.testTarget(
 #if os(Linux)
 let package = Package(
     name: "OpenWorld",
-    dependencies: [
-        .package(
-            url: "https://github.com/OpenSwiftUIProject/OpenSwiftUI.git",
-            revision: "aefa4e6edc9c37a992a0cf9c6cf317fb670ed305"
-        ),
-    ],
     targets: [
         contract,
         contractTests,
         .target(
             name: "OpenWorldUI",
-            dependencies: [
-                "OpenWorldContract",
-                .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
-            ],
+            dependencies: ["OpenWorldContract"],
             path: "Sources/OpenWorldUI"
         ),
         .testTarget(
             name: "OpenWorldUITests",
-            dependencies: [
-                "OpenWorldUI",
-                "OpenWorldContract",
-                .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
-            ],
+            dependencies: ["OpenWorldUI", "OpenWorldContract"],
             path: "Tests/OpenWorldUITests"
-        ),
-        .executableTarget(
-            name: "OpenWorldScreens",
-            dependencies: [
-                "OpenWorldUI",
-                "OpenWorldContract",
-                .product(name: "OpenSwiftUI", package: "OpenSwiftUI"),
-            ],
-            path: "Sources/OpenWorldScreens"
         ),
     ]
 )

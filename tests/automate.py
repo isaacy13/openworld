@@ -103,7 +103,7 @@ def main() -> None:
         apple_env = {"OPENWORLD_BIN": str(bin_path), "OPENWORLD_BUNDLES": str(ROOT / "bundles")}
         if sys.platform.startswith("linux"):
             run(
-                ["sh", str(ROOT / "apple/scripts/test-linux.sh"), "--filter", "PhoneContractTests|OpenWorldUITests"],
+                ["swift", "test", "--filter", "PhoneContractTests|OpenWorldUITests"],
                 cwd=ROOT / "apple",
                 env=apple_env,
             )

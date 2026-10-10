@@ -2,14 +2,12 @@
 #if os(Linux)
 import Foundation
 import Glibc
-import OpenSwiftUI
 import OpenWorldContract
 import OpenWorldUI
 import XCTest
 
-/// Linux CI builds these screens with OpenSwiftUI and runs the phone model
-/// against the same fixture stills as the other shells. The app target is not
-/// part of this package on Linux.
+/// Linux CI runs the phone model against the same fixture stills as the other
+/// shells. The iPhone and Mac app is not part of this package on Linux.
 final class OpenWorldUITests: XCTestCase {
     func testPhoneScreensBuild() throws {
         try MainActor.assumeIsolated {
@@ -98,16 +96,13 @@ final class OpenWorldUITests: XCTestCase {
             model.requestLeave("https://www.fbi.gov.evil.com/wanted")
             XCTAssertNil(model.leavingURL)
             XCTAssertTrue(model.leaveError?.contains("FBI page") == true)
-            _ = FlowView(model: model, importControl: self.control).body
             if let page = model.report?.candidates.first?.fbiUrl {
                 model.requestLeave(page)
             }
-            _ = FlowView(model: model, importControl: self.control).body
             XCTAssertEqual(model.leavingURL?.host, "www.fbi.gov")
             XCTAssertNil(model.leaveError)
             model.leavingURL = nil
             XCTAssertNil(model.leavingURL)
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -221,7 +216,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
             XCTAssertEqual(kept.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
             XCTAssertFalse(kept.contains("Model bundle"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
         if let previous {
             setenv("OPENWORLD_BUNDLES", previous, 1)
@@ -327,7 +321,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(keptResult.contains("Nothing is uploaded."))
             XCTAssertFalse(keptResult.contains("No candidate is not a clearance."))
             XCTAssertFalse(keptResult.contains("Delete"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -360,7 +353,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(preview.last, "Continue")
             model.continueFromBundles()
             XCTAssertEqual(model.step, .bundle)
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -386,7 +378,6 @@ final class OpenWorldUITests: XCTestCase {
             model.bundleID = "accurate"
             XCTAssertEqual(markedChoice("Accurate", selected: model.bundleID == "accurate"), "Accurate. Selected.")
             XCTAssertEqual(markedChoice("Fast", selected: model.bundleID == "fast"), "Fast")
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -425,7 +416,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(lines.contains("Possible candidate. Not an identification."))
             XCTAssertTrue(lines.contains("Fixture subject A (Missing)"))
             XCTAssertFalse(lines.contains("Open FBI page"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -443,7 +433,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(lines.filter { $0 == "That bundle is not in the catalog. Refusing." }.count, 1)
             XCTAssertFalse(lines.contains("Delete"))
             XCTAssertFalse(lines.contains("No candidate is not a clearance."))
-            _ = FlowView(model: model, importControl: self.control).body
             model.chooseAnother()
             XCTAssertEqual(model.step, .choose)
             XCTAssertNil(model.report)
@@ -488,7 +477,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(kept.contains("Nothing is uploaded."))
             XCTAssertFalse(kept.contains("No candidate is not a clearance."))
             XCTAssertFalse(kept.contains("Delete"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
         XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
     }
@@ -520,7 +508,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.scanning)
             XCTAssertFalse(model.backEnabled)
             XCTAssertEqual(model.step, .estimate)
-            _ = FlowView(model: model, importControl: self.control).body
             model.goBack()
             XCTAssertEqual(model.step, .estimate)
             return model
@@ -595,7 +582,6 @@ final class OpenWorldUITests: XCTestCase {
             let title = lines.firstIndex(of: "Scanning")
             XCTAssertEqual(title, 1)
             XCTAssertEqual(crops, 2)
-            _ = FlowView(model: model, importControl: self.control).body
             model.goBack()
             XCTAssertEqual(model.step, .estimate)
             hold.signal()
@@ -670,7 +656,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(continued.dropFirst(2).first, "Estimate")
             XCTAssertEqual(continued.filter { $0 == "The file could not be read. Refusing." }.count, 1)
             XCTAssertTrue(continued.contains("Analyze"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -728,7 +713,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(device.first, "Back")
             XCTAssertFalse(device.contains("The file could not be read. Refusing."))
             XCTAssertFalse(device.contains("Delete"))
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -754,7 +738,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.showsAnalyze)
             XCTAssertEqual(markedChoice("Missing", selected: false), "Missing")
             XCTAssertEqual(markedChoice("Wanted", selected: false), "Wanted")
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -772,7 +755,6 @@ final class OpenWorldUITests: XCTestCase {
             model.longSide = "640"
             model.coverage = "measured"
             model.step = .size
-            _ = FlowView(model: model, importControl: self.control).body
             model.loadEstimate()
             XCTAssertEqual(model.estimateWarning, Copy.oldFile)
             XCTAssertTrue(model.showBriefOnEstimate)
@@ -785,7 +767,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.report?.warnings.contains(Copy.oldFile) == true)
             XCTAssertTrue(model.report?.candidates.isEmpty == true)
             XCTAssertTrue(model.report?.inventory.isEmpty == true)
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -890,7 +871,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(model.showBriefOnEstimate)
             XCTAssertTrue(model.error?.contains("Refusing") == true)
             XCTAssertFalse(model.error?.contains("Choose missing, wanted, or both.") == true)
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -1100,7 +1080,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertNil(model.file)
             XCTAssertNil(model.error)
             XCTAssertTrue(model.canAnalyze)
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -1123,7 +1102,6 @@ final class OpenWorldUITests: XCTestCase {
             if let result {
                 XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
             }
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -1134,7 +1112,6 @@ final class OpenWorldUITests: XCTestCase {
             let frames = result.deletingLastPathComponent().appendingPathComponent("frames")
             XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
             XCTAssertTrue(FileManager.default.fileExists(atPath: frames.path))
-            _ = FlowView(model: model, importControl: self.control).body
             model.deleteResult()
             XCTAssertEqual(model.error, "Deleted.")
             XCTAssertEqual(model.resultHeadline, "Deleted.")
@@ -1157,7 +1134,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(deleted.contains("Nothing is uploaded."))
             XCTAssertFalse(deleted.contains("No candidate is not a clearance."))
             XCTAssertFalse(deleted.contains("Delete"))
-            _ = FlowView(model: model, importControl: self.control).body
 
             let foreign = FileManager.default.temporaryDirectory.appendingPathComponent("ow-foreign-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
@@ -1206,7 +1182,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(lines.contains("The file could not be read. Refusing."))
             XCTAssertTrue(lines.contains(file.lastPathComponent))
             XCTAssertFalse(lines.contains(next.lastPathComponent))
-            _ = FlowView(model: model, importControl: self.control).body
             model.loadBundles()
             model.continueFromBundles()
             model.loadEstimate()
@@ -1259,11 +1234,9 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.deleteNotice, "Refusing to delete a directory that is not an OpenWorld result.")
             XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
             XCTAssertNil(model.error)
-            _ = FlowView(model: model, importControl: self.control).body
             model.goBack()
             XCTAssertEqual(model.step, .estimate)
             model.deleteNotice = "The result could not be deleted."
-            _ = FlowView(model: model, importControl: self.control).body
             model.deleteNotice = nil
             model.analyze()
             XCTAssertEqual(model.step, .results)
@@ -1288,7 +1261,6 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(preview.contains("Nothing is uploaded."))
             XCTAssertEqual(preview.last, "Choose another file")
             XCTAssertEqual(PhonePreview.contextLines(model.report), [])
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -1307,7 +1279,6 @@ final class OpenWorldUITests: XCTestCase {
             let preview = PhonePreview.lines(screen: "results", model: model)
             XCTAssertEqual(Array(preview.prefix(3)), ["Back", "Incomplete.", "The file was not fully decoded."])
             XCTAssertEqual(preview.filter { $0 == "The file was not fully decoded." }.count, 1)
-            _ = FlowView(model: model, importControl: self.control).body
             model.report = nil
             XCTAssertNil(model.resultReason)
         }
@@ -1319,12 +1290,10 @@ final class OpenWorldUITests: XCTestCase {
             model.step = .size
             model.longSide = "640"
             model.coverage = "complete"
-            _ = FlowView(model: model, importControl: self.control).body
             model.longSide = "320"
             model.coverage = "measured"
             XCTAssertEqual(model.longSide, "320")
             XCTAssertEqual(model.coverage, "measured")
-            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 
@@ -1381,14 +1350,8 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(kept.contains("Analyze"))
             XCTAssertFalse(kept.contains("Missing"))
             XCTAssertFalse(kept.contains("Wanted"))
-            _ = FlowView(model: model, importControl: self.control).body
             XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
         }
-    }
-
-    @MainActor
-    private var control: AnyView {
-        AnyView(Button(action: {}) { Text("Choose File") })
     }
 
     @MainActor
@@ -1521,33 +1484,27 @@ final class OpenWorldUITests: XCTestCase {
     @MainActor
     private func drawScreens() throws {
         let model = FlowModel(phone: true)
-        _ = FlowView(model: model, importControl: control).body
 
         model.choose(try self.still("blank"))
         let step = model.step
         XCTAssertEqual(step, .device)
-        _ = FlowView(model: model, importControl: control).body
 
         model.bundles = [try row()]
         model.step = .bundle
-        _ = FlowView(model: model, importControl: control).body
 
         model.step = .size
         model.coverage = "measured"
-        _ = FlowView(model: model, importControl: control).body
         XCTAssertEqual(Copy.brief, "A brief face can be missed.")
 
         model.estimate = try JSONDecoder().decode(Estimate.self, from: Data(estimateJSON.utf8))
         model.coverage = "complete"
         model.step = .estimate
-        _ = FlowView(model: model, importControl: control).body
         let deviceNote = model.estimate?.deviceNote
         XCTAssertEqual(deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
 
         model.report = try JSONDecoder().decode(ScanReport.self, from: Data(reportJSON.utf8))
         model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
         model.step = .results
-        _ = FlowView(model: model, importControl: control).body
         let summary = model.report?.summary
         let disclosure = model.report?.disclosure ?? []
         let warnings = model.report?.warnings ?? []

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-#if os(Linux)
-import OpenSwiftUI
-#else
+#if canImport(SwiftUI)
 import SwiftUI
 #endif
 import OpenWorldContract
@@ -683,6 +681,7 @@ extension CoreClient {
     }
 }
 
+#if canImport(SwiftUI)
 public struct FlowView: View {
     @ObservedObject var model: FlowModel
     var importControl: AnyView
@@ -740,11 +739,7 @@ public struct FlowView: View {
     }
 
     private var device: some View {
-        #if os(Linux)
-        deviceColumn
-        #else
         ScrollView { deviceColumn }
-        #endif
     }
 
     private var deviceColumn: some View {
@@ -768,11 +763,7 @@ public struct FlowView: View {
     }
 
     private var bundles: some View {
-        #if os(Linux)
-        bundleColumn
-        #else
         ScrollView { bundleColumn }
-        #endif
     }
 
     private var bundleColumn: some View {
@@ -801,11 +792,7 @@ public struct FlowView: View {
     }
 
     private var size: some View {
-        #if os(Linux)
-        sizeColumn
-        #else
         ScrollView { sizeColumn }
-        #endif
     }
 
     private var sizeColumn: some View {
@@ -825,11 +812,7 @@ public struct FlowView: View {
     }
 
     private var estimate: some View {
-        #if os(Linux)
-        estimateColumn
-        #else
         ScrollView { estimateColumn }
-        #endif
     }
 
     private var estimateColumn: some View {
@@ -888,20 +871,6 @@ public struct FlowView: View {
 
     @ViewBuilder
     private var results: some View {
-        #if os(Linux)
-        resultsColumn
-        if model.leavingURL != nil {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(Copy.leaving)
-                Text(model.leavingURL?.absoluteString ?? "")
-                prominent("Open") {
-                    if let url = model.leavingURL { openURL(url) }
-                    model.leavingURL = nil
-                }
-                prominent("Stay") { model.leavingURL = nil }
-            }
-        }
-        #else
         ScrollView {
             resultsColumn
         }
@@ -913,7 +882,6 @@ public struct FlowView: View {
         } message: {
             Text(model.leavingURL?.absoluteString ?? "")
         }
-        #endif
     }
 
     private var resultsColumn: some View {
@@ -949,28 +917,14 @@ public struct FlowView: View {
                                 }
                             }
                         }
-                        #if !os(Linux)
                         .padding()
                         .background(.quaternary.opacity(0.4))
                         .clipShape(RoundedRectangle(cornerRadius: model.phone ? 12 : 8))
-                        #endif
                     }
                 }
                 if let items = model.report?.inventory, !items.isEmpty {
                     Text("Crops from this file.")
                         .font(model.phone ? .title3 : .headline)
-                    #if os(Linux)
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(items) { item in
-                            VStack(spacing: 4) {
-                                cropImage(item.crop)
-                                Text(item.frameLabel).multilineTextAlignment(.center)
-                                Text(item.label).multilineTextAlignment(.center)
-                            }
-                            .frame(width: 140)
-                        }
-                    }
-                    #else
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(items) { item in
@@ -986,7 +940,6 @@ public struct FlowView: View {
                             }
                         }
                     }
-                    #endif
                 }
                 ForEach(PhonePreview.disclosureLines(model), id: \.self) { line in
                     Text(line).font(.footnote)
@@ -1032,8 +985,6 @@ public struct FlowView: View {
                 .interpolation(.none)
                 .frame(width: 112, height: 112)
         }
-        #else
-        Color.clear.frame(width: 112, height: 112)
         #endif
     }
 
@@ -1054,20 +1005,11 @@ public struct FlowView: View {
                 .interpolation(.none)
                 .frame(width: 112, height: 112)
         }
-        #else
-        Color.clear.frame(width: 112, height: 112)
         #endif
     }
 
     @ViewBuilder private var sizePicker: some View {
-        #if os(Linux)
-        VStack(alignment: .leading, spacing: 8) {
-            sizeChoice("320")
-            sizeChoice("480")
-            sizeChoice("640")
-            sizeChoice("full")
-        }
-        #elseif os(macOS)
+        #if os(macOS)
         let picker = Picker("Detection size", selection: $model.longSide) {
             Text(detectionChoice("320", selected: model.longSide)).tag("320")
             Text(detectionChoice("480", selected: model.longSide)).tag("480")
@@ -1091,17 +1033,7 @@ public struct FlowView: View {
     }
 
     @ViewBuilder private var coveragePicker: some View {
-        #if os(Linux)
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Coverage").font(model.phone ? .title3 : .headline)
-            Button(action: { model.coverage = "complete" }) {
-                Text(coverageChoice("complete", selected: model.coverage))
-            }
-            Button(action: { model.coverage = "measured" }) {
-                Text(coverageChoice("measured", selected: model.coverage))
-            }
-        }
-        #elseif os(macOS)
+        #if os(macOS)
         let picker = Picker("Coverage", selection: $model.coverage) {
             Text(coverageChoice("complete", selected: model.coverage)).tag("complete")
             Text(coverageChoice("measured", selected: model.coverage)).tag("measured")
@@ -1120,15 +1052,6 @@ public struct FlowView: View {
         #endif
     }
 
-    #if os(Linux)
-    @ViewBuilder
-    private func sizeChoice(_ value: String) -> some View {
-        Button(action: { model.longSide = value }) {
-            Text(detectionChoice(value, selected: model.longSide))
-        }
-    }
-    #endif
-
     @ViewBuilder
     private func classToggle(on: Bool, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -1144,14 +1067,11 @@ public struct FlowView: View {
 
     @ViewBuilder
     private func prominent(_ title: String, action: @escaping () -> Void) -> some View {
-        #if os(Linux)
-        Button(action: action) { Text(title) }
-        #else
         Button(title, action: action).buttonStyle(.borderedProminent)
-        #endif
     }
 
     private var leavingPresented: Binding<Bool> {
         Binding(get: { model.leavingURL != nil }, set: { if !$0 { model.leavingURL = nil } })
     }
 }
+#endif
