@@ -198,6 +198,7 @@ class OpenWorld(Gtk.Application):
         self.file_label.add_css_class("section")
         self.warn_label = Gtk.Label(xalign=0, wrap=True)
         self.warn_label.add_css_class("warn")
+        self.warn_label.set_visible(False)
         box.append(title)
         box.append(self.file_label)
         box.append(self.warn_label)
@@ -333,11 +334,13 @@ class OpenWorld(Gtk.Application):
         self.reason.add_css_class("warn")
         self.reason.set_visible(False)
         self.context_note = Gtk.Label(xalign=0, wrap=True)
+        self.context_note.set_visible(False)
         self.warning_note = Gtk.Label(xalign=0, wrap=True)
         self.warning_note.add_css_class("warn")
         self.warning_note.set_visible(False)
         self.result_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note.add_css_class("dim")
+        self.result_note.set_visible(False)
         self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0)
         self.strip_heading.add_css_class("section")
         self.strip_heading.set_visible(False)
@@ -428,11 +431,11 @@ class OpenWorld(Gtk.Application):
         self.file_label.set_text(Path(path).name)
         age = time.time() - os.stat(path).st_mtime
         if age > 30 * 24 * 3600:
-            self.warn_label.set_text(PHRASES["old"])
+            self._set_line(self.warn_label, PHRASES["old"])
             self.estimate_warn.set_text(PHRASES["old"])
             self.estimate_warn.set_visible(True)
         else:
-            self.warn_label.set_text("")
+            self._set_line(self.warn_label, "")
             self.estimate_warn.set_text("")
             self.estimate_warn.set_visible(False)
         self.can_analyze = True
@@ -687,8 +690,8 @@ class OpenWorld(Gtk.Application):
         self.estimate_delete.set_text("")
         self.estimate_delete.set_visible(False)
         self._clear_results()
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self.warning_note.set_text("")
@@ -871,11 +874,11 @@ class OpenWorld(Gtk.Application):
             context.append(report["coverage_note"])
         if report.get("perception_note"):
             context.append(report["perception_note"])
-        self.context_note.set_text("\n".join(context))
+        self._set_line(self.context_note, "\n".join(context))
         warnings = [line for line in (report.get("warnings") or []) if line]
         self.warning_note.set_text("\n".join(warnings))
         self.warning_note.set_visible(bool(warnings))
-        self.result_note.set_text("\n".join(report.get("disclosure") or []))
+        self._set_line(self.result_note, "\n".join(report.get("disclosure") or []))
         self.results_scroll.get_vadjustment().set_value(0)
         self._fill_strip(report)
         for candidate in report.get("candidates") or []:
@@ -1066,14 +1069,19 @@ class OpenWorld(Gtk.Application):
             return True
         return self.delete_result()
 
+    def _set_line(self, label: Gtk.Label, text: str) -> None:
+        """A note with nothing to say stays off the page. An empty label still takes a line."""
+        label.set_text(text)
+        label.set_visible(bool(text))
+
     def _show_delete(self, visible: bool) -> None:
         self.delete_button.set_visible(visible)
         self.delete_button.set_sensitive(visible)
 
     def _mark_deleted(self) -> None:
         self._clear_results()
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self.warning_note.set_text("")
@@ -1131,14 +1139,14 @@ class OpenWorld(Gtk.Application):
         self.scan_thread = None
         self._clear_results()
         self.summary.set_text("")
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self.warning_note.set_text("")
         self.warning_note.set_visible(False)
         self.file_label.set_text("")
-        self.warn_label.set_text("")
+        self._set_line(self.warn_label, "")
         self.estimate_warn.set_text("")
         self.estimate_warn.set_visible(False)
         self.coverage = "complete"
@@ -1259,8 +1267,8 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self._show_report(self._unreadable_scan_report())
@@ -1287,8 +1295,8 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self._show_report(
@@ -1323,8 +1331,8 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
-        self.context_note.set_text("")
-        self.result_note.set_text("")
+        self._set_line(self.context_note, "")
+        self._set_line(self.result_note, "")
         self.reason.set_text("")
         self.reason.set_visible(False)
         self.choose_another()
@@ -1348,13 +1356,23 @@ class OpenWorld(Gtk.Application):
         aged = time.time() - 40 * 24 * 3600
         os.utime(path, (aged, aged))
         self.choose_file(path)
-        if self.warn_label.get_text() != PHRASES["old"] or self.estimate_warn.get_text() != PHRASES["old"] or not self.estimate_warn.get_visible():
+        if (
+            self.warn_label.get_text() != PHRASES["old"]
+            or not self.warn_label.get_visible()
+            or self.estimate_warn.get_text() != PHRASES["old"]
+            or not self.estimate_warn.get_visible()
+        ):
             self._exercise_fail(f"old file warning missing: {self.warn_label.get_text()!r} {self.estimate_warn.get_text()!r}")
             return False
         now = time.time()
         os.utime(path, (now, now))
         self.choose_file(path)
-        if self.warn_label.get_text() or self.estimate_warn.get_text() or self.estimate_warn.get_visible():
+        if (
+            self.warn_label.get_text()
+            or self.warn_label.get_visible()
+            or self.estimate_warn.get_text()
+            or self.estimate_warn.get_visible()
+        ):
             self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r} {self.estimate_warn.get_text()!r}")
             return False
         missing = str(Path(path).with_name("no-such-photo.png"))
@@ -1860,8 +1878,8 @@ class OpenWorld(Gtk.Application):
             self._grab(result_shot)
         blocker.unlink()
         self._exercise_report = None
-        self.context_note.set_text("Missing and wanted.")
-        self.result_note.set_text(PHRASES["clearance"])
+        self._set_line(self.context_note, "Missing and wanted.")
+        self._set_line(self.result_note, PHRASES["clearance"])
         self.reason.set_text("The file was not fully decoded.")
         self.reason.set_visible(True)
         self.warning_note.set_text(PHRASES["old"])
@@ -1870,7 +1888,9 @@ class OpenWorld(Gtk.Application):
         if (
             self.summary.get_text() != "Scanning"
             or self.context_note.get_text()
+            or self.context_note.get_visible()
             or self.result_note.get_text()
+            or self.result_note.get_visible()
             or self.reason.get_text()
             or self.reason.get_visible()
             or self.warning_note.get_text()
@@ -1930,6 +1950,9 @@ class OpenWorld(Gtk.Application):
                     return False
         if "warn" in self.summary.get_css_classes():
             self._exercise_fail("a finished scan kept the refusal color")
+            return False
+        if not self.context_note.get_visible() or not self.result_note.get_visible():
+            self._exercise_fail("the result hid the lines under the headline")
             return False
         if "Missing and wanted." not in self.context_note.get_text():
             self._exercise_fail(f"the result did not name the classes under the headline: {self.context_note.get_text()!r}")
@@ -2141,7 +2164,9 @@ class OpenWorld(Gtk.Application):
             or result.exists()
             or self.summary.get_text() != "Deleted."
             or self.context_note.get_text()
+            or self.context_note.get_visible()
             or self.result_note.get_text()
+            or self.result_note.get_visible()
             or self.delete_button.get_visible()
             or self.delete_notice.get_visible()
         ):
