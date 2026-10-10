@@ -238,6 +238,19 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertFalse(StillMotion.movieContainer(jpeg))
     }
 
+    func testAJpegNamedPngIsNotAPngHeader() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-pnghdr-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let jpeg = root.appendingPathComponent("photo.png")
+        try Data([0xFF, 0xD8, 0xFF, 0xD9] + [UInt8](repeating: 0, count: 8)).write(to: jpeg)
+        XCTAssertFalse(StillMotion.png(jpeg))
+        let png = try still("blank")
+        let pngNamedJpeg = root.appendingPathComponent("scene.jpg")
+        try FileManager.default.copyItem(at: png, to: pngNamedJpeg)
+        XCTAssertTrue(StillMotion.png(pngNamedJpeg))
+        XCTAssertTrue(StillMotion.png(png))
+    }
+
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
         let apng = try movingPicture("apng")
         XCTAssertTrue(StillMotion.animatedPng(apng))

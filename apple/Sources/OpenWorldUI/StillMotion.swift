@@ -44,6 +44,14 @@ public enum StillMotion {
         return false
     }
 
+    /// A PNG header. The file name is not the type.
+    public static func png(_ url: URL) -> Bool {
+        guard let input = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? input.close() }
+        guard let signature = try? input.read(upToCount: 8), signature.count == 8 else { return false }
+        return [UInt8](signature) == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    }
+
     /// A movie container, including a file whose name has no extension.
     /// HEIF and AVIF stay stills. A JPEG, a PNG, and a still WebP stay stills.
     public static func movieContainer(_ url: URL) -> Bool {

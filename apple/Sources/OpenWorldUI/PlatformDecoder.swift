@@ -210,7 +210,7 @@ enum PlatformDecoder {
         var facts = try facts(url: url)
         if !facts.video {
             let image = directory.appendingPathComponent("frame_000000.png")
-            if url.pathExtension.lowercased() == "png" {
+            if StillMotion.png(url) {
                 if FileManager.default.fileExists(atPath: image.path) {
                     try FileManager.default.removeItem(at: image)
                 }

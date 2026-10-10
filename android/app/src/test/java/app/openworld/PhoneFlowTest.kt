@@ -665,6 +665,30 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aJpegNamedPngIsDecodedAsAJpeg() {
+        val scene = still("scene")
+        val root = File(scene.parentFile, "ow-misname-" + System.nanoTime())
+        check(root.mkdirs())
+        val jpeg = File(root, "photo.jpg")
+        ffmpeg("-i", scene.absolutePath, "-q:v", "2", jpeg.absolutePath)
+        val named = File(root, "photo.png")
+        jpeg.copyTo(named)
+        val source = named.readBytes()
+        assertEquals(0xFF.toByte(), source[0])
+        assertEquals(0xD8.toByte(), source[1])
+        val frames = File(root, "frames")
+        PlatformDecode.writeFrames(named, frames)
+        val written = File(frames, "frame_000000.png").readBytes()
+        assertEquals(0x89.toByte(), written[0])
+        assertEquals(0x50.toByte(), written[1])
+        assertFalse(written.contentEquals(source))
+        val report = scanReport(named)
+        assertEquals("complete", report.getString("status"))
+        assertEquals("Possible candidate. Not an identification.", report.getString("summary"))
+        assertTrue(report.getJSONArray("candidates").length() > 0)
+    }
+
+    @Test
     fun anInterlacedGifKeepsThePixelsOfThatFrame() {
         val gif = File.createTempFile("ow-inter", ".gif")
         gif.writeBytes(INTERLACED_GIF)
