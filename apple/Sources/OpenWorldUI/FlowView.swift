@@ -54,7 +54,14 @@ public final class FlowModel: ObservableObject {
         #if !os(Linux)
         _ = url.startAccessingSecurityScopedResource()
         #endif
+        var directory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
+        if !exists || directory.boolValue || !FileManager.default.isReadableFile(atPath: url.path) {
+            error = "The file could not be read. Refusing."
+            return
+        }
         file = url
+        error = nil
         if let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
            let modified = values.contentModificationDate,
            Date().timeIntervalSince(modified) > 30 * 24 * 3600 {
@@ -256,7 +263,14 @@ public struct FlowView: View {
     }
 
     public var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            if let error = model.error, model.step != .estimate, model.step != .results {
+                Text(error)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+            }
+            Group {
             switch model.step {
             case .choose:
                 choose
@@ -270,6 +284,7 @@ public struct FlowView: View {
                 estimate
             case .results:
                 results
+            }
             }
         }
     }

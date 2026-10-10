@@ -38,6 +38,7 @@ class FlowModel {
     var leavingUrl by mutableStateOf<String?>(null)
     var leaveNotice by mutableStateOf<String?>(null)
     var deleteNotice by mutableStateOf<String?>(null)
+    var pickNotice by mutableStateOf<String?>(null)
     var resultDir: File? = null
         private set
     private var scanRoot: File? = null
@@ -49,14 +50,17 @@ class FlowModel {
     private var localCopy: File? = null
 
     fun choose(uri: Uri, resolver: ContentResolver) {
-        fileName = displayName(uri, resolver)
         val copy = File.createTempFile("openworld", null)
-        resolver.openInputStream(uri)?.use { input ->
-            copy.outputStream().use { input.copyTo(it) }
-        } ?: run {
-            fileName = ""
+        try {
+            val input = resolver.openInputStream(uri) ?: throw IOException("unreadable")
+            input.use { source -> copy.outputStream().use { source.copyTo(it) } }
+        } catch (_: Exception) {
+            copy.delete()
+            pickNotice = "The file could not be read. Refusing."
             return
         }
+        pickNotice = null
+        fileName = displayName(uri, resolver)
         originalModified(uri, resolver)?.let { modified -> copy.setLastModified(modified) }
         localCopy = copy
         val ageMs = System.currentTimeMillis() - copy.lastModified()
@@ -130,6 +134,7 @@ class FlowModel {
         leavingUrl = null
         leaveNotice = null
         deleteNotice = null
+        pickNotice = null
         resultDir = null
         scanRoot = null
         canAnalyze = true

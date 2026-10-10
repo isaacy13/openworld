@@ -8,6 +8,7 @@ import atexit
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import threading
@@ -85,11 +86,20 @@ class OpenWorld(Gtk.Application):
 
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        self.stack.set_margin_top(18)
+        self.stack.set_margin_top(8)
         self.stack.set_margin_bottom(18)
         self.stack.set_margin_start(24)
         self.stack.set_margin_end(24)
-        self.window.set_child(self.stack)
+        self.pick_notice = Gtk.Label(xalign=0, wrap=True)
+        self.pick_notice.add_css_class("warn")
+        self.pick_notice.set_visible(False)
+        self.pick_notice.set_margin_top(12)
+        self.pick_notice.set_margin_start(24)
+        self.pick_notice.set_margin_end(24)
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        root.append(self.pick_notice)
+        root.append(self.stack)
+        self.window.set_child(root)
 
         self.page_choose = self._choose_page()
         self.page_device = self._device_page()
@@ -299,17 +309,36 @@ class OpenWorld(Gtk.Application):
             chosen = dialog.open_finish(result)
         except GLib.Error:
             return
-        if chosen is not None:
-            self.choose_file(chosen.get_path())
-
-    def _on_drop(self, _target, value, _x, _y) -> bool:
-        path = value.get_path()
+        if chosen is None:
+            return
+        path = chosen.get_path()
         if path:
             self.choose_file(path)
-            return True
-        return False
+        else:
+            self._refuse_pick()
+
+    def _on_drop(self, _target, value, _x, _y) -> bool:
+        path = value.get_path() if value is not None else None
+        if path:
+            self.choose_file(path)
+        else:
+            self._refuse_pick()
+        return True
+
+    def _refuse_pick(self) -> None:
+        self.pick_notice.set_text("The file could not be read. Refusing.")
+        self.pick_notice.set_visible(True)
 
     def choose_file(self, path: str) -> None:
+        try:
+            info = os.stat(path)
+        except OSError:
+            self._refuse_pick()
+            return
+        if not stat.S_ISREG(info.st_mode):
+            self._refuse_pick()
+            return
+        self.pick_notice.set_visible(False)
         self.input_path = path
         self.file_label.set_text(Path(path).name)
         age = time.time() - os.stat(path).st_mtime
@@ -887,6 +916,25 @@ class OpenWorld(Gtk.Application):
         self.choose_file(path)
         if self.warn_label.get_text():
             self._exercise_fail(f"fresh file warned: {self.warn_label.get_text()!r}")
+            return False
+        missing = str(Path(path).with_name("no-such-photo.png"))
+        self.choose_file(missing)
+        folder = Path(path).with_name("not-a-file-dir")
+        folder.mkdir(exist_ok=True)
+        self.choose_file(str(folder))
+        if (
+            self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or self.input_path != path
+            or self.stack.get_visible_child_name() != "device"
+        ):
+            self._exercise_fail(
+                f"an unreadable file changed the pick: {self.pick_notice.get_text()!r} {self.input_path!r}"
+            )
+            return False
+        self.choose_file(path)
+        if self.pick_notice.get_visible() or self.input_path != path:
+            self._exercise_fail("a readable file kept the refusal")
             return False
         self.measured_button.set_active(True)
         if self.coverage != "measured" or not self.brief_label.get_visible():

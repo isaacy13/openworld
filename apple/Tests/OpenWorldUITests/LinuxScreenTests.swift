@@ -100,6 +100,27 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnUnreadableFileStaysOffTheNextPage() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo.png"))
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.file)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            let file = try self.still("blank")
+            model.choose(file)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.error)
+            let folder = file.deletingLastPathComponent().appendingPathComponent("not-a-file-dir", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            model.choose(folder)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testBlankMeasuredOldFileIsAClearanceWithTheWarning() throws {
         try MainActor.assumeIsolated {
             let file = try self.still("blank")

@@ -708,6 +708,25 @@ class PhoneFlowTest {
         }
     }
 
+    @Test
+    fun anUnreadableImportStaysOnChoose() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/missing.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        model.choose(uri, resolver)
+        assertEquals(Step.Choose, model.step)
+        assertEquals("", model.fileName)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        choose(model, still("blank"))
+        assertNull(model.pickNotice)
+        assertEquals(Step.Device, model.step)
+        val kept = model.fileName
+        model.choose(Uri.parse("content://app.openworld/also-missing.png"), resolver)
+        assertEquals(Step.Device, model.step)
+        assertEquals(kept, model.fileName)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+    }
+
     private fun drive(kind: String): FlowModel {
         val model = FlowModel()
         choose(model, still(kind))
@@ -739,6 +758,18 @@ class PhoneFlowTest {
 class PhoneScreenTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    @Test
+    fun anUnreadableImportShowsTheRefusalOnTheChoosePage() {
+        val model = FlowModel()
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        model.choose(Uri.parse("content://app.openworld/missing.png"), resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("The file could not be read. Refusing.").assertExists()
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+        compose.onAllNodesWithText("Continue").assertCountEquals(0)
+    }
 
     @Test
     fun resultsScreenShowsTheStripAndTheLeavePrompt() {

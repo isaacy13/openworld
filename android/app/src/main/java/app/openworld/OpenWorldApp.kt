@@ -57,6 +57,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                model.pickNotice?.let { Text(it) }
                 if (model.step != Step.Choose) {
                     TextButton(onClick = model::back) { Text("Back") }
                 }

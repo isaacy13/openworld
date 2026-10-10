@@ -159,11 +159,13 @@ enum ScreenCopy {
             }
             return lines
         default:
-            return [
+            var lines = [
                 "Choose a photo or video",
                 "Import a file you already have. There is no camera.",
                 "Choose File",
             ]
+            if let error = model.error { lines.append(error) }
+            return lines
         }
     }
 
