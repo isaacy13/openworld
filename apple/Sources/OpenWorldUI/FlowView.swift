@@ -134,7 +134,9 @@ public final class FlowModel: ObservableObject {
     public var scratchDirectory: URL?
     let phone: Bool
     private let core = CoreClient()
-    private var scanRoot: URL?
+    var scanRoot: URL?
+    /// Set when the window closes, so a scan that finishes afterward does not return to the page.
+    private var closed = false
     /// The catalog sentence currently on the bundle page, so a later catalog can clear it.
     private var catalogNotice: String?
     /// The estimate refusal, so a later unreadable file does not rename that headline.
@@ -433,6 +435,18 @@ public final class FlowModel: ObservableObject {
         apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, missing: includeMissing, wanted: includeWanted, paths: paths))
     }
 
+    /// Closing the window stops a scan that is still running and removes that temporary folder.
+    public func closeWindow() {
+        closed = true
+        RunningProgram.stop()
+        if let scanRoot {
+            try? FileManager.default.removeItem(at: scanRoot)
+            self.scanRoot = nil
+        }
+        resultDirectory = nil
+        scanning = false
+    }
+
     /// Leaves the estimate page in place and says Scanning until the result is ready.
     public func startScan() {
         guard !scanning, canAnalyze, let file else { return }
@@ -468,6 +482,11 @@ public final class FlowModel: ObservableObject {
                 }
             )
             await MainActor.run {
+                if self.closed {
+                    try? FileManager.default.removeItem(at: outcome.root)
+                    self.scanning = false
+                    return
+                }
                 self.apply(outcome)
                 self.liveCrops = []
                 self.scanning = false

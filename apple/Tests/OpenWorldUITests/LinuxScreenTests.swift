@@ -3,7 +3,7 @@
 import Foundation
 import Glibc
 import OpenWorldContract
-import OpenWorldUI
+@testable import OpenWorldUI
 import XCTest
 
 /// Linux CI runs the phone model against the same fixture stills as the other
@@ -80,6 +80,32 @@ final class OpenWorldUITests: XCTestCase {
             })
         }
         XCTAssertEqual(order, ["claim", "open"])
+    }
+
+    func testClosingTheWindowStopsAScanThatIsStillRunning() throws {
+        let process = try RunningProgram.launch("/bin/sleep", arguments: ["30"])
+        XCTAssertTrue(process.isRunning)
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-close-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.scanRoot = root
+            model.closeWindow()
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        XCTAssertFalse(process.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+        let later = try RunningProgram.launch("/bin/sleep", arguments: ["30"])
+        defer {
+            if later.isRunning {
+                later.terminate()
+            }
+            later.waitUntilExit()
+        }
+        XCTAssertTrue(later.isRunning)
     }
 
     func testAShareOpensTheFileStoredUnderThatName() throws {

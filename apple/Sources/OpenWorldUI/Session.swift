@@ -194,16 +194,15 @@ struct CoreClient {
         if let linked = LinkedCore.invoke(args, onProgress: onProgress) {
             return linked
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = args
         let pipe = Pipe()
-        process.standardOutput = pipe
         let errors = Pipe()
-        if onProgress != nil {
-            process.standardError = errors
+        let process = try RunningProgram.launch(binary, arguments: args) { process in
+            process.standardOutput = pipe
+            if onProgress != nil {
+                process.standardError = errors
+            }
         }
-        try process.run()
+        defer { RunningProgram.forget(process) }
         if let onProgress {
             let reader = StderrLines(onProgress)
             let done = DispatchSemaphore(value: 0)
@@ -224,6 +223,57 @@ struct CoreClient {
         }
         process.waitUntilExit()
         return pipe.fileHandleForReading.readDataToEndOfFile()
+    }
+}
+
+/// A scan program started by this app. Closing the window stops one that is still running.
+public enum RunningProgram {
+    private static let lock = NSLock()
+    private static var generation = 0
+    private static var processes: [Process] = []
+
+    /// Starts a program and remembers it so a later close can stop it.
+    public static func launch(
+        _ executable: String,
+        arguments: [String],
+        configure: (Process) -> Void = { _ in }
+    ) throws -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        configure(process)
+        lock.lock()
+        let seen = generation
+        lock.unlock()
+        try process.run()
+        lock.lock()
+        let keep = generation == seen
+        if keep {
+            processes.append(process)
+        }
+        lock.unlock()
+        if !keep, process.isRunning {
+            process.terminate()
+        }
+        return process
+    }
+
+    public static func forget(_ process: Process) {
+        lock.lock()
+        processes.removeAll { $0 === process }
+        lock.unlock()
+    }
+
+    /// Stops a program that is still running, including one that starts during this call.
+    public static func stop() {
+        lock.lock()
+        generation += 1
+        let copy = processes
+        processes.removeAll()
+        lock.unlock()
+        for process in copy where process.isRunning {
+            process.terminate()
+        }
     }
 }
 

@@ -2,6 +2,11 @@
 import OpenWorldUI
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 @main
 struct OpenWorldApp: App {
@@ -30,6 +35,9 @@ struct PhoneRoot: View {
                 .navigationTitle("OpenWorld")
                 .navigationBarTitleDisplayMode(.large)
                 .onOpenURL { url in importShared(url, model: model) }
+                .onReceive(NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)) { _ in
+                    model.closeWindow()
+                }
         }
     }
 
@@ -54,6 +62,10 @@ struct MacRoot: View {
         FlowView(model: model, importControl: AnyView(importButton))
             .frame(minWidth: 640, minHeight: 520)
             .onOpenURL { url in importShared(url, model: model) }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+                guard let window = note.object as? NSWindow, !(window is NSPanel) else { return }
+                model.closeWindow()
+            }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 guard let provider = providers.first else { return false }
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
