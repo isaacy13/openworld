@@ -23,23 +23,21 @@ final class ShareViewController: UIViewController {
             return
         }
         provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
-            guard let url else {
-                self.finish()
-                return
+            let opened: URL?
+            if let url,
+               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group) {
+                opened = SharedImport.store(source: url, container: container)
+            } else {
+                opened = nil
             }
-            if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group) {
-                let dest = container.appendingPathComponent(url.lastPathComponent)
-                try? FileManager.default.removeItem(at: dest)
-                try? FileManager.default.copyItem(at: url, to: dest)
-                if let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
-                    try? FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: dest.path)
-                }
-                if let open = SharedImport.url(fileName: dest.lastPathComponent) {
-                    self.extensionContext?.open(open) { _ in self.finish() }
+            // The provider calls this on a background queue. Opening the app and finishing the request run on the main thread.
+            DispatchQueue.main.async {
+                guard let opened, let context = self.extensionContext else {
+                    self.finish()
                     return
                 }
+                context.open(opened) { _ in self.finish() }
             }
-            self.finish()
         }
     }
 

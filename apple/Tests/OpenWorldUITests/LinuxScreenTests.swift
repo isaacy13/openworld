@@ -25,6 +25,47 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "plain.png"))), "plain.png")
     }
 
+    func testAFailedShareLeavesTheFileAlreadyStored() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("group")
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let name = "a&b.png"
+        let stored = container.appendingPathComponent(name)
+        try Data("kept".utf8).write(to: stored)
+
+        let source = root.appendingPathComponent(name)
+        XCTAssertNil(SharedImport.store(source: source, container: container))
+        XCTAssertEqual(try Data(contentsOf: stored), Data("kept".utf8))
+
+        try Data("new".utf8).write(to: source)
+        let aged = Date().addingTimeInterval(-40 * 24 * 3600)
+        try FileManager.default.setAttributes([.modificationDate: aged], ofItemAtPath: source.path)
+        let opened = try XCTUnwrap(SharedImport.store(source: source, container: container))
+        XCTAssertEqual(SharedImport.fileName(from: opened), name)
+        XCTAssertEqual(try Data(contentsOf: stored), Data("new".utf8))
+        let modified = try XCTUnwrap(
+            stored.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        )
+        XCTAssertGreaterThan(Date().timeIntervalSince(modified), 30 * 24 * 3600)
+
+        let blocked = root.appendingPathComponent("not-a-folder")
+        try Data("nope".utf8).write(to: blocked)
+        XCTAssertNil(SharedImport.store(source: source, container: blocked))
+        XCTAssertEqual(try Data(contentsOf: stored), Data("new".utf8))
+
+        let folderName = "dir.png"
+        let folder = container.appendingPathComponent(folderName)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let marker = folder.appendingPathComponent("keep")
+        try Data("dir".utf8).write(to: marker)
+        let incomingDir = root.appendingPathComponent(folderName)
+        try Data("file".utf8).write(to: incomingDir)
+        XCTAssertNil(SharedImport.store(source: incomingDir, container: container))
+        XCTAssertEqual(try Data(contentsOf: marker), Data("dir".utf8))
+    }
+
     func testALongFileNameBreaksBetweenCharacters() {
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
