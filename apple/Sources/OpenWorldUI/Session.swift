@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import OpenWorldContract
 
@@ -33,7 +38,7 @@ struct CoreClient {
 
     /// Walk up from the working directory, the same way the CLI finds `bundles/`.
     static func findBundles() -> String {
-        if let env = ProcessInfo.processInfo.environment["OPENWORLD_BUNDLES"], !env.isEmpty {
+        if let env = environmentValue("OPENWORLD_BUNDLES"), !env.isEmpty {
             return env
         }
         var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -46,6 +51,12 @@ struct CoreClient {
             url.deleteLastPathComponent()
         }
         return "bundles"
+    }
+
+    /// `ProcessInfo.environment` keeps the values from process start.
+    static func environmentValue(_ name: String) -> String? {
+        guard let raw = getenv(name) else { return nil }
+        return String(cString: raw)
     }
 
     func bundlesJSON() throws -> [BundleRow] {

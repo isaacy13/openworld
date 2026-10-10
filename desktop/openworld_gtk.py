@@ -202,12 +202,20 @@ class OpenWorld(Gtk.Application):
         self.bundle_list = Gtk.ListBox()
         self.bundle_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.bundle_list.connect("row-selected", self._on_bundle_row)
+        self.bundle_notice = Gtk.Label(
+            label="The scan program is not on this device. Refusing.",
+            xalign=0,
+            wrap=True,
+        )
+        self.bundle_notice.add_css_class("warn")
+        self.bundle_notice.set_visible(False)
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(self.bundle_list)
         scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         box.append(title)
         box.append(hint)
+        box.append(self.bundle_notice)
         box.append(scroll)
         return box
 
@@ -397,6 +405,7 @@ class OpenWorld(Gtk.Application):
     def load_bundles(self) -> None:
         payload = self._run_json(["--json", "--bundles", self.bundles, "bundles"])
         self.rows = payload.get("bundles", [])
+        self.bundle_notice.set_visible(not self.rows)
         previous = self.bundle_id
         while True:
             row = self.bundle_list.get_row_at_index(0)
@@ -1220,6 +1229,25 @@ class OpenWorld(Gtk.Application):
         self.choose_file(path)
         if not self.primary.get_sensitive() or self.stack.get_visible_child_name() != "device":
             self._exercise_fail("the next file kept Continue disabled")
+            return False
+        saved_bundles = self.bundles
+        empty = tempfile.mkdtemp(prefix="openworld-empty-bundles-")
+        try:
+            self.bundles = empty
+            self.load_bundles()
+            if (
+                self.rows
+                or not self.bundle_notice.get_visible()
+                or self.bundle_notice.get_text() != "The scan program is not on this device. Refusing."
+            ):
+                self._exercise_fail(f"an empty catalog stayed silent: {self.rows!r} {self.bundle_notice.get_text()!r}")
+                return False
+        finally:
+            self.bundles = saved_bundles
+            shutil.rmtree(empty, ignore_errors=True)
+        self.load_bundles()
+        if not self.rows or self.bundle_notice.get_visible():
+            self._exercise_fail("the bundle page kept the missing-program sentence after the catalog returned")
             return False
         self.bundle_id = "not-in-the-catalog"
         self.load_bundles()

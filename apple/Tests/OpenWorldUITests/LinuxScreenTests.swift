@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #if os(Linux)
 import Foundation
+import Glibc
 import OpenSwiftUI
 import OpenWorldContract
 import OpenWorldUI
@@ -142,6 +143,52 @@ final class OpenWorldUITests: XCTestCase {
             let blocked = PhonePreview.lines(screen: "estimate", model: model)
             XCTAssertTrue(blocked.contains("Choose missing, wanted, or both."))
             XCTAssertEqual(blocked.last, "Analyze")
+        }
+    }
+
+    func testAnEmptyCatalogNamesTheMissingProgram() throws {
+        let empty = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openworld-empty-bundles-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        let previous = getenv("OPENWORLD_BUNDLES").map { String(cString: $0) }
+        defer {
+            if let previous {
+                setenv("OPENWORLD_BUNDLES", previous, 1)
+            } else {
+                unsetenv("OPENWORLD_BUNDLES")
+            }
+            try? FileManager.default.removeItem(at: empty)
+        }
+        setenv("OPENWORLD_BUNDLES", empty.path, 1)
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The scan program is not on this device. Refusing.")
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertTrue(preview.contains("Model bundle"))
+            XCTAssertTrue(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertFalse(preview.contains("Fast. Selected."))
+            XCTAssertEqual(preview.last, "Continue")
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+        if let previous {
+            setenv("OPENWORLD_BUNDLES", previous, 1)
+        } else {
+            unsetenv("OPENWORLD_BUNDLES")
+        }
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.error = "The scan program is not on this device. Refusing."
+            model.loadBundles()
+            XCTAssertFalse(model.bundles.isEmpty)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.bundles.first?.id, "fast")
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertFalse(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertTrue(preview.contains("Fast. Selected."))
         }
     }
 

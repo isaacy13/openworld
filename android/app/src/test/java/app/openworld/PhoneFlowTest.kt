@@ -999,6 +999,17 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anEmptyCatalogNamesTheMissingProgram() {
+        val model = FlowModel()
+        model.step = Step.Bundle
+        model.bundleRows = emptyList()
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Model bundle").assertExists()
+        compose.onNodeWithText("The scan program is not on this device. Refusing.").assertExists()
+        compose.onNodeWithText("Continue").assertExists()
+    }
+
+    @Test
     fun anOldFileStaysAWarningOnTheEstimate() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/old-estimate.png")

@@ -149,6 +149,11 @@ public final class FlowModel: ObservableObject {
 
     public func loadBundles() {
         bundles = (try? core.bundlesJSON()) ?? []
+        if bundles.isEmpty {
+            error = "The scan program is not on this device. Refusing."
+        } else if error == "The scan program is not on this device. Refusing." {
+            error = nil
+        }
         if !bundles.contains(where: { $0.id == bundleID }),
            let selected = bundles.first(where: { $0.preselected }) {
             bundleID = selected.id
@@ -596,6 +601,9 @@ public struct FlowView: View {
                         Text(row.curveLine).foregroundStyle(.secondary)
                     }
                 }
+            }
+            if model.bundles.isEmpty, let error = model.error {
+                Text(error)
             }
             prominent("Continue") { model.step = .size }
         }
