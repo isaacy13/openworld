@@ -709,6 +709,9 @@ public struct FlowView: View {
                 if let name = model.report?.bundleName {
                     Text("Bundle: \(name)")
                 }
+                if let size = model.report?.detectionNote {
+                    Text(size)
+                }
                 if let note = model.report?.perceptionNote {
                     Text(note)
                 }

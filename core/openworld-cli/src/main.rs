@@ -785,7 +785,19 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
         if let Some(banner) = &report.coverage_banner {
             println!("{banner}");
         }
+        if let Some(frames) = &report.frames_note {
+            println!("{frames}");
+        }
+        if let Some(classes) = &report.class_note {
+            println!("{classes}");
+        }
         println!("Bundle: {}", report.bundle_name);
+        if let Some(size) = &report.detection_note {
+            println!("{size}");
+        }
+        if !report.perception_note.is_empty() {
+            println!("{}", report.perception_note);
+        }
         for line in &report.disclosure {
             println!("{line}");
         }

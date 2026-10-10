@@ -697,6 +697,8 @@ class OpenWorld(Gtk.Application):
             context.append(report["class_note"])
         if report.get("bundle_name"):
             context.append(f"Bundle: {report['bundle_name']}")
+        if report.get("detection_note"):
+            context.append(report["detection_note"])
         if report.get("perception_note"):
             context.append(report["perception_note"])
         self.context_note.set_text("\n".join(context))
@@ -1349,6 +1351,9 @@ class OpenWorld(Gtk.Application):
             return False
         if "1 frame analyzed." not in self.context_note.get_text():
             self._exercise_fail(f"the result did not say how many frames were analyzed: {self.context_note.get_text()!r}")
+            return False
+        if "640 px on the long side." not in self.context_note.get_text():
+            self._exercise_fail(f"the result did not repeat the detection size: {self.context_note.get_text()!r}")
             return False
         result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
         if result_shot and not getattr(self, "_result_shot_saved", False):

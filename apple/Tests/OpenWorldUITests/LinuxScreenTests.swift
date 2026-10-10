@@ -26,6 +26,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.report?.status, "complete")
             XCTAssertEqual(model.report?.summary, Copy.possible)
             XCTAssertEqual(model.report?.framesNote, "1 frame analyzed.")
+            XCTAssertEqual(model.report?.detectionNote, "640 px on the long side.")
             let labels = model.report?.inventory.map(\.label) ?? []
             XCTAssertTrue(labels.contains(Copy.possible))
             XCTAssertTrue(labels.contains(Copy.notCompared))
@@ -53,6 +54,9 @@ final class OpenWorldUITests: XCTestCase {
             let framesAt = try XCTUnwrap(preview.firstIndex(of: "1 frame analyzed."))
             let classAt = try XCTUnwrap(preview.firstIndex(of: "Missing and wanted."))
             XCTAssertLessThan(framesAt, classAt)
+            let bundleAt = try XCTUnwrap(preview.firstIndex(of: "Bundle: Fast"))
+            let sizeAt = try XCTUnwrap(preview.firstIndex(of: "640 px on the long side."))
+            XCTAssertLessThan(bundleAt, sizeAt)
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" || $0.posterClassLabel == "Wanted" } == true)
             let disclosure = model.report?.disclosure ?? []
             XCTAssertTrue(disclosure.contains("Nothing is uploaded."))

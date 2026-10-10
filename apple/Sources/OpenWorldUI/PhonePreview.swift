@@ -90,6 +90,7 @@ public enum PhonePreview {
             if let frames = model.report?.framesNote { lines.append(frames) }
             if let classes = model.report?.classNote { lines.append(classes) }
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
+            if let size = model.report?.detectionNote { lines.append(size) }
             if let note = model.report?.perceptionNote { lines.append(note) }
             lines.append(contentsOf: model.report?.warnings ?? [])
             for candidate in model.report?.candidates ?? [] {

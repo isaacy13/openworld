@@ -137,6 +137,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert_eq!(report.bundle_name, "Fast");
     assert_eq!(report.class_note.as_deref(), Some("Missing and wanted."));
     assert_eq!(report.frames_note.as_deref(), Some("1 frame analyzed."));
+    assert_eq!(report.detection_note.as_deref(), Some("640 px on the long side."));
     assert!(report.disclosure.iter().any(|l| l == "Nothing is uploaded."));
     assert!(report.disclosure.iter().any(|l| l == "Nobody is enrolled."));
     assert!(report.disclosure.iter().any(|l| l.contains("does not train")));
@@ -352,6 +353,7 @@ fn measured_banner_and_a_stopped_job_is_incomplete() {
         report.frames_note.as_deref(),
         Some(format!("{} of {} frames analyzed.", report.frames_analyzed, report.frames_decoded).as_str())
     );
+    assert_eq!(report.detection_note.as_deref(), Some("Full resolution."));
     assert_eq!(report.status, "complete");
 
     measured.coverage = Coverage::Complete;
@@ -401,6 +403,8 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
         &mut |_| {},
     );
     assert_eq!(refused.status, "refused");
+    assert!(refused.frames_note.is_none());
+    assert!(refused.detection_note.is_none());
     assert!(refused.refusal == Some("bad_codec".into()) || refused.refusal == Some("bad_hash".into()));
 
     image.save(dir.path().join("in.png")).unwrap();
