@@ -92,7 +92,7 @@ enum ScreenCopy {
         case "bundle":
             var lines = ["Model bundle", "Scores are not comparable across bundles."]
             for row in model.bundles {
-                lines.append(row.name)
+                lines.append(markedChoice(row.name, selected: row.id == model.bundleID))
                 lines.append(row.bestFor)
                 lines.append(row.curveLine)
             }

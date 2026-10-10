@@ -342,6 +342,8 @@ class OpenWorld(Gtk.Application):
             box.set_margin_end(10)
             name = Gtk.Label(label=item["name"], xalign=0)
             name.add_css_class("section")
+            row.bundle_name = item["name"]
+            row.bundle_name_label = name
             best = Gtk.Label(label=item["best_for"], xalign=0)
             curve = Gtk.Label(label=item["curve_line"], xalign=0)
             curve.add_css_class("dim")
@@ -357,6 +359,19 @@ class OpenWorld(Gtk.Application):
         chosen = kept or selected
         if chosen is not None:
             self.bundle_list.select_row(chosen)
+        self._mark_bundle_rows()
+
+    def _mark_bundle_rows(self) -> None:
+        index = 0
+        while True:
+            row = self.bundle_list.get_row_at_index(index)
+            if row is None:
+                return
+            label = getattr(row, "bundle_name_label", None)
+            title = getattr(row, "bundle_name", "")
+            if label is not None:
+                label.set_text(f"{title}. Selected." if getattr(row, "bundle_id", None) == self.bundle_id else title)
+            index += 1
 
     def _bundle_row(self, bundle_id: str):
         index = 0
@@ -371,6 +386,7 @@ class OpenWorld(Gtk.Application):
     def _on_bundle_row(self, _list, row) -> None:
         if row is not None:
             self.bundle_id = row.bundle_id
+            self._mark_bundle_rows()
 
     def _on_size(self, button: Gtk.CheckButton, value: str) -> None:
         if button.get_active():
@@ -912,6 +928,9 @@ class OpenWorld(Gtk.Application):
         if self.bundle_id != "accurate":
             self._exercise_fail(f"selecting Accurate left {self.bundle_id}")
             return False
+        if accurate.bundle_name_label.get_text() != "Accurate. Selected." or self._bundle_row("fast").bundle_name_label.get_text() != "Fast":
+            self._exercise_fail("the bundle page did not mark Accurate")
+            return False
         self.go_back()
         if self.stack.get_visible_child_name() != "device":
             self._exercise_fail("Back from the bundle page did not return to the file page")
@@ -927,6 +946,9 @@ class OpenWorld(Gtk.Application):
         self.bundle_list.select_row(fast)
         if self.bundle_id != "fast":
             self._exercise_fail(f"selecting Fast left {self.bundle_id}")
+            return False
+        if fast.bundle_name_label.get_text() != "Fast. Selected." or self._bundle_row("accurate").bundle_name_label.get_text() != "Accurate":
+            self._exercise_fail("the bundle page did not mark Fast")
             return False
         self._go("bundle")
         self.long_side = "640"

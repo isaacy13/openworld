@@ -51,39 +51,28 @@ struct MacRoot: View {
     @State private var showPicker = false
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                Label("Choose a file", systemImage: "folder")
-                Label("On this Mac", systemImage: "lock")
-                Label("Bundle", systemImage: "square.stack")
-                Label("Detection size", systemImage: "aspectratio")
-                Label("Estimate", systemImage: "clock")
-                Label("Results", systemImage: "person.crop.rectangle")
-            }
-            .navigationTitle("OpenWorld")
-        } detail: {
-            FlowView(model: model, importControl: AnyView(importButton))
-                .onOpenURL { url in importShared(url, model: model) }
-                .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                    guard let provider = providers.first else { return false }
-                    _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                        if let url {
-                            Task { @MainActor in model.choose(url) }
-                        }
+        FlowView(model: model, importControl: AnyView(importButton))
+            .frame(minWidth: 640, minHeight: 520)
+            .onOpenURL { url in importShared(url, model: model) }
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                guard let provider = providers.first else { return false }
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    if let url {
+                        Task { @MainActor in model.choose(url) }
                     }
-                    return true
                 }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Choose File") { showPicker = true }
+                return true
             }
-        }
-        .fileImporter(isPresented: $showPicker, allowedContentTypes: [.image, .movie]) { result in
-            if case .success(let url) = result {
-                model.choose(url)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Choose File") { showPicker = true }
+                }
             }
-        }
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.image, .movie]) { result in
+                if case .success(let url) = result {
+                    model.choose(url)
+                }
+            }
     }
 
     private var importButton: some View {

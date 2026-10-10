@@ -12,6 +12,11 @@ import UIKit
 #endif
 import Foundation
 
+/// The choice that will run, in the same words on every screen.
+public func markedChoice(_ title: String, selected: Bool) -> String {
+    selected ? "\(title). Selected." : title
+}
+
 public enum Step {
     case choose, device, bundle, size, estimate, results
 }
@@ -308,7 +313,7 @@ public struct FlowView: View {
             ForEach(model.bundles) { row in
                 Button(action: { model.bundleID = row.id }) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(row.name).font(.headline)
+                        Text(markedChoice(row.name, selected: model.bundleID == row.id)).font(.headline)
                         Text(row.bestFor)
                         Text(row.curveLine).foregroundStyle(.secondary)
                     }
@@ -320,7 +325,7 @@ public struct FlowView: View {
                     model.bundleID = row.id
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(row.name).font(.headline)
+                        Text(markedChoice(row.name, selected: row.id == model.bundleID)).font(.headline)
                         Text(row.bestFor)
                         Text(row.curveLine).foregroundStyle(.secondary)
                     }
