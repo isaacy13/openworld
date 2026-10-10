@@ -206,6 +206,15 @@ public final class FlowModel: ObservableObject {
         return resultHeadline.contains("Refusing.")
     }
 
+    /// The reason under Incomplete. The headline stays in the title color. This line is the warning.
+    public var resultReason: String? {
+        guard report?.status == "incomplete",
+              let reason = report?.message,
+              !reason.isEmpty,
+              reason != report?.summary else { return nil }
+        return reason
+    }
+
     /// A catalog that can run is titled Model bundle. A refusal is the headline.
     public var bundleHeadline: String {
         guard bundles.isEmpty else { return "Model bundle" }
@@ -860,11 +869,8 @@ public struct FlowView: View {
                 Text(model.resultHeadline)
                     .font(model.phone ? .largeTitle : .title)
                     .foregroundStyle(model.resultRefused ? .orange : .primary)
-                if model.report?.status == "incomplete",
-                   let reason = model.report?.message,
-                   !reason.isEmpty,
-                   reason != model.report?.summary {
-                    Text(reason)
+                if let reason = model.resultReason {
+                    Text(reason).foregroundStyle(.orange)
                 }
                 ForEach(PhonePreview.contextLines(model.report), id: \.self) { line in
                     Text(line)

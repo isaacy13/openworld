@@ -1180,6 +1180,7 @@ class OpenWorld(Gtk.Application):
             or "warn" in self.summary.get_css_classes()
             or self.reason.get_text() != "The file was not fully decoded."
             or not self.reason.get_visible()
+            or "warn" not in self.reason.get_css_classes()
         ):
             self._exercise_fail(f"incomplete reason missing: {self.summary.get_text()!r} {self.reason.get_text()!r}")
             return False

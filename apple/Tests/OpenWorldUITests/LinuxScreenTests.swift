@@ -1091,7 +1091,15 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.report?.status, "incomplete")
             XCTAssertEqual(model.report?.message, "The file was not fully decoded.")
             XCTAssertNotEqual(model.report?.message, model.report?.summary)
+            XCTAssertFalse(model.resultRefused)
+            XCTAssertEqual(model.resultHeadline, Copy.incomplete)
+            XCTAssertEqual(model.resultReason, "The file was not fully decoded.")
+            let preview = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(Array(preview.prefix(3)), ["Back", "Incomplete.", "The file was not fully decoded."])
+            XCTAssertEqual(preview.filter { $0 == "The file was not fully decoded." }.count, 1)
             _ = FlowView(model: model, importControl: self.control).body
+            model.report = nil
+            XCTAssertNil(model.resultReason)
         }
     }
 

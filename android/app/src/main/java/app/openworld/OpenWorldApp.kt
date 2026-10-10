@@ -210,7 +210,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             style = MaterialTheme.typography.headlineMedium,
                             color = if (refusedResult) warningColor else Color.Unspecified,
                         )
-                        if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
+                        if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason, color = warningColor)
                         if (model.context.isNotBlank()) Text(model.context)
                         if (model.warnings.isNotBlank()) Text(model.warnings, color = warningColor)
                         model.candidateRows.forEach { row ->

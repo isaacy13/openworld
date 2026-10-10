@@ -83,10 +83,7 @@ public enum PhonePreview {
             return lines
         case "results", "leaving":
             var lines = ["Back", model.resultHeadline]
-            if model.report?.status == "incomplete",
-               let reason = model.report?.message,
-               !reason.isEmpty,
-               reason != model.report?.summary {
+            if let reason = model.resultReason {
                 lines.append(reason)
             }
             lines.append(contentsOf: contextLines(model.report))

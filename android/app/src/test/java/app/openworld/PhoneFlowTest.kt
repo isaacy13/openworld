@@ -10,10 +10,12 @@ import android.os.ParcelFileDescriptor
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -1503,6 +1505,12 @@ class PhoneScreenTest {
         compose.onNodeWithText("Incomplete.").assertExists()
         compose.onNodeWithText("The file was not fully decoded.").assertExists()
         compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        assertTrue(textUsesWarningColor("The file was not fully decoded."))
+        assertFalse(textUsesWarningColor("Incomplete."))
+        model.incompleteReason = "The result could not be written."
+        compose.onNodeWithText("The result could not be written.").assertExists()
+        compose.onNodeWithText("Incomplete.").assertExists()
+        assertTrue(textUsesWarningColor("The result could not be written."))
     }
 
     @Test
@@ -1716,6 +1724,25 @@ class PhoneScreenTest {
         assertEquals("Possible candidate. Not an identification.", model.summary)
         assertTrue(result.exists())
         assertTrue(result != model.resultDir)
+    }
+
+    /** Glyph cores of a warning are the same brown the desktop uses. A title stays off that brown. */
+    private fun textUsesWarningColor(text: String): Boolean {
+        val pixels = compose.onNodeWithText(text).captureToImage().toPixelMap()
+        var brown = 0
+        for (y in 0 until pixels.height) {
+            for (x in 0 until pixels.width) {
+                val color = pixels[x, y]
+                if (color.alpha < 0.4f) continue
+                val red = color.red
+                val green = color.green
+                val blue = color.blue
+                if (red in 0.35f..0.75f && green in 0.15f..0.55f && blue < 0.2f && red > green && green > blue) {
+                    brown++
+                }
+            }
+        }
+        return brown > 8
     }
 }
 
