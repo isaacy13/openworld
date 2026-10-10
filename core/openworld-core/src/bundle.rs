@@ -127,6 +127,8 @@ pub fn load_bundles(dir: &Path) -> Result<Vec<Bundle>, BundleError> {
     for name in names {
         bundles.push(load_bundle(&dir.join(&name))?);
     }
+    // The bundle that will run is the first row. The rest stay in name order.
+    bundles.sort_by_key(|bundle| !bundle.preselected());
     Ok(bundles)
 }
 

@@ -97,6 +97,7 @@ final class PhoneContractTests: XCTestCase {
         let file = try still("blank")
         let size = try pngSize(file)
         let rows = try JSONDecoder().decode(BundleList.self, from: run(PhoneArguments.bundles(catalog: bundlesDir()))).bundles
+        XCTAssertEqual(rows.first?.id, "fast")
         XCTAssertTrue(rows.contains { $0.id == "fast" && $0.preselected })
         XCTAssertTrue(rows.contains { $0.id == "accurate" && $0.curveLine.contains("Not measured yet.") })
         let media = MediaArguments(width: size.0, height: size.1, fps: 0, frames: 1, duration: 0, video: false, containerUnix: nil)

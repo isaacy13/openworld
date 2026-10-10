@@ -14,7 +14,11 @@ import Foundation
 
 /// The choice that will run, in the same words on every screen.
 public func markedChoice(_ title: String, selected: Bool) -> String {
-    selected ? "\(title). Selected." : title
+    guard selected else { return title }
+    if title.hasSuffix(".") {
+        return "\(title) Selected."
+    }
+    return "\(title). Selected."
 }
 
 public enum Step {

@@ -62,10 +62,12 @@ final class OpenWorldUITests: XCTestCase {
     func testTheChosenBundleIsMarked() throws {
         XCTAssertEqual(markedChoice("Fast", selected: true), "Fast. Selected.")
         XCTAssertEqual(markedChoice("Accurate", selected: false), "Accurate")
+        XCTAssertEqual(markedChoice("Complete. Every decoded frame.", selected: true), "Complete. Every decoded frame. Selected.")
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
             model.choose(try self.still("blank"))
             model.loadBundles()
+            XCTAssertEqual(model.bundles.first?.id, "fast")
             XCTAssertEqual(markedChoice("Fast", selected: model.bundleID == "fast"), "Fast. Selected.")
             model.bundleID = "accurate"
             XCTAssertEqual(markedChoice("Accurate", selected: model.bundleID == "accurate"), "Accurate. Selected.")

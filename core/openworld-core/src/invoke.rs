@@ -376,7 +376,7 @@ mod tests {
             .iter()
             .map(|row| row["id"].as_str().unwrap().to_string())
             .collect();
-        assert!(ids.contains(&"fast".to_string()));
+        assert_eq!(ids.first().map(String::as_str), Some("fast"));
         assert!(ids.contains(&"accurate".to_string()));
 
         let update: Value = serde_json::from_str(&invoke_argv(&[

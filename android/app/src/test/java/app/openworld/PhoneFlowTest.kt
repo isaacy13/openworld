@@ -235,7 +235,7 @@ class PhoneFlowTest {
         choose(model, still("blank"))
         model.continueFromDevice()
         val ids = model.bundleRows.map { it.first }
-        assertTrue(ids.contains("fast"))
+        assertEquals("fast", ids.first())
         assertTrue(ids.contains("accurate"))
         assertEquals("fast", model.bundleId)
         assertTrue(model.bundleRows.any { it.third.contains("Not measured yet.") })

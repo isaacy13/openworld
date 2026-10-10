@@ -103,9 +103,9 @@ enum ScreenCopy {
         case "size":
             return [
                 "Detection size",
-                "640 px on the long side",
-                "Complete. Every decoded frame.",
-                "Measured. 5 frames a second, plus the tracker.",
+                markedChoice("640 px on the long side", selected: model.longSide == "640"),
+                markedChoice("Complete. Every decoded frame.", selected: model.coverage == "complete"),
+                markedChoice("Measured. 5 frames a second, plus the tracker.", selected: model.coverage == "measured"),
                 Copy.brief,
             ]
         case "estimate":

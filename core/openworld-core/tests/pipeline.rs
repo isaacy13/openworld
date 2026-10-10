@@ -60,6 +60,7 @@ fn paint_face(id: u16, module: u32, x: u32, y: u32, w: u32, h: u32) -> RgbImage 
 fn catalog_rows_name_fast_and_keep_accurate_unmeasured() {
     let all = bundles();
     assert_eq!(all.len(), 2);
+    assert_eq!(all[0].id, "fast");
     let fast = all.iter().find(|b| b.id == "fast").unwrap();
     let accurate = all.iter().find(|b| b.id == "accurate").unwrap();
     assert!(fast.preselected());
