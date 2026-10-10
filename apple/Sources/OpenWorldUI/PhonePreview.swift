@@ -75,7 +75,7 @@ public enum PhonePreview {
             }
             return lines
         case "results", "leaving":
-            var lines = [model.report?.summary ?? model.error ?? Copy.incomplete, "Choose another file", "Back"]
+            var lines = ["Back", model.report?.summary ?? model.error ?? Copy.incomplete]
             if model.report?.status == "incomplete",
                let reason = model.report?.message,
                !reason.isEmpty,
@@ -87,23 +87,27 @@ public enum PhonePreview {
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
             if let note = model.report?.perceptionNote { lines.append(note) }
             lines.append(contentsOf: model.report?.warnings ?? [])
-            if model.report?.candidates.isEmpty == false {
-                if let candidate = model.report?.candidates.first {
-                    if candidate.crop?.isEmpty == false { lines.append("Crop") }
-                    if candidate.frame?.isEmpty == false { lines.append("Frame") }
-                    lines.append(candidate.posterLine)
-                }
+            for candidate in model.report?.candidates ?? [] {
+                lines.append(candidate.wording)
+                if candidate.crop?.isEmpty == false { lines.append("Crop") }
+                if candidate.frame?.isEmpty == false { lines.append("Frame") }
+                if !candidate.uncertainty.isEmpty { lines.append(candidate.uncertainty) }
+                lines.append(candidate.posterLine)
                 lines.append("Open FBI page")
             }
-            if model.report?.inventory.isEmpty == false {
+            if let items = model.report?.inventory, !items.isEmpty {
                 lines.append("Crops from this file.")
+                for item in items {
+                    lines.append(item.label)
+                }
             }
-            for item in model.report?.inventory ?? [] where !lines.contains(item.label) {
-                lines.append(item.label)
-            }
+            lines.append(contentsOf: model.report?.disclosure ?? [])
+            if let notice = model.leaveError { lines.append(notice) }
             if model.resultDirectory != nil {
                 lines.append("Delete")
             }
+            if let notice = model.deleteNotice { lines.append(notice) }
+            lines.append("Choose another file")
             if screen == "leaving" {
                 lines.append(Copy.leaving)
                 if let page = model.leavingURL?.absoluteString { lines.append(page) }
