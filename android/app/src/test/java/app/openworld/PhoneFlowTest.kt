@@ -704,6 +704,15 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun anAvifHeaderStaysAStill() {
+        assertTrue(StillMotion.stillContainer(headerFile("ftypheic")))
+        assertTrue(StillMotion.stillContainer(headerFile("ftypavif")))
+        assertTrue(StillMotion.stillContainer(headerFile("ftypavis")))
+        assertTrue(StillMotion.stillContainer(headerFile("ftypmsf1")))
+        assertFalse(StillMotion.stillContainer(headerFile("ftypisom")))
+    }
+
+    @Test
     fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
         val apng = movingPicture("apng")
         assertTrue(StillMotion.animatedPng(apng))
@@ -2586,6 +2595,12 @@ private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentT
     }
     assertEquals(Step.Results, model.step)
     assertFalse(model.scanning)
+}
+
+private fun headerFile(brand: String): File {
+    val out = File.createTempFile("ow-brand", null)
+    out.writeBytes(ByteArray(4) + brand.toByteArray(Charsets.US_ASCII))
+    return out
 }
 
 private fun still(kind: String): File {

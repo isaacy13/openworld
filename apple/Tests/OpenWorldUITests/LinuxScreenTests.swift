@@ -1192,6 +1192,12 @@ final class OpenWorldUITests: XCTestCase {
         let heicBytes = [UInt8](repeating: 0, count: 4) + Array("ftypheic".utf8)
         try Data(heicBytes).write(to: heic)
         XCTAssertFalse(StillMotion.movieContainer(heic))
+        for brand in ["avif", "avis", "msf1"] {
+            let still = root.appendingPathComponent(brand)
+            let bytes = [UInt8](repeating: 0, count: 4) + Array("ftyp\(brand)".utf8)
+            try Data(bytes).write(to: still)
+            XCTAssertFalse(StillMotion.movieContainer(still), brand)
+        }
         let png = try still("blank")
         XCTAssertFalse(StillMotion.movieContainer(png))
         let jpeg = root.appendingPathComponent("photo")

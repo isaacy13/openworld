@@ -11,6 +11,21 @@ import java.io.InputStream
 object StillMotion {
     fun animatedPng(file: File): Boolean = file.inputStream().use { animatedPng(it) }
 
+    /**
+     * HEIF and AVIF stay stills. A movie container, including an extensionless video, does not.
+     * The major brand is the four bytes after `ftyp`.
+     */
+    fun stillContainer(file: File): Boolean {
+        val header = ByteArray(12)
+        val read = file.inputStream().use { it.read(header) }
+        if (read < 12) return false
+        if (!header.copyOfRange(4, 8).contentEquals("ftyp".encodeToByteArray())) return false
+        val brand = String(header, 8, 4, Charsets.US_ASCII)
+        return brand in stillBrands
+    }
+
+    private val stillBrands = setOf("heic", "heix", "hevc", "heif", "mif1", "msf1", "avif", "avis")
+
     fun animatedWebp(file: File): Boolean = file.inputStream().use { animatedWebp(it) }
 
     private fun animatedPng(input: InputStream): Boolean {

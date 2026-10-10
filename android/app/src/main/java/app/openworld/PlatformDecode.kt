@@ -198,7 +198,7 @@ object PlatformDecode {
         return JpegOrientation.tiffPageTags(file.readBytes())?.size ?: 1
     }
 
-    /** JPEG, GIF, WebP, BMP, or HEIF. A text file has none of these headers. */
+    /** JPEG, GIF, WebP, BMP, HEIF, or AVIF. A text file has none of these headers. */
     private fun hasImageHeader(file: File): Boolean {
         val header = ByteArray(16)
         val read = file.inputStream().use { it.read(header) }
@@ -213,11 +213,7 @@ object PlatformDecode {
             header.copyOfRange(8, 12).contentEquals("WEBP".encodeToByteArray())
         ) return true
         if (header[0] == 'B'.code.toByte() && header[1] == 'M'.code.toByte()) return true
-        if (read >= 12 && header.copyOfRange(4, 8).contentEquals("ftyp".encodeToByteArray())) {
-            val brand = String(header, 8, 4, Charsets.US_ASCII)
-            return brand in setOf("heic", "heix", "hevc", "heif", "mif1")
-        }
-        return false
+        return StillMotion.stillContainer(file)
     }
 
     /** Width and height from a PNG header, or null when the file is not a PNG. */
