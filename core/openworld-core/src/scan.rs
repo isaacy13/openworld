@@ -306,9 +306,7 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     }
     let mut report = engine.finish();
     if let Err(err) = write_report(&req.out_dir, &report) {
-        report.status = "incomplete".into();
-        report.summary = INCOMPLETE.into();
-        report.message = err;
+        mark_unwritable(&mut report, err);
     }
     report
 }
@@ -370,9 +368,7 @@ fn scan_decoded_dir(
     engine.frames_decoded = frames.len() as u64;
     let mut report = engine.finish();
     if let Err(err) = write_report(&req.out_dir, &report) {
-        report.status = "incomplete".into();
-        report.summary = INCOMPLETE.into();
-        report.message = err;
+        mark_unwritable(&mut report, err);
     }
     report
 }
@@ -406,9 +402,11 @@ pub fn scan_images(
         }
     }
     engine.frames_decoded = frames.len() as u64;
-    let report = engine.finish();
+    let mut report = engine.finish();
     if let Some(dir) = &opts.out_dir {
-        let _ = write_report(dir, &report);
+        if let Err(err) = write_report(dir, &report) {
+            mark_unwritable(&mut report, err);
+        }
     }
     report
 }
@@ -1048,6 +1046,14 @@ fn prepare_out(dir: &Path) -> Result<(), ScanReport> {
 fn write_report(dir: &Path, report: &ScanReport) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(report).map_err(|e| e.to_string())?;
     fs::write(dir.join("result.json"), bytes).map_err(|_| "The result could not be written.".to_string())
+}
+
+/// The scan finished in memory and the result file did not. That is unfinished, so the clearance sentence stays off.
+fn mark_unwritable(report: &mut ScanReport, err: String) {
+    report.status = "incomplete".into();
+    report.summary = INCOMPLETE.into();
+    report.message = err;
+    report.disclosure = disclosure_lines(false);
 }
 
 pub fn refused(code: &str, message: &str) -> ScanReport {

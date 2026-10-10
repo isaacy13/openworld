@@ -868,3 +868,78 @@ fn an_estimate_uses_the_platform_duration_or_the_frame_rate() {
     .unwrap();
     assert!(!from_rate.human.is_empty());
 }
+
+/// A finished scan whose result file cannot be saved is unfinished. The clearance sentence stays off.
+#[test]
+fn a_result_file_that_cannot_be_written_stays_incomplete() {
+    let bundle = fast();
+    let dir = tempfile::tempdir().unwrap();
+    let posters = pack(dir.path());
+    let scene = demo_scene(bundle.threshold);
+    let scene_path = dir.path().join("scene.png");
+    scene.image.save(&scene_path).unwrap();
+    let out = dir.path().join("out");
+
+    let mut block = |_| {
+        let _ = fs::create_dir(out.join("result.json"));
+    };
+    let report = scan_path(
+        &request(
+            dir.path(),
+            scene_path,
+            "fast",
+            posters.clone(),
+            RequestExtra::default(),
+        ),
+        &mut block,
+    );
+    assert_unwritable(&report, &out);
+
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    scene.image.save(frames.join("frame_000001.png")).unwrap();
+    let input = dir.path().join("clip.png");
+    fs::write(&input, b"clip").unwrap();
+    let mut extra = RequestExtra::default();
+    extra.frames = Some(frames);
+    extra.media = Some(MediaFacts {
+        width: scene.image.width(),
+        height: scene.image.height(),
+        fps: 1.0,
+        frames: 1,
+        duration_sec: 1.0,
+        video: true,
+        container_unix: None,
+    });
+    let decoded = scan_path(
+        &request(dir.path(), input, "fast", posters.clone(), extra),
+        &mut block,
+    );
+    assert_unwritable(&decoded, &out);
+
+    let loaded = posters::load_pack(&posters, now()).unwrap();
+    let opts = ScanOpts {
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Complete,
+        execution: Execution::Cpu,
+        form_factor: FormFactor::Computer,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        fps: 1.0,
+        frame_count_hint: Some(1),
+        warnings: Vec::new(),
+        out_dir: Some(out.clone()),
+    };
+    let images = scan_images(&[scene.image], &bundle, &loaded, &opts, &mut block);
+    assert_unwritable(&images, &out);
+}
+
+fn assert_unwritable(report: &openworld_core::ScanReport, out: &Path) {
+    assert_eq!(report.status, "incomplete");
+    assert_eq!(report.summary, INCOMPLETE);
+    assert_eq!(report.message, "The result could not be written.");
+    assert!(report.disclosure.iter().any(|line| line == "Nothing is uploaded."));
+    assert!(report.disclosure.iter().all(|line| line != NO_CLEARANCE));
+    assert!(!out.join("result.json").is_file());
+}

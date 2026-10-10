@@ -2,8 +2,12 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_openworld")
@@ -1180,6 +1184,94 @@ fn a_fixture_still_answer_is_a_refusal() {
         assert!(err.is_empty(), "{err}");
         assert!(!out.exists(), "{sentence}");
     }
+}
+
+#[test]
+fn a_result_file_that_cannot_be_written_stays_incomplete() {
+    let dir = tempfile::tempdir().unwrap();
+    let scene = dir.path().join("scene.png");
+    let (code, text, err) = run(false, &["fixture-still", "--scene", "--out", scene.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let posters = dir.path().join("posters");
+    let (code, text, err) = run(
+        false,
+        &["posters", "write-fixture", "--out", posters.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+
+    let out = dir.path().join("out");
+    let (code, text, err) = scan_while_result_is_a_directory(
+        false,
+        scene.to_str().unwrap(),
+        posters.to_str().unwrap(),
+        &out,
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert!(err.is_empty(), "{err}");
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines.first(), Some(&"Scanning"));
+    let report_at = lines
+        .iter()
+        .position(|line| *line == "Incomplete.")
+        .expect(&text);
+    assert_eq!(lines.get(report_at + 1), Some(&"The result could not be written."));
+    assert!(lines.contains(&"Nothing is uploaded."));
+    assert!(!lines.contains(&"No candidate is not a clearance."));
+    assert!(!out.join("result.json").is_file());
+
+    let json_out = dir.path().join("json-out");
+    let (code, text, err) = scan_while_result_is_a_directory(
+        true,
+        scene.to_str().unwrap(),
+        posters.to_str().unwrap(),
+        &json_out,
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(!text.lines().any(|line| line == "Scanning"));
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "incomplete");
+    assert_eq!(doc["summary"], "Incomplete.");
+    assert_eq!(doc["message"], "The result could not be written.");
+    let disclosure = doc["disclosure"].as_array().expect("disclosure");
+    assert!(disclosure.iter().any(|line| line == "Nothing is uploaded."));
+    assert!(disclosure.iter().all(|line| line != "No candidate is not a clearance."));
+    assert!(!json_out.join("result.json").is_file());
+}
+
+fn scan_while_result_is_a_directory(
+    json: bool,
+    input: &str,
+    posters: &str,
+    out: &Path,
+) -> (Option<i32>, String, String) {
+    let watched = out.to_path_buf();
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&stop);
+    let watcher = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !flag.load(Ordering::Relaxed) && Instant::now() < deadline {
+            if watched.is_dir() {
+                let _ = fs::create_dir(watched.join("result.json"));
+            }
+            std::hint::spin_loop();
+        }
+    });
+    let result = run(
+        json,
+        &[
+            "scan",
+            "--input",
+            input,
+            "--posters",
+            posters,
+            "--out",
+            out.to_str().unwrap(),
+        ],
+    );
+    stop.store(true, Ordering::Relaxed);
+    watcher.join().unwrap();
+    result
 }
 
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
