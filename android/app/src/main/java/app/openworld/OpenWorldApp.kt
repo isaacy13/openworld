@@ -251,7 +251,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 }
                             }
                         }
-                        Text(model.detail)
+                        if (model.detail.isNotBlank()) Text(model.detail)
                         model.leaveNotice?.let { Text(it, color = warningColor) }
                         if (model.resultDir != null) {
                             Button(onClick = model::deleteResult) { Text("Delete") }

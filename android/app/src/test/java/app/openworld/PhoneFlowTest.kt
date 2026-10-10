@@ -1839,6 +1839,7 @@ class PhoneScreenTest {
         assertTrue("$kept", fileAt >= 0 && deletedAt > fileAt)
         assertEquals(1, kept.count { it == "The file could not be read. Refusing." })
         assertEquals(1, kept.count { it == "Deleted." })
+        assertFalse(kept.any { it.isBlank() })
         compose.onAllNodesWithText("Nothing is uploaded.").assertCountEquals(0)
         compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
         compose.onAllNodesWithText("Delete").assertCountEquals(0)
