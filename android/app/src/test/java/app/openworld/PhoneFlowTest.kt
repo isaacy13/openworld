@@ -2232,6 +2232,37 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun changingTheTextSizeKeepsTheOpenFile() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("shared.png").assertExists()
+        val open = compose.activity
+        val scaled = Configuration(open.resources.configuration)
+        scaled.fontScale = 2f
+        val next = window.controller.configurationChange(scaled)
+        compose.waitForIdle()
+        assertSame(open, next.get())
+        assertFalse(open.isDestroyed)
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        compose.onNodeWithText("shared.png").assertExists()
+        compose.onNodeWithText("Choose a photo or video").assertDoesNotExist()
+        assertEquals(2f, open.resources.configuration.fontScale)
+        val info = open.packageManager.getActivityInfo(open.componentName, 0)
+        assertEquals(ActivityInfo.CONFIG_FONT_SCALE, info.configChanges and ActivityInfo.CONFIG_FONT_SCALE)
+    }
+
+    @Test
     fun theSystemBackStepsToThePreviousPage() {
         val file = still("blank")
         val uri = Uri.parse("content://app.openworld/shared.png")
