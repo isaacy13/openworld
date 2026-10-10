@@ -711,7 +711,22 @@ fn analyze(
                 println!("{line}");
             }
         }
-        (prompt_on("Missing", json_mode)?, prompt_on("Wanted", json_mode)?)
+        (
+            match prompt_on("Missing", json_mode) {
+                Ok(on) => on,
+                Err(message) if message == openworld_core::copy::CHOOSE_CLASS => {
+                    return class_refusal(json_mode);
+                }
+                Err(message) => return Err(message),
+            },
+            match prompt_on("Wanted", json_mode) {
+                Ok(on) => on,
+                Err(message) if message == openworld_core::copy::CHOOSE_CLASS => {
+                    return class_refusal(json_mode);
+                }
+                Err(message) => return Err(message),
+            },
+        )
     };
     let req = match request(
         bundles,
@@ -1114,6 +1129,23 @@ fn estimate_lines(
     }
     lines.push(openworld_core::copy::estimate_class_line(missing, wanted).into());
     lines
+}
+
+fn class_refusal(json_mode: bool) -> Result<i32, String> {
+    let message = openworld_core::copy::CHOOSE_CLASS;
+    emit(
+        json_mode,
+        json!({
+            "status": "refused",
+            "summary": message,
+            "message": message,
+        }),
+    );
+    if !json_mode {
+        println!();
+    }
+    speak(json_mode, [message]);
+    Ok(2)
 }
 
 fn class_menu_lines() -> Vec<String> {
