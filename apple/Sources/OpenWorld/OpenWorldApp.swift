@@ -85,7 +85,8 @@ struct MacRoot: View {
 @MainActor
 private func importShared(_ url: URL, model: FlowModel) {
     guard let name = SharedImport.fileName(from: url),
-          let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.openworld")
+          let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.openworld"),
+          let file = SharedImport.storedFile(in: container, name: name)
     else { return }
-    model.choose(container.appendingPathComponent(name))
+    model.choose(file)
 }

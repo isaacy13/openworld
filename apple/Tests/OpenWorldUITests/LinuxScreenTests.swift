@@ -66,6 +66,36 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: marker), Data("dir".utf8))
     }
 
+    func testAShareOpensTheFileStoredUnderThatName() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-name-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("group")
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let outside = root.appendingPathComponent("secret")
+        try Data("secret".utf8).write(to: outside)
+        let kept = container.appendingPathComponent("photo.png")
+        try Data("kept".utf8).write(to: kept)
+
+        let opened = try XCTUnwrap(SharedImport.storedFile(in: container, name: "photo.png"))
+        XCTAssertEqual(opened.standardizedFileURL.path, kept.standardizedFileURL.path)
+        let spaced = try XCTUnwrap(SharedImport.storedFile(in: container, name: "a b.png"))
+        XCTAssertEqual(spaced.lastPathComponent, "a b.png")
+        let ampersand = try XCTUnwrap(SharedImport.storedFile(in: container, name: "a&b.png"))
+        XCTAssertEqual(ampersand.lastPathComponent, "a&b.png")
+        XCTAssertEqual(ampersand.deletingLastPathComponent().standardizedFileURL.path, container.standardizedFileURL.path)
+
+        for name in ["../secret", "..", ".", "foo/bar.png", "foo/../../secret", "a\0b.png", "", "a\\b.png"] {
+            XCTAssertNil(SharedImport.storedFile(in: container, name: name), name)
+        }
+        let crafted = URL(string: "openworld://import?name=..%2Fsecret")!
+        let decoded = try XCTUnwrap(SharedImport.fileName(from: crafted))
+        XCTAssertEqual(decoded, "../secret")
+        XCTAssertNil(SharedImport.storedFile(in: container, name: decoded))
+        XCTAssertEqual(try Data(contentsOf: outside), Data("secret".utf8))
+        XCTAssertEqual(try Data(contentsOf: kept), Data("kept".utf8))
+    }
+
     func testALongFileNameBreaksBetweenCharacters() {
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)

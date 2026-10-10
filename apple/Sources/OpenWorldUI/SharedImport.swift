@@ -19,6 +19,17 @@ public enum SharedImport {
             .value
     }
 
+    /// The file stored under `name` in `container`.
+    /// That name is one file in the folder.
+    public static func storedFile(in container: URL, name: String) -> URL? {
+        guard isSingleFileName(name) else { return nil }
+        let dest = container.appendingPathComponent(name).standardizedFileURL
+        let root = container.standardizedFileURL
+        guard dest.deletingLastPathComponent().standardizedFileURL.path == root.path else { return nil }
+        guard dest.lastPathComponent == name else { return nil }
+        return dest
+    }
+
     /// Copies `source` into `container` under its file name and keeps that file's age.
     /// The open URL is returned only after that copy is the file stored there.
     /// A copy that fails leaves a file already stored under that name.
@@ -66,6 +77,12 @@ public enum SharedImport {
             return nil
         }
         return url(fileName: name)
+    }
+
+    private static func isSingleFileName(_ name: String) -> Bool {
+        guard !name.isEmpty, name != ".", name != ".." else { return false }
+        if name.contains("/") || name.contains("\\") || name.contains("\0") { return false }
+        return true
     }
 
     private static let allowed: CharacterSet = {
