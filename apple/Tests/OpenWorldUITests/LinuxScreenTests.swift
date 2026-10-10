@@ -292,6 +292,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(model.canAnalyze)
             XCTAssertFalse(model.showBriefOnEstimate)
             XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("Choose missing, wanted, or both.") == true)
             _ = FlowView(model: model, importControl: self.control).body
         }
     }

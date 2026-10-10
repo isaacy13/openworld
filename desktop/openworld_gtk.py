@@ -469,10 +469,11 @@ class OpenWorld(Gtk.Application):
             self.estimate_body.set_text(payload.get("message", "Refusing."))
             self.estimate_ok = False
             self.can_analyze = False
-            self._apply_class_gate()
+            self._show_classes(False)
             return
         self.estimate_ok = True
         self.can_analyze = True
+        self._show_classes(True)
         lines = [payload.get("human", ""), payload.get("caveat", "")]
         if payload.get("device_note"):
             lines.append(payload["device_note"])
@@ -503,6 +504,11 @@ class OpenWorld(Gtk.Application):
         if self.include_wanted:
             return "Wanted."
         return "Choose missing, wanted, or both."
+
+    def _show_classes(self, visible: bool) -> None:
+        self.missing_button.set_visible(visible)
+        self.wanted_button.set_visible(visible)
+        self.class_label.set_visible(visible)
 
     def _apply_class_gate(self) -> None:
         self.class_label.set_text(self.class_line())
@@ -1066,6 +1072,26 @@ class OpenWorld(Gtk.Application):
         if self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():
             self._exercise_fail(f"a bad file offered Analyze: {self.estimate_body.get_text()!r}")
             return False
+        if (
+            self.missing_button.get_visible()
+            or self.wanted_button.get_visible()
+            or self.class_label.get_visible()
+            or "Choose missing, wanted, or both." in self.estimate_body.get_text()
+        ):
+            self._exercise_fail("a refused estimate asked for a poster class")
+            return False
+        refusal_shot = os.environ.get("OPENWORLD_REFUSAL_SHOT")
+        if refusal_shot:
+            subprocess.run(
+                ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
+                check=False,
+            )
+            context = GLib.MainContext.default()
+            deadline = time.time() + 0.4
+            while time.time() < deadline:
+                context.iteration(False)
+                time.sleep(0.05)
+            self._grab(refusal_shot)
         self.go_back()
         if self.stack.get_visible_child_name() != "size" or not self.primary.get_sensitive():
             self._exercise_fail("Back left Continue disabled after a refusal")
@@ -1122,7 +1148,13 @@ class OpenWorld(Gtk.Application):
         if "Fast. 640 px on the long side. Every decoded frame." not in text or "Bundle fast" in text or "Coverage complete" in text:
             self._exercise_fail(f"estimate did not repeat the choice in plain words: {text}")
             return False
-        if self.class_label.get_text() != "Missing and wanted." or self._class_args():
+        if (
+            not self.missing_button.get_visible()
+            or not self.wanted_button.get_visible()
+            or not self.class_label.get_visible()
+            or self.class_label.get_text() != "Missing and wanted."
+            or self._class_args()
+        ):
             self._exercise_fail(f"classes did not start on: {self.class_label.get_text()!r} {self._class_args()}")
             return False
         self.wanted_button.set_active(False)

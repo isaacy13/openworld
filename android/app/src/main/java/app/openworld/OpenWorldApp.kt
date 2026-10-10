@@ -118,27 +118,29 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     Step.Estimate -> {
                         Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
                         Text(model.estimateText)
-                        Row {
-                            Checkbox(
-                                checked = model.includeMissing,
-                                onCheckedChange = {
-                                    model.includeMissing = it
-                                    model.refreshClassLine()
-                                },
-                                enabled = !model.scanning,
-                            )
-                            Text("Missing", modifier = Modifier.padding(top = 12.dp))
-                        }
-                        Row {
-                            Checkbox(
-                                checked = model.includeWanted,
-                                onCheckedChange = {
-                                    model.includeWanted = it
-                                    model.refreshClassLine()
-                                },
-                                enabled = !model.scanning,
-                            )
-                            Text("Wanted", modifier = Modifier.padding(top = 12.dp))
+                        if (model.estimateOk) {
+                            Row {
+                                Checkbox(
+                                    checked = model.includeMissing,
+                                    onCheckedChange = {
+                                        model.includeMissing = it
+                                        model.refreshClassLine()
+                                    },
+                                    enabled = !model.scanning,
+                                )
+                                Text("Missing", modifier = Modifier.padding(top = 12.dp))
+                            }
+                            Row {
+                                Checkbox(
+                                    checked = model.includeWanted,
+                                    onCheckedChange = {
+                                        model.includeWanted = it
+                                        model.refreshClassLine()
+                                    },
+                                    enabled = !model.scanning,
+                                )
+                                Text("Wanted", modifier = Modifier.padding(top = 12.dp))
+                            }
                         }
                         Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
                             Text(if (model.scanning) "Scanning" else "Analyze")

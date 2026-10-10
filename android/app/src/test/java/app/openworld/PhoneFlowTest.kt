@@ -318,7 +318,35 @@ class PhoneFlowTest {
         val model = FlowModel()
         choose(model, junk)
         model.continueFromSize()
+        assertFalse(model.estimateOk)
         assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("Refusing"))
+        model.includeMissing = false
+        model.includeWanted = false
+        model.refreshClassLine()
+        assertFalse(model.canAnalyze)
+        assertFalse(model.estimateText.contains("Choose missing, wanted, or both."))
+    }
+
+    @Test
+    fun aLaterRefusalDoesNotBringAnalyzeBack() {
+        val model = FlowModel()
+        choose(model, still("blank"))
+        model.continueFromDevice()
+        model.continueFromSize()
+        assertTrue(model.estimateOk)
+        assertTrue(model.canAnalyze)
+        val junk = File.createTempFile("openworld-junk", null)
+        junk.writeText("this is not a photo")
+        choose(model, junk)
+        model.continueFromSize()
+        assertFalse(model.estimateOk)
+        assertFalse(model.canAnalyze)
+        model.includeMissing = true
+        model.includeWanted = true
+        model.refreshClassLine()
+        assertFalse(model.canAnalyze)
+        assertFalse(model.estimateText.contains("Missing and wanted."))
         assertTrue(model.estimateText.contains("Refusing"))
     }
 
@@ -875,6 +903,20 @@ class PhoneScreenTest {
         val openAt = texts.indexOfFirst { it == "Open FBI page" }
         val disclosureAt = texts.indexOfFirst { it.contains("Nothing is uploaded.") }
         assertTrue("$texts", classAt >= 0 && openAt > classAt && disclosureAt > openAt)
+    }
+
+    @Test
+    fun aRefusedEstimateDoesNotAskForAClass() {
+        val model = FlowModel()
+        model.step = Step.Estimate
+        model.estimateText = "Bad codec or unreadable file. Refusing."
+        model.canAnalyze = false
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Bad codec or unreadable file. Refusing.").assertExists()
+        compose.onAllNodesWithText("Missing").assertCountEquals(0)
+        compose.onAllNodesWithText("Wanted").assertCountEquals(0)
+        compose.onAllNodesWithText("Choose missing, wanted, or both.").assertCountEquals(0)
+        compose.onNodeWithText("Analyze").assertIsNotEnabled()
     }
 
     @Test

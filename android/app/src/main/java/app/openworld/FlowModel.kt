@@ -52,7 +52,8 @@ class FlowModel {
     var includeMissing by mutableStateOf(true)
     var includeWanted by mutableStateOf(true)
     var estimateText by mutableStateOf("")
-    private var estimateOk = false
+    var estimateOk by mutableStateOf(false)
+        private set
     private var estimateBody = ""
     var summary by mutableStateOf("")
     var status by mutableStateOf("")
@@ -241,7 +242,9 @@ class FlowModel {
     fun continueFromSize() {
         val file = localCopy
         if (file == null) {
-            estimateText = "The file could not be read. Refusing."
+            estimateOk = false
+            estimateBody = "The file could not be read. Refusing."
+            estimateText = estimateBody
             canAnalyze = false
             step = Step.Estimate
             return
@@ -279,7 +282,9 @@ class FlowModel {
                 refreshClassLine()
             }
         } catch (err: IOException) {
-            estimateText = err.message ?: "The scan program is not on this device. Refusing."
+            estimateOk = false
+            estimateBody = err.message ?: "The scan program is not on this device. Refusing."
+            estimateText = estimateBody
             canAnalyze = false
         }
         step = Step.Estimate
@@ -321,8 +326,9 @@ class FlowModel {
     }
 
     fun refreshClassLine() {
+        if (!estimateOk) return
         estimateText = if (estimateBody.isEmpty()) classLine() else estimateBody + "\n" + classLine()
-        if (estimateOk) canAnalyze = includeMissing || includeWanted
+        canAnalyze = includeMissing || includeWanted
     }
 
     fun classArgs(missing: Boolean = includeMissing, wanted: Boolean = includeWanted): List<String> {
