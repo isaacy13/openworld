@@ -129,6 +129,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     opts.out_dir = Some(dir.path().join("out"));
     let mut progress_labels = Vec::new();
     let report = scan_images(&[scene.image], &bundle, &pack, &opts, &mut |event| {
+        assert_eq!(event.frame_label, "Frame 1.");
         progress_labels.push(event.label);
     });
     assert!(progress_labels.iter().any(|label| label == VEHICLE_NOT_PERSON), "{progress_labels:?}");

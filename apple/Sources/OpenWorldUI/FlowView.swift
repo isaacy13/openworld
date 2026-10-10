@@ -28,6 +28,7 @@ public enum Step {
 public struct LiveCrop: Identifiable, Equatable {
     public let id: Int
     public let label: String
+    public let frameLabel: String
     public let path: String
 }
 
@@ -284,8 +285,8 @@ public final class FlowModel: ObservableObject {
         }
     }
 
-    func appendLiveCrop(label: String, path: String) {
-        liveCrops.append(LiveCrop(id: liveCrops.count, label: label, path: path))
+    func appendLiveCrop(label: String, frameLabel: String, path: String) {
+        liveCrops.append(LiveCrop(id: liveCrops.count, label: label, frameLabel: frameLabel, path: path))
     }
 
     /// Hop the crop onto the main thread, then let only the first one wait for the test.
@@ -302,9 +303,10 @@ public final class FlowModel: ObservableObject {
         }
         let path = directory.appendingPathComponent(relative).path
         guard FileManager.default.fileExists(atPath: path) else { return }
+        let frameLabel = (object["frame_label"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Frame"
         if Thread.isMainThread {
             MainActor.assumeIsolated {
-                model.appendLiveCrop(label: label, path: path)
+                model.appendLiveCrop(label: label, frameLabel: frameLabel, path: path)
             }
             return
         }
@@ -312,7 +314,7 @@ public final class FlowModel: ObservableObject {
         let posted = DispatchSemaphore(value: 0)
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                model.appendLiveCrop(label: label, path: path)
+                model.appendLiveCrop(label: label, frameLabel: frameLabel, path: path)
             }
             if first {
                 gate.seen?.signal()
@@ -618,6 +620,7 @@ public struct FlowView: View {
                 ForEach(model.liveCrops) { crop in
                     VStack(spacing: 4) {
                         liveImage(crop.path)
+                        Text(crop.frameLabel)
                         Text(crop.label)
                     }
                 }

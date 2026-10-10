@@ -247,11 +247,20 @@ final class OpenWorldUITests: XCTestCase {
                 "This face could not be scored.",
             ]
             XCTAssertTrue(known.contains(label), label)
+            XCTAssertTrue(model.liveCrops.allSatisfy { $0.frameLabel == "Frame 1." })
             let lines = PhonePreview.lines(screen: "estimate", model: model)
             XCTAssertEqual(lines.first, "Back")
             XCTAssertTrue(lines.contains("Scanning"))
             XCTAssertTrue(lines.contains("Crops from this file."))
             XCTAssertTrue(lines.contains(label))
+            XCTAssertTrue(lines.contains("Frame 1."))
+            let frameAt = lines.firstIndex(of: "Frame 1.")
+            let labelAt = lines.firstIndex(of: label)
+            XCTAssertNotNil(frameAt)
+            XCTAssertNotNil(labelAt)
+            if let frameAt, let labelAt {
+                XCTAssertLessThan(frameAt, labelAt)
+            }
             let crops = lines.firstIndex(of: "Crops from this file.")
             let title = lines.firstIndex(of: "Scanning")
             XCTAssertEqual(title, 1)

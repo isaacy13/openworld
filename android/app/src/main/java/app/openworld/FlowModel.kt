@@ -34,6 +34,12 @@ internal class ScanOutcome(
     val resultDir: File? = null,
 )
 
+class LiveCrop(
+    val label: String,
+    val path: String,
+    val frameLabel: String,
+)
+
 class StripCrop(
     val label: String,
     val path: String,
@@ -80,7 +86,7 @@ class FlowModel {
     var fbiUrl by mutableStateOf<String?>(null)
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<StripCrop>())
-    var liveCrops by mutableStateOf(listOf<Pair<String, String>>())
+    var liveCrops by mutableStateOf(listOf<LiveCrop>())
     var canAnalyze by mutableStateOf(true)
     var scanning by mutableStateOf(false)
     var scanGate: CountDownLatch? = null
@@ -505,9 +511,10 @@ class FlowModel {
         val path = File(out, relative)
         if (!path.isFile) return
         val absolute = path.absolutePath
+        val frameLabel = event.optString("frame_label").ifBlank { "Frame" }
         val first = progressOnce.compareAndSet(false, true)
         Handler(Looper.getMainLooper()).post {
-            liveCrops = liveCrops + (label to absolute)
+            liveCrops = liveCrops + LiveCrop(label, absolute, frameLabel)
             if (first) seen?.countDown()
         }
         if (first) hold?.await(30, TimeUnit.SECONDS)

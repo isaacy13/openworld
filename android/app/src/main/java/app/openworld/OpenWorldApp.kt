@@ -121,17 +121,18 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
-                            model.liveCrops.forEach { (label, path) ->
+                            model.liveCrops.forEach { crop ->
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val bitmap = BitmapFactory.decodeFile(path)
+                                    val bitmap = BitmapFactory.decodeFile(crop.path)
                                     if (bitmap != null) {
                                         Image(
                                             bitmap = bitmap.asImageBitmap(),
-                                            contentDescription = label,
+                                            contentDescription = crop.label,
                                             modifier = Modifier.size(112.dp),
                                         )
                                     }
-                                    Text(label)
+                                    Text(crop.frameLabel)
+                                    Text(crop.label)
                                 }
                             }
                         }

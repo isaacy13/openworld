@@ -886,7 +886,8 @@ class PhoneScreenTest {
         assertTrue(model.liveCrops.isNotEmpty())
         assertEquals(Step.Estimate, model.step)
         assertTrue(model.scanning)
-        val label = model.liveCrops.first().first
+        val label = model.liveCrops.first().label
+        assertTrue(model.liveCrops.all { it.frameLabel == "Frame 1." })
         assertTrue(
             label,
             label == "Possible candidate. Not an identification." ||
@@ -900,6 +901,7 @@ class PhoneScreenTest {
         )
         compose.onAllNodesWithText("Scanning").assertCountEquals(2)
         compose.onNodeWithText("Crops from this file.").assertExists()
+        compose.onNodeWithText("Frame 1.").assertExists()
         compose.onNodeWithText(label).assertExists()
         compose.onNodeWithText("Back").assertIsNotEnabled()
         model.back()

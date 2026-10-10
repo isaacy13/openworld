@@ -664,6 +664,9 @@ class OpenWorld(Gtk.Application):
         caption = Gtk.Label(label=label, wrap=True, justify=Gtk.Justification.CENTER)
         caption.set_max_width_chars(18)
         box.append(picture)
+        frame = event.get("frame_label") or ""
+        if frame:
+            box.append(Gtk.Label(label=frame, xalign=0.5))
         box.append(caption)
         self.strip.append(box)
         self.strip_heading.set_visible(True)
@@ -1316,7 +1319,7 @@ class OpenWorld(Gtk.Application):
         (probe / "crops").mkdir(parents=True)
         shutil.copy(path, probe / "crops" / "plate.png")
         self.out_dir = probe
-        self._add_crop({"kind": "plate", "crop": "crops/plate.png", "label": "No poster publishes a plate."})
+        self._add_crop({"kind": "plate", "crop": "crops/plate.png", "label": "No poster publishes a plate.", "frame_label": "Frame 1."})
         self._add_crop({"kind": "vehicle", "crop": "crops/plate.png", "label": "A vehicle is not a person."})
         self._add_crop({"kind": "audio", "crop": "crops/plate.png", "label": "skip me"})
         self._add_crop({"kind": "face", "label": "Not compared."})
@@ -1324,6 +1327,7 @@ class OpenWorld(Gtk.Application):
         self.out_dir = saved_out
         if (
             "No poster publishes a plate." not in live
+            or "Frame 1." not in live
             or "A vehicle is not a person." not in live
             or "skip me" in live
             or "Not compared." in live

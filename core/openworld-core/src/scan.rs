@@ -107,6 +107,7 @@ pub struct ScanReport {
 #[derive(Clone, Debug, Serialize)]
 pub struct Progress {
     pub frame_index: u64,
+    pub frame_label: String,
     pub label: String,
     pub kind: String,
     pub crop: Option<String>,
@@ -546,7 +547,7 @@ impl<'a> Engine<'a> {
                     crop: crop.clone(),
                     fiducial_id: None,
                 };
-                progress(Progress { frame_index: index, label: item.label.clone(), kind: "vehicle".into(), crop: crop.clone() });
+                progress(Progress { frame_index: index, frame_label: frame_label(index), label: item.label.clone(), kind: "vehicle".into(), crop: crop.clone() });
                 self.inventory.push(item);
             }
             Marker::Plate => self.ingest_plate(index, frame, hit.rect, orig, track_id, progress),
@@ -579,7 +580,7 @@ impl<'a> Engine<'a> {
                 crop: crop_path.clone(),
                 fiducial_id: None,
             };
-            progress(Progress { frame_index: index, label: NOT_COMPARED.into(), kind: "face".into(), crop: crop_path });
+            progress(Progress { frame_index: index, frame_label: frame_label(index), label: NOT_COMPARED.into(), kind: "face".into(), crop: crop_path });
             self.inventory.push(item);
             return;
         }
@@ -613,7 +614,7 @@ impl<'a> Engine<'a> {
                 crop: crop_path.clone(),
                 fiducial_id: None,
             };
-            progress(Progress { frame_index: index, label: item.label.clone(), kind: "face".into(), crop: crop_path });
+            progress(Progress { frame_index: index, frame_label: frame_label(index), label: item.label.clone(), kind: "face".into(), crop: crop_path });
             self.inventory.push(item);
             return;
         };
@@ -679,7 +680,7 @@ impl<'a> Engine<'a> {
             crop: crop_path.clone(),
             fiducial_id: Some(id),
         };
-        progress(Progress { frame_index: index, label: label.into(), kind: "face".into(), crop: crop_path });
+        progress(Progress { frame_index: index, frame_label: frame_label(index), label: label.into(), kind: "face".into(), crop: crop_path });
         self.inventory.push(item);
         let _ = best;
     }
@@ -756,7 +757,7 @@ impl<'a> Engine<'a> {
             crop: crop_path.clone(),
             fiducial_id: Some(id),
         };
-        progress(Progress { frame_index: index, label: label.into(), kind: "face".into(), crop: crop_path });
+        progress(Progress { frame_index: index, frame_label: frame_label(index), label: label.into(), kind: "face".into(), crop: crop_path });
         self.inventory.push(item);
         let _ = best;
     }
@@ -788,7 +789,7 @@ impl<'a> Engine<'a> {
                 crop: crop_path.clone(),
                 fiducial_id: None,
             };
-            progress(Progress { frame_index: index, label: item.label.clone(), kind: "plate".into(), crop: crop_path });
+            progress(Progress { frame_index: index, frame_label: frame_label(index), label: item.label.clone(), kind: "plate".into(), crop: crop_path });
             self.inventory.push(item);
             return;
         }
@@ -843,7 +844,7 @@ impl<'a> Engine<'a> {
             crop: crop_path,
             fiducial_id: None,
         };
-        progress(Progress { frame_index: index, label: item.label.clone(), kind: "plate".into(), crop: item.crop.clone() });
+        progress(Progress { frame_index: index, frame_label: frame_label(index), label: item.label.clone(), kind: "plate".into(), crop: item.crop.clone() });
         self.inventory.push(item);
     }
 
