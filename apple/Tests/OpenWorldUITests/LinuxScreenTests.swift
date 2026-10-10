@@ -15,8 +15,8 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
-    func testALongFileNameBreaksBetweenCharacters() throws {
-        try MainActor.assumeIsolated {
+    func testALongFileNameBreaksBetweenCharacters() {
+        MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
             let name = String(repeating: "A", count: 80) + ".png"
             model.file = URL(fileURLWithPath: "/tmp/\(name)")
