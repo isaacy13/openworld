@@ -100,6 +100,32 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnalyzeSaysScanningUntilTheResultIsReady() async throws {
+        let file = try self.still("blank")
+        let model = await MainActor.run { () -> FlowModel in
+            let model = FlowModel(phone: true)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.startScan()
+            XCTAssertTrue(model.scanning)
+            XCTAssertEqual(model.step, .estimate)
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            return model
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while await MainActor.run(body: { model.scanning }) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        await MainActor.run {
+            XCTAssertFalse(model.scanning)
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+        }
+    }
+
     func testAnUnreadableFileStaysOffTheNextPage() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)

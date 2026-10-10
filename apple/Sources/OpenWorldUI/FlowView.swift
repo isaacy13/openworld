@@ -25,6 +25,21 @@ public enum Step {
     case choose, device, bundle, size, estimate, results
 }
 
+private struct ScanPaths: Sendable {
+    var root: URL
+    var posters: URL
+    var frames: URL
+    var result: URL
+}
+
+private struct FinishedScan {
+    var report: ScanReport?
+    var error: String?
+    var keepRoot: Bool
+    var root: URL
+    var result: URL
+}
+
 @MainActor
 public final class FlowModel: ObservableObject {
     @Published public var step: Step = .choose
@@ -42,6 +57,7 @@ public final class FlowModel: ObservableObject {
     @Published public var oldFile = false
     @Published public var error: String?
     @Published public var canAnalyze = true
+    @Published public var scanning = false
     let phone: Bool
     private let core = CoreClient()
     private var scanRoot: URL?
@@ -110,6 +126,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func goBack() {
+        guard !scanning else { return }
         leavingURL = nil
         leaveError = nil
         deleteNotice = nil
@@ -130,6 +147,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func chooseAnother() {
+        guard !scanning else { return }
         guard removeResult() else { return }
         file = nil
         report = nil
@@ -150,39 +168,95 @@ public final class FlowModel: ObservableObject {
     public func analyze() {
         guard canAnalyze, let file else { return }
         guard removeResult() else { return }
+        let paths = makeScanPaths()
+        apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, paths: paths))
+    }
+
+    /// Leaves the estimate page in place and says Scanning until the result is ready.
+    public func startScan() {
+        guard !scanning, canAnalyze, let file else { return }
+        guard removeResult() else { return }
+        scanning = true
+        let paths = makeScanPaths()
+        let core = core
+        let bundleID = bundleID
+        let longSide = longSide
+        let coverage = coverage
+        let phone = phone
+        Task.detached {
+            let outcome = Self.finishedScan(
+                core: core,
+                file: file,
+                bundleID: bundleID,
+                longSide: longSide,
+                coverage: coverage,
+                phone: phone,
+                paths: paths
+            )
+            await MainActor.run {
+                self.apply(outcome)
+                self.scanning = false
+            }
+        }
+    }
+
+    private func makeScanPaths() -> ScanPaths {
         leavingURL = nil
         leaveError = nil
         deleteNotice = nil
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         scanRoot = root
-        let posters = root.appendingPathComponent("posters")
-        let frames = root.appendingPathComponent("frames")
+        return ScanPaths(
+            root: root,
+            posters: root.appendingPathComponent("posters"),
+            frames: root.appendingPathComponent("frames"),
+            result: root.appendingPathComponent("result")
+        )
+    }
+
+    private func apply(_ outcome: FinishedScan) {
+        if outcome.keepRoot, let report = outcome.report {
+            self.report = report
+            resultDirectory = outcome.result
+            error = nil
+        } else {
+            report = nil
+            resultDirectory = nil
+            try? FileManager.default.removeItem(at: outcome.root)
+            scanRoot = nil
+            error = outcome.error
+        }
+        step = .results
+    }
+
+    nonisolated private static func finishedScan(
+        core: CoreClient,
+        file: URL,
+        bundleID: String,
+        longSide: String,
+        coverage: String,
+        phone: Bool,
+        paths: ScanPaths
+    ) -> FinishedScan {
         do {
             // The fixture pack is written by the CLI before a real curve allows FBI photos.
-            try CoreClient().runPublic(posters: posters)
-            let reel = try PlatformDecoder.writeFrames(url: file, directory: frames)
-            let result = root.appendingPathComponent("result")
-            report = try core.scan(
+            try CoreClient().runPublic(posters: paths.posters)
+            let reel = try PlatformDecoder.writeFrames(url: file, directory: paths.frames)
+            let report = try core.scan(
                 input: file,
                 bundle: bundleID,
                 longSide: longSide,
                 coverage: coverage,
-                posters: posters,
-                frames: reel.directory ?? frames,
+                posters: paths.posters,
+                frames: reel.directory ?? paths.frames,
                 facts: reel,
-                out: result,
+                out: paths.result,
                 phone: phone
             )
-            resultDirectory = result
-            error = nil
+            return FinishedScan(report: report, error: nil, keepRoot: true, root: paths.root, result: paths.result)
         } catch {
-            report = nil
-            resultDirectory = nil
-            if let scanRoot { try? FileManager.default.removeItem(at: scanRoot) }
-            self.scanRoot = nil
-            self.error = error.localizedDescription
+            return FinishedScan(report: nil, error: error.localizedDescription, keepRoot: false, root: paths.root, result: paths.result)
         }
-        step = .results
     }
 
     /// Ask the library before any FBI page is shown. A lookalike host stays closed.
@@ -376,7 +450,7 @@ public struct FlowView: View {
     private var estimate: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
-            Text("Estimate").font(model.phone ? .largeTitle : .title)
+            Text(model.scanning ? "Scanning" : "Estimate").font(model.phone ? .largeTitle : .title)
             if let estimate = model.estimate {
                 Text(estimate.human).font(.headline)
                 Text(estimate.caveat).foregroundStyle(.secondary)
@@ -391,8 +465,8 @@ public struct FlowView: View {
             if model.coverage == "measured" {
                 Text(Copy.brief)
             }
-            if model.canAnalyze {
-                prominent("Analyze") { model.analyze() }
+            if model.canAnalyze && !model.scanning {
+                prominent("Analyze") { model.startScan() }
             }
             Spacer()
         }

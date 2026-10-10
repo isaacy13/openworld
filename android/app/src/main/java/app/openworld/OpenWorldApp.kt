@@ -59,7 +59,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
             ) {
                 model.pickNotice?.let { Text(it) }
                 if (model.step != Step.Choose) {
-                    TextButton(onClick = model::back) { Text("Back") }
+                    TextButton(onClick = model::back, enabled = !model.scanning) { Text("Back") }
                 }
                 when (model.step) {
                     Step.Choose -> {
@@ -115,9 +115,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Button(onClick = model::continueFromSize) { Text("Continue") }
                     }
                     Step.Estimate -> {
-                        Text("Estimate", style = MaterialTheme.typography.headlineMedium)
+                        Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
                         Text(model.estimateText)
-                        Button(onClick = model::analyze, enabled = model.canAnalyze) { Text("Analyze") }
+                        Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
+                            Text(if (model.scanning) "Scanning" else "Analyze")
+                        }
                     }
                     Step.Results -> {
                         Text(

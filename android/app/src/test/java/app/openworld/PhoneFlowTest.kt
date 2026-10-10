@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -801,6 +802,30 @@ class PhoneScreenTest {
     val compose = createComposeRule()
 
     @Test
+    fun analyzeSaysScanningUntilTheResultIsReady() {
+        val model = FlowModel()
+        val gate = java.util.concurrent.CountDownLatch(1)
+        model.scanGate = gate
+        val uri = Uri.parse("content://app.openworld/blank-scan.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Analyze").performClick()
+        compose.onAllNodesWithText("Scanning").assertCountEquals(2)
+        compose.onNodeWithText("Back").assertIsNotEnabled()
+        model.back()
+        assertEquals(Step.Estimate, model.step)
+        gate.countDown()
+        waitForScan(compose, model)
+        compose.onAllNodesWithText("Scanning").assertCountEquals(0)
+        compose.onNodeWithText("No candidate is not a clearance.").assertExists()
+    }
+
+    @Test
     fun anUnreadableImportShowsTheRefusalOnTheChoosePage() {
         val model = FlowModel()
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
@@ -831,6 +856,7 @@ class PhoneScreenTest {
         compose.onNodeWithText("This phone may get hot.", substring = true).assertExists()
         compose.onNodeWithText("A long scan uses a lot of battery.", substring = true).assertExists()
         compose.onNodeWithText("Analyze").assertIsEnabled().performClick()
+        waitForScan(compose, model)
         assertTrue(compose.onAllNodesWithText("Possible candidate. Not an identification.").fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithText("Not compared.").assertExists()
         compose.onNodeWithText("A vehicle is not a person.").assertExists()
@@ -981,6 +1007,16 @@ class PhoneLaunchTest {
         compose.onNodeWithText("Nothing is uploaded.").assertExists()
         compose.onNodeWithText("shared.png").assertExists()
     }
+}
+
+private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentTestRule, model: FlowModel) {
+    val deadline = System.currentTimeMillis() + 20_000
+    while (System.currentTimeMillis() < deadline && !(model.step == Step.Results && !model.scanning)) {
+        Thread.sleep(50)
+        compose.waitForIdle()
+    }
+    assertEquals(Step.Results, model.step)
+    assertFalse(model.scanning)
 }
 
 private fun still(kind: String): File {

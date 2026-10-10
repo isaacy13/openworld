@@ -7,11 +7,29 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.os.Handler
+import android.os.Looper
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 enum class Step { Choose, Device, Bundle, Size, Estimate, Results }
+
+private class ScanOutcome(
+    val earlyReturn: Boolean = false,
+    val estimateText: String? = null,
+    val canAnalyze: Boolean? = null,
+    val root: File? = null,
+    val status: String = "",
+    val summary: String = "",
+    val incompleteReason: String = "",
+    val detail: String = "",
+    val rows: List<CandidateRow> = emptyList(),
+    val strip: List<Pair<String, String>> = emptyList(),
+    val resultDir: File? = null,
+)
 
 class CandidateRow(
     val wording: String,
@@ -46,6 +64,8 @@ class FlowModel {
     var candidateRows by mutableStateOf(listOf<CandidateRow>())
     var strip by mutableStateOf(listOf<Pair<String, String>>())
     var canAnalyze by mutableStateOf(true)
+    var scanning by mutableStateOf(false)
+    var scanGate: CountDownLatch? = null
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
     private var localCopy: File? = null
 
@@ -108,6 +128,7 @@ class FlowModel {
     }
 
     fun back() {
+        if (scanning) return
         leavingUrl = null
         leaveNotice = null
         deleteNotice = null
@@ -122,6 +143,7 @@ class FlowModel {
     }
 
     fun chooseAnother() {
+        if (scanning) return
         if (!removeResult()) return
         discardImport()
         step = Step.Choose
@@ -248,26 +270,39 @@ class FlowModel {
         step = Step.Estimate
     }
 
+    fun startScan() {
+        val file = localCopy
+        if (scanning || !canAnalyze || file == null) return
+        if (!removeResult()) return
+        scanning = true
+        val bundle = bundleId
+        val side = longSide
+        val cover = coverage
+        val gate = scanGate
+        Thread({
+            gate?.await(30, TimeUnit.SECONDS)
+            val outcome = computeScan(file, bundle, side, cover)
+            Handler(Looper.getMainLooper()).post {
+                applyScan(outcome)
+                scanning = false
+            }
+        }, "openworld-scan").start()
+    }
+
     fun analyze() {
         val file = localCopy ?: return
         if (!canAnalyze) return
         if (!removeResult()) return
-        strip = emptyList()
-        fbiUrl = null
-        candidateRows = emptyList()
-        leavingUrl = null
-        leaveNotice = null
-        deleteNotice = null
-        incompleteReason = ""
-        try {
-            val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
-            val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
-            if (root == null || !root.mkdirs()) {
-                estimateText = "The output directory could not be created."
-                canAnalyze = false
-                return
-            }
-            scanRoot = root
+        applyScan(computeScan(file, bundleId, longSide, coverage))
+    }
+
+    private fun computeScan(file: File, bundle: String, side: String, cover: String): ScanOutcome {
+        val parent = System.getProperty("java.io.tmpdir")?.let { File(it) }
+        val root = if (parent != null) File(parent, "openworld-" + System.nanoTime()) else null
+        if (root == null || !root.mkdirs()) {
+            return ScanOutcome(earlyReturn = true, estimateText = "The output directory could not be created.", canAnalyze = false)
+        }
+        return try {
             val posters = File(root, "openworld-posters")
             val out = File(root, "openworld-result")
             Core.json(listOf("--json", "posters", "write-fixture", "--out", posters.absolutePath))
@@ -277,23 +312,22 @@ class FlowModel {
                 listOf(
                     "--json", "--bundles", Core.bundlesDir(), "scan",
                     "--input", file.absolutePath,
-                    "--bundle", bundleId,
-                    "--long-side", longSide,
-                    "--coverage", coverage,
+                    "--bundle", bundle,
+                    "--long-side", side,
+                    "--coverage", cover,
                     "--posters", posters.absolutePath,
                     "--out", out.absolutePath,
                     "--form-factor", "phone",
                     "--provider", "cpu",
                 ) + reel.arguments(reel.directory)
             )
-            status = json.optString("status")
-            summary = json.present("summary") ?: when (status) {
+            val status = json.optString("status")
+            val summary = json.present("summary") ?: when (status) {
                 "complete" -> "No candidate is not a clearance."
                 "refused" -> json.present("message") ?: "Refusing."
                 else -> "Incomplete."
             }
             val reason = json.present("message")
-            incompleteReason = if (status == "incomplete" && reason != null && reason != summary) reason else ""
             val lines = mutableListOf<String>()
             json.present("coverage_banner")?.let(lines::add)
             json.present("bundle_name")?.let { lines.add("Bundle: $it") }
@@ -327,32 +361,58 @@ class FlowModel {
                     )
                 }
             }
-            candidateRows = rows
-            fbiUrl = rows.firstOrNull()?.url
             val pictures = mutableListOf<Pair<String, String>>()
             val inventory = json.optJSONArray("inventory")
             if (inventory != null) {
                 for (i in 0 until inventory.length()) {
                     val item = inventory.getJSONObject(i)
-                    val crop = item.optString("crop")
-                    if (crop.isNotBlank()) {
-                        pictures.add(item.optString("label") to File(out, crop).absolutePath)
-                    }
+                    val crop = item.present("crop") ?: continue
+                    val label = item.present("label") ?: continue
+                    pictures.add(label to File(out, crop).absolutePath)
                 }
             }
-            strip = pictures
-            detail = lines.joinToString("\n")
-            resultDir = if (File(out, "result.json").isFile) out else null
+            ScanOutcome(
+                root = root,
+                status = status,
+                summary = summary,
+                incompleteReason = if (status == "incomplete" && reason != null && reason != summary) reason else "",
+                detail = lines.joinToString("\n"),
+                rows = rows,
+                strip = pictures,
+                resultDir = if (File(out, "result.json").isFile) out else null,
+            )
         } catch (err: IOException) {
-            resultDir = null
-            scanRoot?.deleteRecursively()
-            scanRoot = null
+            root.deleteRecursively()
             val message = err.message ?: "Incomplete."
-            status = if (message.contains("Refusing")) "refused" else "incomplete"
-            summary = if (message.contains("Refusing")) message else "Incomplete."
-            incompleteReason = if (status == "incomplete" && message != summary) message else ""
-            detail = if (incompleteReason.isNotEmpty()) "" else message
+            val status = if (message.contains("Refusing")) "refused" else "incomplete"
+            val summary = if (message.contains("Refusing")) message else "Incomplete."
+            ScanOutcome(
+                status = status,
+                summary = summary,
+                incompleteReason = if (status == "incomplete" && message != summary) message else "",
+                detail = if (status == "incomplete" && message != summary) "" else message,
+            )
         }
+    }
+
+    private fun applyScan(outcome: ScanOutcome) {
+        if (outcome.earlyReturn) {
+            estimateText = outcome.estimateText ?: estimateText
+            outcome.canAnalyze?.let { canAnalyze = it }
+            return
+        }
+        scanRoot = outcome.root
+        status = outcome.status
+        summary = outcome.summary
+        incompleteReason = outcome.incompleteReason
+        detail = outcome.detail
+        candidateRows = outcome.rows
+        fbiUrl = outcome.rows.firstOrNull()?.url
+        strip = outcome.strip
+        resultDir = outcome.resultDir
+        leavingUrl = null
+        leaveNotice = null
+        deleteNotice = null
         step = Step.Results
     }
 
