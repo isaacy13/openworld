@@ -842,6 +842,17 @@ class OpenWorld(Gtk.Application):
         self._mark_deleted()
         return True
 
+    def release_result(self) -> bool:
+        """Leave a non-result folder on disk and continue. A real result is deleted."""
+        out = self.out_dir
+        if out is not None and out.exists() and not (out / "result.json").is_file():
+            self.out_dir = None
+            self.delete_notice.set_text("")
+            self.delete_notice.set_visible(False)
+            self._show_delete(False)
+            return True
+        return self.delete_result()
+
     def _show_delete(self, visible: bool) -> None:
         self.delete_button.set_visible(visible)
         self.delete_button.set_sensitive(visible)
@@ -892,7 +903,7 @@ class OpenWorld(Gtk.Application):
     def choose_another(self) -> None:
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
-        if not self.delete_result():
+        if not self.release_result():
             return
         self.input_path = None
         self.scan_thread = None
@@ -1329,6 +1340,18 @@ class OpenWorld(Gtk.Application):
         self.choose_another()
         if self.stack.get_visible_child_name() != "choose" or self.input_path is not None:
             self._exercise_fail("choose another did not return to the start")
+            return False
+        orphan = self.work / "not-a-result"
+        orphan.mkdir()
+        (orphan / "notes.txt").write_text("keep")
+        self.out_dir = orphan
+        self.choose_another()
+        if (
+            self.stack.get_visible_child_name() != "choose"
+            or self.input_path is not None
+            or not (orphan / "notes.txt").is_file()
+        ):
+            self._exercise_fail("choose another deleted a folder that is not a result, or stayed put")
             return False
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
             json.dumps({"ok": True, "summary": report.get("summary"), "work": str(self.work)})

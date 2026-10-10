@@ -181,7 +181,7 @@ public final class FlowModel: ObservableObject {
 
     public func chooseAnother() {
         guard !scanning else { return }
-        guard removeResult() else { return }
+        guard releaseResult() else { return }
         file = nil
         report = nil
         resultDirectory = nil
@@ -202,7 +202,7 @@ public final class FlowModel: ObservableObject {
 
     public func analyze() {
         guard canAnalyze, let file else { return }
-        guard removeResult() else { return }
+        guard releaseResult() else { return }
         let paths = makeScanPaths()
         apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, missing: includeMissing, wanted: includeWanted, paths: paths))
     }
@@ -210,7 +210,7 @@ public final class FlowModel: ObservableObject {
     /// Leaves the estimate page in place and says Scanning until the result is ready.
     public func startScan() {
         guard !scanning, canAnalyze, let file else { return }
-        guard removeResult() else { return }
+        guard releaseResult() else { return }
         scanning = true
         let paths = makeScanPaths()
         let core = core
@@ -323,6 +323,20 @@ public final class FlowModel: ObservableObject {
         } else {
             leaveError = "OpenWorld only opens an FBI page."
         }
+    }
+
+    /// Leave a folder that is not a result on disk so Choose another file and Analyze can continue.
+    private func releaseResult() -> Bool {
+        guard let resultDirectory else { return true }
+        let marker = resultDirectory.appendingPathComponent("result.json")
+        if FileManager.default.fileExists(atPath: resultDirectory.path),
+           !FileManager.default.fileExists(atPath: marker.path) {
+            self.resultDirectory = nil
+            self.scanRoot = nil
+            deleteNotice = nil
+            return true
+        }
+        return removeResult()
     }
 
     /// Remove the result directory through the library, then the temporary frames beside it.
@@ -519,6 +533,9 @@ public struct FlowView: View {
             }
             if model.canAnalyze && !model.scanning {
                 prominent("Analyze") { model.startScan() }
+            }
+            if let notice = model.deleteNotice {
+                Text(notice).foregroundStyle(.orange)
             }
             Spacer()
         }

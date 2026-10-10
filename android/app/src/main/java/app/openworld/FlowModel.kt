@@ -86,7 +86,7 @@ class FlowModel {
             pickNotice = "The file could not be read. Refusing."
             return
         }
-        if (!removeResult()) {
+        if (!removeResult(abandonUnmarked = true)) {
             copy.delete()
             if (pickNotice == null) pickNotice = deleteNotice ?: "The result could not be deleted."
             return
@@ -151,7 +151,7 @@ class FlowModel {
 
     fun chooseAnother() {
         if (scanning) return
-        if (!removeResult()) return
+        if (!removeResult(abandonUnmarked = true)) return
         discardImport()
         step = Step.Choose
         fileName = ""
@@ -195,12 +195,17 @@ class FlowModel {
         leaveNotice = null
     }
 
-    private fun removeResult(): Boolean {
+    private fun removeResult(abandonUnmarked: Boolean = false): Boolean {
         val out = resultDir
         if (out == null) return true
         deleteNotice = null
         if (!out.exists()) {
             scanRoot?.deleteRecursively()
+            resultDir = null
+            scanRoot = null
+            return true
+        }
+        if (abandonUnmarked && !File(out, "result.json").isFile) {
             resultDir = null
             scanRoot = null
             return true
@@ -293,7 +298,7 @@ class FlowModel {
     fun startScan() {
         val file = localCopy
         if (scanning || !canAnalyze || file == null) return
-        if (!removeResult()) return
+        if (!removeResult(abandonUnmarked = true)) return
         scanning = true
         val bundle = bundleId
         val side = longSide
@@ -314,7 +319,7 @@ class FlowModel {
     fun analyze() {
         val file = localCopy ?: return
         if (!canAnalyze) return
-        if (!removeResult()) return
+        if (!removeResult(abandonUnmarked = true)) return
         applyScan(computeScan(file, bundleId, longSide, coverage, includeMissing, includeWanted))
     }
 

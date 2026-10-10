@@ -145,6 +145,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 Text(if (model.scanning) "Scanning" else "Analyze")
                             }
                         }
+                        model.deleteNotice?.let { Text(it) }
                     }
                     Step.Results -> {
                         Text(

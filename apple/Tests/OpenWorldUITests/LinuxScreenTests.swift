@@ -561,6 +561,16 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
             XCTAssertNil(model.error)
             _ = FlowView(model: model, importControl: self.control).body
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            model.deleteNotice = "The result could not be deleted."
+            _ = FlowView(model: model, importControl: self.control).body
+            model.deleteNotice = nil
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, "Possible candidate. Not an identification.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertNotEqual(model.resultDirectory?.path, result.path)
         }
     }
 

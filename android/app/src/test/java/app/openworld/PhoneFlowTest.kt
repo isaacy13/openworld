@@ -1093,6 +1093,16 @@ class PhoneScreenTest {
         compose.onNodeWithText("Refusing to delete a directory that is not an OpenWorld result.").assertExists()
         compose.onNodeWithText("Delete").assertExists()
         assertTrue(compose.onAllNodesWithText("Open FBI page").fetchSemanticsNodes().isNotEmpty())
+        model.back()
+        assertEquals(Step.Estimate, model.step)
+        model.deleteNotice = "The result could not be deleted."
+        compose.onNodeWithText("The result could not be deleted.").assertExists()
+        model.deleteNotice = null
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertEquals("Possible candidate. Not an identification.", model.summary)
+        assertTrue(result.exists())
+        assertTrue(result != model.resultDir)
     }
 }
 
