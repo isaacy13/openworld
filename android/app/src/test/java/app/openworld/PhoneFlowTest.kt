@@ -22,6 +22,7 @@ import androidx.test.core.app.ApplicationProvider
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -469,6 +470,41 @@ class PhoneFlowTest {
         assertTrue(model.strip.isNotEmpty())
         assertTrue(model.strip.all { it.frameLabel == "Frame 2." })
         assertTrue(model.context.startsWith("3 frames analyzed."))
+    }
+
+    @Test
+    fun aPhoneScanReadsTheContainerClock() {
+        val movie = File.createTempFile("ow-clock", ".mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=64x64",
+            "-frames:v", "1", "-r", "1", "-an", "-c:v", "libx264",
+            "-metadata", "creation_time=2020-01-01T00:00:00Z",
+            movie.absolutePath,
+        )
+        val plain = File.createTempFile("ow-plain", ".mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=64x64",
+            "-frames:v", "1", "-r", "1", "-an", "-c:v", "libx264",
+            plain.absolutePath,
+        )
+        val frames = File(movie.parentFile, "ow-clock-frames-" + System.nanoTime())
+        assertTrue(frames.mkdirs())
+        still("blank").copyTo(File(frames, "frame_000000.png"))
+        val reel = PlatformDecode.Facts(64, 64, 1.0, 1, 1.0, true, frames)
+        assertFalse(reel.arguments(frames).contains("--container-unix"))
+        val warned = scanPrepared(movie, reel)
+        assertEquals("complete", warned.getString("status"))
+        val warnings = warned.getJSONArray("warnings")
+        var found = false
+        for (i in 0 until warnings.length()) {
+            if (warnings.getString(i) == "The file timestamps disagree.") found = true
+        }
+        assertTrue(found)
+        val quiet = scanPrepared(plain, reel)
+        val quietWarnings = quiet.getJSONArray("warnings")
+        for (i in 0 until quietWarnings.length()) {
+            assertNotEquals("The file timestamps disagree.", quietWarnings.getString(i))
+        }
     }
 
     @Test

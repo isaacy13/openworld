@@ -322,7 +322,8 @@ fn scan_decoded_dir(
         .media
         .as_ref()
         .and_then(|media| media.container_unix)
-        .map(|secs| SystemTime::UNIX_EPOCH + Duration::from_secs(secs));
+        .map(|secs| SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
+        .or_else(|| decode::container_created(&req.input));
     let warnings = media_warnings(mtime, container, req.now);
     if let Err(report) = prepare_out(&req.out_dir) {
         return report;

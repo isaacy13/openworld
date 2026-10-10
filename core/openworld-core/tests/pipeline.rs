@@ -778,6 +778,95 @@ fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
 }
 
 #[test]
+fn a_phone_scan_reads_the_container_clock() {
+    let dir = tempfile::tempdir().unwrap();
+    let dated = dir.path().join("dated.mp4");
+    let plain = dir.path().join("plain.mp4");
+    let mkv = dir.path().join("dated.mkv");
+    let encode = |path: &std::path::Path, codec: &str, dated_clock: bool| {
+        let mut command = Command::new("ffmpeg");
+        command.args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=64x64",
+            "-frames:v",
+            "1",
+            "-r",
+            "1",
+            "-an",
+            "-c:v",
+            codec,
+        ]);
+        if dated_clock {
+            command.args(["-metadata", "creation_time=2020-01-01T00:00:00Z"]);
+        }
+        let status = command.arg(path).status().expect("ffmpeg");
+        assert!(status.success(), "{}", path.display());
+    };
+    encode(&dated, "libx264", true);
+    encode(&plain, "libx264", false);
+    encode(&mkv, "ffv1", true);
+    let clock = parse_rfc3339("2020-01-01T00:00:00Z").unwrap();
+    assert_eq!(openworld_core::decode::container_created(&dated), Some(clock));
+    assert_eq!(openworld_core::decode::probe(&dated).unwrap().container_created, Some(clock));
+    assert_eq!(openworld_core::decode::container_created(&mkv), Some(clock));
+    assert_eq!(openworld_core::decode::probe(&mkv).unwrap().container_created, Some(clock));
+    assert!(openworld_core::decode::container_created(&plain).is_none());
+    assert!(openworld_core::decode::probe(&plain).unwrap().container_created.is_none());
+
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    RgbImage::from_pixel(64, 64, Rgb([0, 0, 255]))
+        .save(frames.join("frame_000000.png"))
+        .unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let phone = |input: PathBuf, container_unix: Option<u64>, out: &str| {
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir: dir.path().join(out),
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Phone,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: Some(frames.clone()),
+                media: Some(MediaFacts {
+                    width: 64,
+                    height: 64,
+                    fps: 1.0,
+                    frames: 1,
+                    duration_sec: 1.0,
+                    video: true,
+                    container_unix,
+                }),
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let warned = phone(dated.clone(), None, "dated");
+    assert_eq!(warned.status, "complete", "{}", warned.message);
+    assert!(warned.warnings.iter().any(|line| line == "The file timestamps disagree."));
+    let quiet = phone(plain, None, "plain");
+    assert!(quiet.warnings.iter().all(|line| line != "The file timestamps disagree."));
+    let mtime = fs::metadata(&dated).unwrap().modified().unwrap();
+    let secs = mtime.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+    let overridden = phone(dated, Some(secs), "overridden");
+    assert!(overridden.warnings.iter().all(|line| line != "The file timestamps disagree."));
+}
+
+#[test]
 fn a_pinned_onnx_bundle_that_does_not_load_refuses_instead_of_clearing() {
     let dir = tempfile::tempdir().unwrap();
     let bundle_dir = dir.path().join("bundles/custom");

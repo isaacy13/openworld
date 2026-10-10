@@ -7,7 +7,9 @@
 //! A one-page palette, bilevel, or subsampled TIFF is read as a player shows that
 //! page. A multi-page TIFF whose pages are not all read is refused. Audio is not decoded. Phone, Mac, and Android shells
 //! decode with AVFoundation or MediaCodec and pass the frames through
-//! `load_frame_dir`. That path does not run FFmpeg.
+//! `load_frame_dir`. That path does not run FFmpeg. It reads the container creation
+//! time from the file, so a clock that disagrees with the file time warns the same
+//! way the desktop probe does.
 
 use crate::timeutil::parse_rfc3339;
 use image::metadata::Orientation;
@@ -951,6 +953,164 @@ pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
     Ok(frames)
 }
 
+/// The container clock the desktop probe reports as `creation_time`. A still has none.
+pub fn container_created(path: &Path) -> Option<SystemTime> {
+    let mut file = File::open(path).ok()?;
+    let mut header = [0u8; 12];
+    if file.read_exact(&mut header).is_err() {
+        return None;
+    }
+    if &header[4..8] == b"ftyp" {
+        return mp4_created(&mut file);
+    }
+    if header[..4] == [0x1A, 0x45, 0xDF, 0xA3] {
+        return matroska_created(&mut file);
+    }
+    None
+}
+
+fn mp4_created(file: &mut File) -> Option<SystemTime> {
+    let len = file.metadata().ok()?.len();
+    let (moov, moov_end) = atom_body(file, 0, len, b"moov")?;
+    let (body, _) = atom_body(file, moov, moov_end, b"mvhd")?;
+    file.seek(SeekFrom::Start(body)).ok()?;
+    let mut version = [0u8; 4];
+    file.read_exact(&mut version).ok()?;
+    let created = match version[0] {
+        0 => {
+            let mut bytes = [0u8; 4];
+            file.read_exact(&mut bytes).ok()?;
+            u64::from(u32::from_be_bytes(bytes))
+        }
+        1 => {
+            let mut bytes = [0u8; 8];
+            file.read_exact(&mut bytes).ok()?;
+            u64::from_be_bytes(bytes)
+        }
+        _ => return None,
+    };
+    // QuickTime counts seconds from 1904-01-01. Zero means the file has no clock.
+    if created == 0 {
+        return None;
+    }
+    let unix = created.checked_sub(2_082_844_800)?;
+    Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix))
+}
+
+fn atom_body(file: &mut File, start: u64, end: u64, name: &[u8; 4]) -> Option<(u64, u64)> {
+    let mut pos = start;
+    while pos + 8 <= end {
+        file.seek(SeekFrom::Start(pos)).ok()?;
+        let mut header = [0u8; 8];
+        file.read_exact(&mut header).ok()?;
+        let size32 = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
+        let (header_len, size) = if size32 == 1 {
+            let mut wide = [0u8; 8];
+            file.read_exact(&mut wide).ok()?;
+            (16u64, u64::from_be_bytes(wide))
+        } else if size32 == 0 {
+            (8u64, end.saturating_sub(pos))
+        } else {
+            (8u64, u64::from(size32))
+        };
+        if size < header_len || pos.saturating_add(size) > end {
+            return None;
+        }
+        let body = pos + header_len;
+        if &header[4..8] == name {
+            return Some((body, pos + size));
+        }
+        pos += size;
+    }
+    None
+}
+
+fn matroska_created(file: &mut File) -> Option<SystemTime> {
+    let len = file.metadata().ok()?.len().min(4 * 1024 * 1024);
+    file.seek(SeekFrom::Start(0)).ok()?;
+    let mut data = vec![0u8; len as usize];
+    file.read_exact(&mut data).ok()?;
+    let ns = dateutc(&data, 0, data.len())?;
+    let secs = ns.div_euclid(1_000_000_000);
+    // DateUTC counts nanoseconds from 2001-01-01.
+    let unix = secs.checked_add(978_307_200)?;
+    if unix < 0 {
+        return None;
+    }
+    Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix as u64))
+}
+
+fn dateutc(data: &[u8], mut pos: usize, end: usize) -> Option<i64> {
+    let end = end.min(data.len());
+    while pos + 2 <= end {
+        let (id, id_len) = ebml_id(data, pos)?;
+        let (size, size_len, unknown) = ebml_size(data, pos + id_len)?;
+        let body = pos + id_len + size_len;
+        if body > end {
+            return None;
+        }
+        if id == 0x1F43B675 {
+            return None;
+        }
+        if id == 0x4461 {
+            if size == 8 && body + 8 <= end {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&data[body..body + 8]);
+                return Some(i64::from_be_bytes(bytes));
+            }
+            return None;
+        }
+        let child_end = if unknown {
+            end
+        } else {
+            body.saturating_add(size as usize).min(end)
+        };
+        if matches!(id, 0x1A45DFA3 | 0x18538067 | 0x1549A966) {
+            if let Some(ns) = dateutc(data, body, child_end) {
+                return Some(ns);
+            }
+        }
+        if unknown || child_end <= pos {
+            return None;
+        }
+        pos = child_end;
+    }
+    None
+}
+
+fn ebml_id(data: &[u8], pos: usize) -> Option<(u64, usize)> {
+    let first = *data.get(pos)?;
+    let len = first.leading_zeros() as usize + 1;
+    if len > 4 || pos + len > data.len() {
+        return None;
+    }
+    let mut id = 0u64;
+    for byte in &data[pos..pos + len] {
+        id = (id << 8) | u64::from(*byte);
+    }
+    Some((id, len))
+}
+
+fn ebml_size(data: &[u8], pos: usize) -> Option<(u64, usize, bool)> {
+    let first = *data.get(pos)?;
+    if first == 0 {
+        return None;
+    }
+    let len = first.leading_zeros() as usize + 1;
+    if len > 8 || pos + len > data.len() {
+        return None;
+    }
+    // An eight-byte size keeps its marker in the top bit and has no data bits there.
+    let mask = if len == 8 { 0 } else { 0xFFu8 >> len };
+    let mut value = u64::from(first & mask);
+    for byte in &data[pos + 1..pos + len] {
+        value = (value << 8) | u64::from(*byte);
+    }
+    let width = len * 7;
+    let unknown = width < 64 && value == (1u64 << width) - 1;
+    Some((value, len, unknown))
+}
+
 #[cfg(test)]
 mod tests {
     use super::open_oriented;
@@ -1681,5 +1841,51 @@ mod tests {
         assert!((super::picture_duration(&mp4, 30.0) - 0.8).abs() < 0.001);
         let bare = serde_json::json!({});
         assert!((super::picture_duration(&bare, 4.0) - 4.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn a_movie_header_clock_is_seconds_since_1904() {
+        let dir = tempfile::tempdir().unwrap();
+        let mp4 = dir.path().join("clock.mp4");
+        fs::write(&mp4, movie_clock(3_660_681_600)).unwrap();
+        let when = crate::timeutil::parse_rfc3339("2020-01-01T00:00:00Z").unwrap();
+        assert_eq!(super::container_created(&mp4), Some(when));
+        fs::write(&mp4, movie_clock(0)).unwrap();
+        assert!(super::container_created(&mp4).is_none());
+        let mkv = dir.path().join("clock.mkv");
+        fs::write(&mkv, matroska_clock(599_529_600_000_000_000)).unwrap();
+        assert_eq!(super::container_created(&mkv), Some(when));
+        fs::write(dir.path().join("still.png"), []).unwrap();
+        assert!(super::container_created(&dir.path().join("still.png")).is_none());
+    }
+
+    fn movie_clock(created: u32) -> Vec<u8> {
+        fn atom(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
+            let mut out = ((8 + body.len()) as u32).to_be_bytes().to_vec();
+            out.extend_from_slice(kind);
+            out.extend_from_slice(body);
+            out
+        }
+        let mut header = vec![0u8; 100];
+        header[4..8].copy_from_slice(&created.to_be_bytes());
+        let mut file = atom(b"ftyp", b"isom");
+        file.extend(atom(b"moov", &atom(b"mvhd", &header)));
+        file
+    }
+
+    fn matroska_clock(ns: i64) -> Vec<u8> {
+        fn element(id: &[u8], body: &[u8]) -> Vec<u8> {
+            let mut out = id.to_vec();
+            assert!(body.len() < 127);
+            out.push(0x80 | body.len() as u8);
+            out.extend_from_slice(body);
+            out
+        }
+        let date = element(&[0x44, 0x61], &ns.to_be_bytes());
+        let info = element(&[0x15, 0x49, 0xA9, 0x66], &date);
+        let segment = element(&[0x18, 0x53, 0x80, 0x67], &info);
+        let mut file = element(&[0x1A, 0x45, 0xDF, 0xA3], &[]);
+        file.extend(segment);
+        file
     }
 }

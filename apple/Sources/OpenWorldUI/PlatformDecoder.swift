@@ -47,7 +47,7 @@ enum PlatformDecoder {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if GifFrames.isGif(url) {
-            return try adopted(try GifFrames.read(url), containerUnix: containerUnix(url))
+            return try adopted(try GifFrames.read(url), containerUnix: nil)
         }
         guard let size = pngSize(url) else {
             throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
@@ -60,7 +60,7 @@ enum PlatformDecoder {
             frames: 1,
             duration: 0,
             video: false,
-            containerUnix: containerUnix(url),
+            containerUnix: nil,
             directory: nil
         )
     }
@@ -68,7 +68,7 @@ enum PlatformDecoder {
     static func writeFrames(url: URL, directory: URL) throws -> Facts {
         if GifFrames.isGif(url) {
             let reel = try GifFrames.write(url, directory: directory)
-            var gif = try adopted(reel, containerUnix: containerUnix(url))
+            var gif = try adopted(reel, containerUnix: nil)
             gif.directory = directory
             return gif
         }
@@ -101,20 +101,13 @@ enum PlatformDecoder {
         return (width, height)
     }
 
-    private static func containerUnix(_ url: URL) -> Int? {
-        guard let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate else {
-            return nil
-        }
-        return Int(created.timeIntervalSince1970)
-    }
     #else
     static func facts(url: URL) throws -> Facts {
-        let container = containerUnix(url)
         if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if GifFrames.isGif(url) {
-            return try adopted(try GifFrames.read(url), containerUnix: container)
+            return try adopted(try GifFrames.read(url), containerUnix: nil)
         }
         if isVideo(url) {
             let asset = AVURLAsset(url: url)
@@ -149,7 +142,7 @@ enum PlatformDecoder {
                 frames: VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate),
                 duration: seconds,
                 video: true,
-                containerUnix: container,
+                containerUnix: nil,
                 directory: nil
             )
         }
@@ -166,7 +159,7 @@ enum PlatformDecoder {
                 frames: count,
                 duration: Double(count),
                 video: true,
-                containerUnix: container,
+                containerUnix: nil,
                 directory: nil
             )
         }
@@ -190,7 +183,7 @@ enum PlatformDecoder {
             frames: 1,
             duration: 0,
             video: false,
-            containerUnix: container,
+            containerUnix: nil,
             directory: nil
         )
     }
@@ -199,7 +192,7 @@ enum PlatformDecoder {
     static func writeFrames(url: URL, directory: URL) throws -> Facts {
         if GifFrames.isGif(url) {
             let reel = try GifFrames.write(url, directory: directory)
-            var gif = try adopted(reel, containerUnix: containerUnix(url))
+            var gif = try adopted(reel, containerUnix: nil)
             gif.directory = directory
             return gif
         }
@@ -337,13 +330,6 @@ enum PlatformDecoder {
         return 0
     }
 
-    private static func containerUnix(_ url: URL) -> Int? {
-        guard let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate else {
-            return nil
-        }
-        return Int(created.timeIntervalSince1970)
-    }
-
     /// More than one still page. A video stays on the track reader.
     private static func stillPages(_ url: URL) -> (CGImageSource, Int)? {
         guard !isVideo(url),
@@ -406,7 +392,7 @@ enum PlatformDecoder {
             frames: count,
             duration: Double(count),
             video: true,
-            containerUnix: containerUnix(url),
+            containerUnix: nil,
             directory: directory
         )
     }
