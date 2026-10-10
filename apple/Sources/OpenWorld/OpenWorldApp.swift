@@ -57,8 +57,9 @@ struct MacRoot: View {
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 guard let provider = providers.first else { return false }
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    if let url {
-                        Task { @MainActor in model.choose(url) }
+                    guard let url else { return }
+                    DroppedFile.deliver(url, claim: { _ = $0.startAccessingSecurityScopedResource() }) { url in
+                        model.choose(url)
                     }
                 }
                 return true

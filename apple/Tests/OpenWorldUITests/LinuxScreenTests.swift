@@ -66,6 +66,22 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: marker), Data("dir".utf8))
     }
 
+    func testADroppedFileIsClaimedBeforeItOpens() async {
+        let url = URL(fileURLWithPath: "/tmp/photo.png")
+        var order: [String] = []
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            DroppedFile.deliver(url, claim: { got in
+                XCTAssertEqual(got, url)
+                order.append("claim")
+            }, open: { got in
+                XCTAssertEqual(got, url)
+                order.append("open")
+                done.resume()
+            })
+        }
+        XCTAssertEqual(order, ["claim", "open"])
+    }
+
     func testAShareOpensTheFileStoredUnderThatName() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-name-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
