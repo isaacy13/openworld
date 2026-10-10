@@ -30,6 +30,27 @@ pub enum BundleError {
     ResearchOnly(String),
 }
 
+impl BundleError {
+    /// The sentence a person reads when this catalog cannot be used.
+    pub fn refusal(&self) -> String {
+        match self {
+            BundleError::Unreadable => "The bundle catalog could not be read. Refusing.".to_string(),
+            BundleError::UnofficialUnstated(id) => {
+                format!("Bundle {id} is unofficial and the manifest does not say so. Refusing.")
+            }
+            BundleError::UnpinnedWeight(id) => {
+                format!("Bundle {id} has a weight file with no pinned SHA-256. Refusing.")
+            }
+            BundleError::BadWeightHash(id) => {
+                format!("The bundle {id} weight hash does not match. Refusing.")
+            }
+            BundleError::ResearchOnly(id) => {
+                format!("The bundle {id} weight license does not allow shipping it. Refusing.")
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct WeightPin {
     pub role: String,
@@ -296,6 +317,19 @@ path = "weights/det.onnx"
         std::fs::write(bundle.join("manifest.toml"), manifest).unwrap();
         let err = load_bundle(&bundle).unwrap_err();
         assert!(matches!(err, BundleError::ResearchOnly(_)));
+        assert_eq!(
+            err.refusal(),
+            "The bundle fast weight license does not allow shipping it. Refusing."
+        );
+    }
+
+    #[test]
+    fn an_unreadable_catalog_names_the_refusal() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("no-catalog");
+        let err = load_bundles(&missing).unwrap_err();
+        assert!(matches!(err, BundleError::Unreadable));
+        assert_eq!(err.refusal(), "The bundle catalog could not be read. Refusing.");
     }
 
     #[test]

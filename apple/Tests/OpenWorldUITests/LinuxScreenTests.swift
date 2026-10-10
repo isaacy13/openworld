@@ -212,6 +212,35 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnUnreadableCatalogNamesTheCatalog() throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openworld-missing-bundles-\(UUID().uuidString)", isDirectory: true)
+        let previous = getenv("OPENWORLD_BUNDLES").map { String(cString: $0) }
+        defer {
+            if let previous {
+                setenv("OPENWORLD_BUNDLES", previous, 1)
+            } else {
+                unsetenv("OPENWORLD_BUNDLES")
+            }
+        }
+        setenv("OPENWORLD_BUNDLES", missing.path, 1)
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The bundle catalog could not be read. Refusing.")
+            XCTAssertFalse(model.showsTopError)
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertTrue(preview.contains("Model bundle"))
+            XCTAssertEqual(preview.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertEqual(preview.last, "Continue")
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testTheChosenBundleIsMarked() throws {
         XCTAssertTrue(Copy.sizeHint.contains("A face under 64 px on that image is left out."))
         XCTAssertTrue(Copy.sizeHint.contains("the label is \"Not compared.\""))

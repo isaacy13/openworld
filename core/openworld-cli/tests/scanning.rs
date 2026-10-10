@@ -430,3 +430,48 @@ fn a_missing_file_is_not_a_bad_codec() {
     assert_eq!(doc["message"], "The file could not be read. Refusing.");
     assert!(!text.contains("This file stays on this device."));
 }
+
+#[test]
+fn an_unreadable_catalog_is_a_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-catalog");
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles").arg(&missing).arg("bundles");
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert_eq!(text.trim(), "The bundle catalog could not be read. Refusing.");
+    assert!(err.is_empty(), "{err}");
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("--json").arg("--bundles").arg(&missing).arg("bundles");
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["message"], "The bundle catalog could not be read. Refusing.");
+    assert_eq!(doc["summary"], "The bundle catalog could not be read. Refusing.");
+    assert!(doc.get("bundles").is_none());
+
+    let input = dir.path().join("notes.txt");
+    fs::write(&input, b"not a photo").unwrap();
+    let mut cmd = Command::new(bin());
+    cmd.arg("--bundles")
+        .arg(&missing)
+        .args(["analyze", "--yes", "--input"])
+        .arg(&input)
+        .args(["--bundle", "fast", "--long-side", "640", "--coverage", "complete"]);
+    let output = cmd.output().expect("openworld");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert_eq!(
+        text.lines().next(),
+        Some("The bundle catalog could not be read. Refusing."),
+        "{text}"
+    );
+    assert!(!text.contains("This file stays on this device."), "{text}");
+}

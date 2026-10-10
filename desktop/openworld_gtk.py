@@ -404,8 +404,18 @@ class OpenWorld(Gtk.Application):
 
     def load_bundles(self) -> None:
         payload = self._run_json(["--json", "--bundles", self.bundles, "bundles"])
-        self.rows = payload.get("bundles", [])
-        self.bundle_notice.set_visible(not self.rows)
+        if payload.get("status") == "refused":
+            self.rows = []
+            message = payload.get("message") or "The bundle catalog could not be read. Refusing."
+            self.bundle_notice.set_text(message)
+            self.bundle_notice.set_visible(True)
+        else:
+            self.rows = payload.get("bundles", [])
+            if self.rows:
+                self.bundle_notice.set_visible(False)
+            else:
+                self.bundle_notice.set_text("The scan program is not on this device. Refusing.")
+                self.bundle_notice.set_visible(True)
         previous = self.bundle_id
         while True:
             row = self.bundle_list.get_row_at_index(0)
@@ -1307,6 +1317,17 @@ class OpenWorld(Gtk.Application):
                 or self.bundle_notice.get_text() != "The scan program is not on this device. Refusing."
             ):
                 self._exercise_fail(f"an empty catalog stayed silent: {self.rows!r} {self.bundle_notice.get_text()!r}")
+                return False
+            self.bundles = os.path.join(empty, "missing")
+            self.load_bundles()
+            if (
+                self.rows
+                or not self.bundle_notice.get_visible()
+                or self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing."
+            ):
+                self._exercise_fail(
+                    f"an unreadable catalog used the missing-program sentence: {self.rows!r} {self.bundle_notice.get_text()!r}"
+                )
                 return False
         finally:
             self.bundles = saved_bundles

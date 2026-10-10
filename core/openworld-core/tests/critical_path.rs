@@ -487,6 +487,33 @@ fn estimate_refuses_a_zero_size_and_an_unknown_bundle() {
 }
 
 #[test]
+fn an_unreadable_catalog_is_not_an_unknown_bundle() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.png");
+    blank(32, 32).save(&input).unwrap();
+    let mut req = request(
+        dir.path(),
+        input,
+        "fast",
+        dir.path().join("none"),
+        RequestExtra::default(),
+    );
+    req.bundles_dir = dir.path().join("no-catalog");
+    let report = scan_path(&req, &mut |_| {});
+    assert_eq!(report.refusal.as_deref(), Some("catalog"));
+    assert_eq!(
+        report.summary,
+        "The bundle catalog could not be read. Refusing."
+    );
+    let estimate = estimate_for(&req).unwrap_err();
+    assert_eq!(estimate.refusal.as_deref(), Some("catalog"));
+    assert_eq!(
+        estimate.summary,
+        "The bundle catalog could not be read. Refusing."
+    );
+}
+
+#[test]
 fn deleting_a_result_requires_the_report_file() {
     let dir = tempfile::tempdir().unwrap();
     let posters = pack(dir.path());

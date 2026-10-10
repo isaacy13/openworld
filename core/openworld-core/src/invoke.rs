@@ -59,7 +59,7 @@ fn dispatch_with_progress(
     let bundles = bundles_dir(parsed.bundles.clone());
     match parsed.cmd.as_str() {
         "bundles" => {
-            let all = crate::load_bundles(&bundles).map_err(|err| format!("{err}. Refusing."))?;
+            let all = crate::load_bundles(&bundles).map_err(|err| err.refusal())?;
             let rows: Vec<_> = all.iter().map(crate::bundle::row_json).collect();
             Ok(json!({ "bundles": rows }))
         }

@@ -96,7 +96,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Text("Model bundle", style = MaterialTheme.typography.headlineMedium)
                         Text("Scores are not comparable across bundles. Results name the bundle you pick.")
                         if (model.bundleRows.isEmpty()) {
-                            Text("The scan program is not on this device. Refusing.")
+                            Text(model.bundleNotice ?: "The scan program is not on this device. Refusing.")
                         }
                         model.bundleRows.forEach { (id, title, curve) ->
                             val lines = title.lines()

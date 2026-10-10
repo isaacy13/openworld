@@ -261,13 +261,23 @@ fn run(cli: Cli) -> Result<i32, String> {
             speak(cli.json, copy_lines(&words));
             Ok(0)
         }
-        Cmd::Bundles => {
-            let all = load_bundles(&bundles).map_err(|e| e.to_string())?;
-            let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
-            emit(cli.json, json!({ "bundles": rows }));
-            speak(cli.json, bundle_lines(&rows));
-            Ok(0)
-        }
+        Cmd::Bundles => match load_bundles(&bundles) {
+            Ok(all) => {
+                let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
+                emit(cli.json, json!({ "bundles": rows }));
+                speak(cli.json, bundle_lines(&rows));
+                Ok(0)
+            }
+            Err(err) => {
+                let message = err.refusal();
+                emit(
+                    cli.json,
+                    json!({ "status": "refused", "summary": &message, "message": &message }),
+                );
+                speak(cli.json, [message.as_str()]);
+                Ok(2)
+            }
+        },
         Cmd::Estimate {
             input,
             bundle,
@@ -434,7 +444,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             }
         },
         Cmd::Measure => {
-            let all = load_bundles(&bundles).map_err(|e| e.to_string())?;
+            let all = load_bundles(&bundles).map_err(|e| e.refusal())?;
             let fast = all
                 .into_iter()
                 .find(|b| b.id == "fast")
@@ -548,8 +558,16 @@ fn analyze(
             &openworld_core::scan::refused("unreadable", "The file could not be read. Refusing."),
         );
     }
+    let all = match load_bundles(bundles) {
+        Ok(all) => all,
+        Err(err) => {
+            return finish_report(
+                json_mode,
+                &openworld_core::scan::refused("catalog", &err.refusal()),
+            );
+        }
+    };
     speak(json_mode, device_lines(&input));
-    let all = load_bundles(bundles).map_err(|e| e.to_string())?;
     let bundle = match bundle {
         Some(id) => id,
         None if yes => all
@@ -788,8 +806,7 @@ fn find_origin(id: u16, w: u32, h: u32, threshold: f32, below: bool) -> Result<(
 }
 
 fn fast_threshold(bundles: &Path) -> Result<f32, String> {
-    load_bundles(bundles)
-        .map_err(|e| e.to_string())?
+    load_bundles(bundles).map_err(|e| e.refusal())?
         .into_iter()
         .find(|b| b.id == "fast")
         .map(|b| b.threshold)
@@ -800,8 +817,7 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let posters = out.join("posters");
     let pack = write_fixture_pack(&posters, SystemTime::now()).map_err(|e| e.to_string())?;
-    let fast = load_bundles(bundles)
-        .map_err(|e| e.to_string())?
+    let fast = load_bundles(bundles).map_err(|e| e.refusal())?
         .into_iter()
         .find(|b| b.id == "fast")
         .ok_or("Fast bundle is missing.")?;

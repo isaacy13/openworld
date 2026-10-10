@@ -199,16 +199,26 @@ fn open_models(bundle: &Bundle, pack: &PosterPack) -> Result<Option<FaceModels>,
     crate::onnx_exec::load(bundle).map(Some).map_err(|message| refused("missing_weights", &message))
 }
 
+fn require_bundle(dir: &Path, id: &str) -> Result<Bundle, ScanReport> {
+    let all = match crate::bundle::load_bundles(dir) {
+        Ok(all) => all,
+        Err(err) => return Err(refused("catalog", &err.refusal())),
+    };
+    all.into_iter().find(|bundle| bundle.id == id).ok_or_else(|| {
+        refused(
+            "bundle_not_found",
+            "That bundle is not in the catalog. Refusing.",
+        )
+    })
+}
+
 pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanReport {
     if req.frames_dir.is_none() && !input_readable(&req.input) {
         return refused("unreadable", "The file could not be read. Refusing.");
     }
-    let bundle = match crate::bundle::load_bundles(&req.bundles_dir)
-        .ok()
-        .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
-    {
-        Some(bundle) => bundle,
-        None => return refused("bundle_not_found", "That bundle is not in the catalog. Refusing."),
+    let bundle = match require_bundle(&req.bundles_dir, &req.bundle_id) {
+        Ok(bundle) => bundle,
+        Err(report) => return report,
     };
     let pack = match crate::posters::load_pack(&req.posters_dir, req.now) {
         Ok(pack) => pack,
@@ -1081,10 +1091,7 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
     if req.media.is_none() && !input_readable(&req.input) {
         return Err(refused("unreadable", "The file could not be read. Refusing."));
     }
-    let bundle = crate::bundle::load_bundles(&req.bundles_dir)
-        .ok()
-        .and_then(|all| all.into_iter().find(|b| b.id == req.bundle_id))
-        .ok_or_else(|| refused("bundle_not_found", "That bundle is not in the catalog. Refusing."))?;
+    let bundle = require_bundle(&req.bundles_dir, &req.bundle_id)?;
     let (frames, fps, duration, long_side) = if let Some(media) = &req.media {
         if media.width == 0 || media.height == 0 || media.frames == 0 {
             return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));

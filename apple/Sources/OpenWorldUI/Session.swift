@@ -61,6 +61,9 @@ struct CoreClient {
 
     func bundlesJSON() throws -> [BundleRow] {
         let data = try run(PhoneArguments.bundles(catalog: bundles))
+        if let message = Self.refusalMessage(data) {
+            throw CoreFailure(message: message)
+        }
         let decoded = try JSONDecoder().decode(BundleList.self, from: data)
         return decoded.bundles
     }

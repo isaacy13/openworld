@@ -120,6 +120,8 @@ public final class FlowModel: ObservableObject {
     let phone: Bool
     private let core = CoreClient()
     private var scanRoot: URL?
+    /// The catalog sentence currently on the bundle page, so a later catalog can clear it.
+    private var catalogNotice: String?
 
     public init(phone: Bool) {
         self.phone = phone
@@ -148,11 +150,26 @@ public final class FlowModel: ObservableObject {
     }
 
     public func loadBundles() {
-        bundles = (try? core.bundlesJSON()) ?? []
-        if bundles.isEmpty {
-            error = "The scan program is not on this device. Refusing."
-        } else if error == "The scan program is not on this device. Refusing." {
-            error = nil
+        let previousCatalog = catalogNotice
+        do {
+            bundles = try core.bundlesJSON()
+            if bundles.isEmpty {
+                catalogNotice = "The scan program is not on this device. Refusing."
+                error = catalogNotice
+            } else if error == previousCatalog
+                || error == "The scan program is not on this device. Refusing."
+                || error == "The bundle catalog could not be read. Refusing." {
+                error = nil
+                catalogNotice = nil
+            }
+        } catch let failure as CoreFailure {
+            bundles = []
+            catalogNotice = failure.message
+            error = failure.message
+        } catch {
+            bundles = []
+            catalogNotice = "The scan program is not on this device. Refusing."
+            self.error = catalogNotice
         }
         if !bundles.contains(where: { $0.id == bundleID }),
            let selected = bundles.first(where: { $0.preselected }) {

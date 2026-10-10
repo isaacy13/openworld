@@ -1083,6 +1083,22 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anUnreadableCatalogNamesTheCatalog() {
+        val model = FlowModel()
+        model.applyBundlePayload(
+            JSONObject(
+                """{"status":"refused","summary":"The bundle catalog could not be read. Refusing.","message":"The bundle catalog could not be read. Refusing."}"""
+            )
+        )
+        model.step = Step.Bundle
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Model bundle").assertExists()
+        compose.onNodeWithText("The bundle catalog could not be read. Refusing.").assertExists()
+        compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(0)
+        compose.onNodeWithText("Continue").assertExists()
+    }
+
+    @Test
     fun anOldFileStaysAWarningOnTheEstimate() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/old-estimate.png")

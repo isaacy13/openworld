@@ -96,6 +96,7 @@ class FlowModel {
     var progressGate: CountDownLatch? = null
     private val progressOnce = AtomicBoolean(false)
     var bundleRows by mutableStateOf(listOf<Triple<String, String, String>>())
+    var bundleNotice by mutableStateOf<String?>(null)
     private var localCopy: File? = null
 
     fun choose(uri: Uri, resolver: ContentResolver) {
@@ -126,25 +127,36 @@ class FlowModel {
 
     fun continueFromDevice() {
         try {
-            val json = Core.json(listOf("--json", "--bundles", Core.bundlesDir(), "bundles"))
-            val rows = json.optJSONArray("bundles")
-            val parsed = mutableListOf<Triple<String, String, String>>()
-            if (rows != null) {
-                for (i in 0 until rows.length()) {
-                    val row = rows.getJSONObject(i)
-                    parsed.add(Triple(row.getString("id"), row.getString("name") + "\n" + row.getString("best_for"), row.getString("curve_line")))
-                }
-            }
-            bundleRows = parsed
-            val ids = parsed.map { it.first }
-            if (bundleId !in ids) {
-                val selected = (0 until (rows?.length() ?: 0)).firstOrNull { rows!!.getJSONObject(it).optBoolean("preselected") }
-                if (selected != null && rows != null) bundleId = rows.getJSONObject(selected).getString("id")
-            }
+            applyBundlePayload(Core.json(listOf("--json", "--bundles", Core.bundlesDir(), "bundles")))
         } catch (_: IOException) {
             bundleRows = emptyList()
+            bundleNotice = "The scan program is not on this device. Refusing."
         }
         step = Step.Bundle
+    }
+
+    fun applyBundlePayload(json: JSONObject) {
+        if (json.optString("status") == "refused") {
+            bundleRows = emptyList()
+            val message = json.optString("message")
+            bundleNotice = if (message.isBlank()) "The bundle catalog could not be read. Refusing." else message
+            return
+        }
+        val rows = json.optJSONArray("bundles")
+        val parsed = mutableListOf<Triple<String, String, String>>()
+        if (rows != null) {
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                parsed.add(Triple(row.getString("id"), row.getString("name") + "\n" + row.getString("best_for"), row.getString("curve_line")))
+            }
+        }
+        bundleRows = parsed
+        bundleNotice = if (parsed.isEmpty()) "The scan program is not on this device. Refusing." else null
+        val ids = parsed.map { it.first }
+        if (bundleId !in ids) {
+            val selected = (0 until (rows?.length() ?: 0)).firstOrNull { rows!!.getJSONObject(it).optBoolean("preselected") }
+            if (selected != null && rows != null) bundleId = rows.getJSONObject(selected).getString("id")
+        }
     }
     fun continueFromBundle() { step = Step.Size }
 
