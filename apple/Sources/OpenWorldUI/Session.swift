@@ -235,6 +235,13 @@ public enum ScreenClose {
     }
 }
 
+/// The screen remembers its window. An update that has no window does not forget it.
+public enum HostWindowTrack {
+    public static func remember(current: ObjectIdentifier?, seen: ObjectIdentifier?) -> ObjectIdentifier? {
+        seen ?? current
+    }
+}
+
 /// Scan programs started by one window. Closing that window stops these, including one that starts during the close.
 public final class RunningProgram: @unchecked Sendable {
     private let lock = NSLock()

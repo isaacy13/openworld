@@ -63,15 +63,37 @@ struct PhoneRoot: View {
 #if os(macOS)
 final class HostWindowBox {
     weak var window: NSWindow?
+
+    func observe(_ seen: NSWindow?) {
+        let current = window.map(ObjectIdentifier.init)
+        let next = HostWindowTrack.remember(current: current, seen: seen.map(ObjectIdentifier.init))
+        guard next != current else { return }
+        window = seen
+    }
+}
+
+private final class HostWindowView: NSView {
+    var box: HostWindowBox?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        box?.observe(window)
+    }
 }
 
 private struct HostWindowReader: NSViewRepresentable {
     var box: HostWindowBox
 
-    func makeNSView(context: Context) -> NSView { NSView() }
+    func makeNSView(context: Context) -> NSView {
+        let view = HostWindowView()
+        view.box = box
+        return view
+    }
 
     func updateNSView(_ view: NSView, context: Context) {
-        box.window = view.window
+        guard let view = view as? HostWindowView else { return }
+        view.box = box
+        box.observe(view.window)
     }
 }
 

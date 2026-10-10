@@ -153,6 +153,21 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertTrue(kept.isRunning)
     }
 
+    func testAWindowUpdateWithoutAWindowDoesNotForgetTheOpenWindow() {
+        let openObject = NSObject()
+        let otherObject = NSObject()
+        let open = ObjectIdentifier(openObject)
+        let other = ObjectIdentifier(otherObject)
+        XCTAssertNil(HostWindowTrack.remember(current: nil, seen: nil))
+        let seen = HostWindowTrack.remember(current: nil, seen: open)
+        XCTAssertEqual(seen, open)
+        XCTAssertEqual(HostWindowTrack.remember(current: seen, seen: nil), open)
+        XCTAssertEqual(HostWindowTrack.remember(current: seen, seen: other), other)
+        let remembered = HostWindowTrack.remember(current: seen, seen: nil)
+        XCTAssertTrue(ScreenClose.stops(sameWindow: remembered == open, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: remembered == other, panel: false))
+    }
+
     func testClosingAWindowStopsOnlyThatWindow() {
         XCTAssertTrue(ScreenClose.stops(sameWindow: true, panel: false))
         XCTAssertFalse(ScreenClose.stops(sameWindow: false, panel: false))
