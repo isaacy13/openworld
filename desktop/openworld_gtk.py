@@ -383,7 +383,7 @@ class OpenWorld(Gtk.Application):
         except OSError:
             self._refuse_pick()
             return
-        if not stat.S_ISREG(info.st_mode):
+        if not stat.S_ISREG(info.st_mode) or not os.access(path, os.R_OK):
             self._refuse_pick()
             return
         self.pick_notice.set_visible(False)
@@ -1140,6 +1140,17 @@ class OpenWorld(Gtk.Application):
         folder = Path(path).with_name("not-a-file-dir")
         folder.mkdir(exist_ok=True)
         self.choose_file(str(folder))
+        unreadable = Path(path).with_name("unreadable-photo.bin")
+        unreadable.write_bytes(b"not readable")
+        unreadable.chmod(0)
+        try:
+            if os.access(unreadable, os.R_OK):
+                self._exercise_fail("this account can still read a mode-0 file")
+                return False
+            self.choose_file(str(unreadable))
+        finally:
+            unreadable.chmod(0o644)
+            unreadable.unlink(missing_ok=True)
         if (
             self.pick_notice.get_text() != "The file could not be read. Refusing."
             or not self.pick_notice.get_visible()
