@@ -1286,11 +1286,6 @@ fn class_refusal(json_mode: bool) -> Result<i32, String> {
             "message": message,
         }),
     );
-    // The question has no newline. A terminal already moved when the answer was entered.
-    // A pipe did not, so the sentence would stay on the question line.
-    if prompt_needs_a_new_line(json_mode, io::stdin().is_terminal()) {
-        println!();
-    }
     speak(json_mode, [message]);
     Ok(2)
 }
@@ -1479,6 +1474,11 @@ fn prompt(text: &str, json_mode: bool) -> Result<String, String> {
         .lock()
         .read_line(&mut line)
         .map_err(|e| e.to_string())?;
+    // The question has no newline. A terminal already moved when the answer was entered.
+    // A pipe did not, so the next question or the sentence would stay on this line.
+    if prompt_needs_a_new_line(json_mode, io::stdin().is_terminal()) {
+        println!();
+    }
     Ok(line.trim().to_string())
 }
 

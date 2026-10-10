@@ -211,3 +211,88 @@ fn a_bad_class_answer_stops_before_the_estimate() {
     assert!(!text.contains("Estimate"), "{text}");
     assert!(!out.join("result.json").exists());
 }
+
+#[test]
+fn the_next_question_starts_on_the_next_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("still.png");
+    let (code, _text, err) = run(&["fixture-still", "--blank", "--out", still.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{err}");
+    let posters = dir.path().join("posters");
+    let (code, _text, err) = run(&[
+        "posters",
+        "write-fixture",
+        "--out",
+        posters.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{err}");
+    let out = dir.path().join("out");
+
+    let mut child = Command::new(bin())
+        .arg("--bundles")
+        .arg(bundles())
+        .args([
+            "analyze",
+            "--input",
+            still.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("openworld");
+    child.stdin.take().unwrap().write_all(b"\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(0), "{err}\n{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(
+        text.contains("Missing? [Y/n]: \nWanted? [Y/n]: \n"),
+        "{text:?}"
+    );
+    assert!(!text.contains("Missing? [Y/n]: Wanted?"), "{text:?}");
+    assert!(
+        text.contains("Analyze? [y/N]: \nNot started.\n"),
+        "{text:?}"
+    );
+    assert!(!text.contains("Analyze? [y/N]: Not started."), "{text:?}");
+    assert!(!text.contains("\n\nNot started."), "{text:?}");
+    assert!(!text.contains("Scanning"), "{text}");
+
+    let mut child = Command::new(bin())
+        .arg("--bundles")
+        .arg(bundles())
+        .args(["analyze", "--input", still.to_str().unwrap()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("openworld");
+    child.stdin.take().unwrap().write_all(b"nope\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(
+        text.contains("Model bundle [fast]: \nThat bundle is not in the catalog. Refusing.\n"),
+        "{text:?}"
+    );
+    assert!(
+        !text.contains("Model bundle [fast]: That bundle is not in the catalog. Refusing."),
+        "{text:?}"
+    );
+    assert!(!text.contains("\n\nThat bundle is not in the catalog."), "{text:?}");
+    assert!(!text.contains("Detection size"), "{text}");
+}

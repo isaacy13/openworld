@@ -868,6 +868,11 @@ fn a_result_file_stops_before_the_estimate() {
     assert_eq!(output.status.code(), Some(0), "{err}\n{text}");
     assert!(text.lines().any(|line| line == "Estimate"), "{text}");
     assert!(text.contains("Not started."), "{text}");
+    assert!(
+        text.contains("Analyze? [y/N]: \nNot started.\n"),
+        "{text:?}"
+    );
+    assert!(!text.contains("\n\nNot started."), "{text:?}");
     assert!(!text.contains("Scanning"), "{text}");
     assert_eq!(fs::read(kept.join("keep.txt")).unwrap(), b"stay");
 }
