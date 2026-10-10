@@ -495,7 +495,7 @@ public struct FlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             backControl
             Text("Detection size").font(model.phone ? .largeTitle : .title)
-            Text("Smaller frames are a resize of each decoded frame in memory. Evidence crops come from the original frame. Full resolution is slower.")
+            Text(Copy.sizeHint)
                 .foregroundStyle(.secondary)
             sizePicker
             coveragePicker

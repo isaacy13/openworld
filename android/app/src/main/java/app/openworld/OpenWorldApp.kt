@@ -96,8 +96,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     }
                     Step.Size -> {
                         Text("Detection size", style = MaterialTheme.typography.headlineMedium)
-                        Text("Smaller frames are a resize of each decoded frame in memory. Evidence crops come from the original frame.")
-                        Text("If the original crop is under about 112 px, the label is Not compared.")
+                        Text("Smaller frames are a resize of each decoded frame in memory. A face under 64 px on that image is left out. Evidence crops come from the original frame. If that crop is under 112 px on the short side, the label is \"Not compared.\" Full resolution is slower.")
                         listOf("320" to "320 px on the long side", "480" to "480 px on the long side", "640" to "640 px on the long side", "full" to "Full resolution").forEach { (value, label) ->
                             androidx.compose.foundation.layout.Row {
                                 RadioButton(selected = model.longSide == value, onClick = { model.longSide = value })

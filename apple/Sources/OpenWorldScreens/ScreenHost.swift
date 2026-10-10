@@ -107,6 +107,7 @@ enum ScreenCopy {
                 markedChoice("Complete. Every decoded frame.", selected: model.coverage == "complete"),
                 markedChoice("Measured. 5 frames a second, plus the tracker.", selected: model.coverage == "measured"),
                 Copy.brief,
+                Copy.sizeHint,
             ]
         case "estimate":
             var lines = ["Estimate"]

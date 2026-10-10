@@ -8,6 +8,7 @@ public enum Copy {
     public static let clearance = "No candidate is not a clearance."
     public static let leaving = "You are leaving OpenWorld."
     public static let brief = "A brief face can be missed."
+    public static let sizeHint = "Smaller frames are a resize of each decoded frame in memory. A face under 64 px on that image is left out. Evidence crops come from the original frame. If that crop is under 112 px on the short side, the label is \"Not compared.\" Full resolution is slower."
     public static let onDevice = "This file stays on this device."
     public static let oldFile = "This file is older than about 30 days."
     public static let disagree = "The file timestamps disagree."

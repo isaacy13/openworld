@@ -216,10 +216,17 @@ class OpenWorld(Gtk.Application):
         title = Gtk.Label(label="Detection size", xalign=0)
         title.add_css_class("title")
         hint = Gtk.Label(
-            label="Smaller frames are a resize of each decoded frame in memory. Evidence crops come from the original frame. Full resolution is slower.",
+            label=(
+                "Smaller frames are a resize of each decoded frame in memory. "
+                "A face under 64 px on that image is left out. "
+                "Evidence crops come from the original frame. "
+                'If that crop is under 112 px on the short side, the label is "Not compared." '
+                "Full resolution is slower."
+            ),
             xalign=0,
             wrap=True,
         )
+        self.size_hint = hint
         hint.add_css_class("dim")
         box.append(title)
         box.append(hint)
@@ -1107,6 +1114,25 @@ class OpenWorld(Gtk.Application):
         self.choose_file(str(junk))
         self.load_bundles()
         self._go("size")
+        size_hint = self.size_hint.get_text()
+        if (
+            "A face under 64 px on that image is left out." not in size_hint
+            or 'the label is "Not compared."' not in size_hint
+        ):
+            self._exercise_fail(f"the size page did not explain what is left out: {size_hint!r}")
+            return False
+        size_shot = os.environ.get("OPENWORLD_SIZE_SHOT")
+        if size_shot:
+            subprocess.run(
+                ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
+                check=False,
+            )
+            context = GLib.MainContext.default()
+            deadline = time.time() + 0.4
+            while time.time() < deadline:
+                context.iteration(False)
+                time.sleep(0.05)
+            self._grab(size_shot)
         self.refresh_estimate()
         self._go("estimate")
         if self.primary.get_visible() or self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():

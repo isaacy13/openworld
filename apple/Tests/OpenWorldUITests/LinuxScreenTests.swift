@@ -63,6 +63,9 @@ final class OpenWorldUITests: XCTestCase {
     }
 
     func testTheChosenBundleIsMarked() throws {
+        XCTAssertTrue(Copy.sizeHint.contains("A face under 64 px on that image is left out."))
+        XCTAssertTrue(Copy.sizeHint.contains("the label is \"Not compared.\""))
+        XCTAssertFalse(Copy.sizeHint.contains("about 112"))
         XCTAssertEqual(markedChoice("Fast", selected: true), "Fast. Selected.")
         XCTAssertEqual(markedChoice("Accurate", selected: false), "Accurate")
         XCTAssertEqual(markedChoice("Complete. Every decoded frame.", selected: true), "Complete. Every decoded frame. Selected.")
