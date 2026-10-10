@@ -2112,6 +2112,45 @@ class PhoneLaunchTest {
             ActivityInfo.CONFIG_UI_MODE
         assertEquals(kept, info.configChanges and kept)
     }
+
+    @Test
+    fun theSystemBackStepsToThePreviousPage() {
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/shared.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+        }
+        val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        method.isAccessible = true
+        method.invoke(compose.activity, intent)
+        compose.waitForIdle()
+        compose.onNodeWithText("This file stays on this device.").assertExists()
+        val model = phoneModel(compose.activity)
+        compose.activity.onBackPressedDispatcher.onBackPressed()
+        compose.waitForIdle()
+        assertFalse(compose.activity.isFinishing)
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+        compose.runOnUiThread { model.scanning = true }
+        compose.waitForIdle()
+        compose.activity.onBackPressedDispatcher.onBackPressed()
+        compose.waitForIdle()
+        assertFalse(compose.activity.isFinishing)
+        assertEquals(Step.Choose, model.step)
+        compose.onNodeWithText("Choose a photo or video").assertExists()
+        compose.runOnUiThread { model.scanning = false }
+        compose.waitForIdle()
+        compose.activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(compose.activity.isFinishing)
+    }
+}
+
+private fun phoneModel(activity: MainActivity): FlowModel {
+    val field = MainActivity::class.java.getDeclaredField("model")
+    field.isAccessible = true
+    return field.get(activity) as FlowModel
 }
 
 private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentTestRule, model: FlowModel) {

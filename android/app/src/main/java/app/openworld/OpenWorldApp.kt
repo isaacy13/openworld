@@ -2,6 +2,7 @@
 package app.openworld
 
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +79,9 @@ private val disclosure = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Unit) {
+    BackHandler(enabled = model.step != Step.Choose || model.scanning) {
+        model.back()
+    }
     MaterialTheme {
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
             Column(
