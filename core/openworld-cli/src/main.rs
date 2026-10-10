@@ -1025,9 +1025,9 @@ fn estimate_lines(
 
 fn class_menu_lines() -> Vec<String> {
     vec![
-        "Classes:".into(),
-        "  missing — Missing".into(),
-        "  wanted — Wanted".into(),
+        openworld_core::copy::estimate_class_line(true, true).into(),
+        format!("  missing — {}", marked_name("Missing", true)),
+        format!("  wanted — {}", marked_name("Wanted", true)),
     ]
 }
 
@@ -1834,9 +1834,9 @@ mod cli_tests {
         assert_eq!(
             class_menu_lines(),
             vec![
-                "Classes:".to_string(),
-                "  missing — Missing".to_string(),
-                "  wanted — Wanted".to_string(),
+                "Missing and wanted.".to_string(),
+                "  missing — Missing. Selected.".to_string(),
+                "  wanted — Wanted. Selected.".to_string(),
             ]
         );
         assert_eq!(parse_class_answer("").unwrap(), true);
