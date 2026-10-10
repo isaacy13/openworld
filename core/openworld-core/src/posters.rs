@@ -28,6 +28,18 @@ pub enum PackError {
     Unreadable,
 }
 
+impl PackError {
+    /// The sentence a scan shows when this pack cannot be used.
+    pub fn refusal(self) -> &'static str {
+        match self {
+            PackError::Missing => "The poster pack is missing. Refusing.",
+            PackError::BadHash => "The poster pack hash does not match. Refusing.",
+            PackError::Expired => "The poster pack is expired. Refusing.",
+            PackError::Unreadable => "The poster pack could not be read. Refusing.",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PosterClass {
@@ -108,7 +120,9 @@ impl PosterPack {
     }
 
     pub fn any_plate<'a>(&'a self, missing: bool, wanted: bool, now: SystemTime) -> bool {
-        self.enabled(missing, wanted, now).iter().any(|p| p.plate.as_ref().is_some_and(|s| !s.is_empty()))
+        self.enabled(missing, wanted, now)
+            .iter()
+            .any(|p| p.plate.as_ref().is_some_and(|s| !s.is_empty()))
     }
 }
 
@@ -157,7 +171,8 @@ pub(crate) fn write_pack(dir: &Path, file: &PosterFile) -> Result<PosterPack, Pa
     let bytes = serde_json::to_vec_pretty(file).map_err(|_| PackError::Unreadable)?;
     let hash = sha256_hex(&bytes);
     fs::write(dir.join("snapshot.json"), &bytes).map_err(|_| PackError::Unreadable)?;
-    fs::write(dir.join("snapshot.sha256"), format!("{hash}\n")).map_err(|_| PackError::Unreadable)?;
+    fs::write(dir.join("snapshot.sha256"), format!("{hash}\n"))
+        .map_err(|_| PackError::Unreadable)?;
     let now = parse_rfc3339(&file.created_at).unwrap_or(SystemTime::UNIX_EPOCH);
     load_pack(dir, now)
 }
@@ -275,7 +290,22 @@ mod tests {
         let mut bytes = fs::read(dir.path().join("snapshot.json")).unwrap();
         bytes.push(b' ');
         fs::write(dir.path().join("snapshot.json"), bytes).unwrap();
-        assert!(matches!(load_pack(dir.path(), now), Err(PackError::BadHash)));
+        assert_eq!(
+            load_pack(dir.path(), now).unwrap_err().refusal(),
+            "The poster pack hash does not match. Refusing."
+        );
+        assert_eq!(
+            PackError::Missing.refusal(),
+            "The poster pack is missing. Refusing."
+        );
+        assert_eq!(
+            PackError::Unreadable.refusal(),
+            "The poster pack could not be read. Refusing."
+        );
+        assert_eq!(
+            PackError::Expired.refusal(),
+            "The poster pack is expired. Refusing."
+        );
     }
 
     #[test]
@@ -289,8 +319,15 @@ mod tests {
         // Write the bytes directly and then load.
         let bytes = serde_json::to_vec_pretty(&file).unwrap();
         fs::write(dir.path().join("snapshot.json"), &bytes).unwrap();
-        fs::write(dir.path().join("snapshot.sha256"), format!("{}\n", sha256_hex(&bytes))).unwrap();
-        assert!(matches!(load_pack(dir.path(), now), Err(PackError::Expired)));
+        fs::write(
+            dir.path().join("snapshot.sha256"),
+            format!("{}\n", sha256_hex(&bytes)),
+        )
+        .unwrap();
+        assert!(matches!(
+            load_pack(dir.path(), now),
+            Err(PackError::Expired)
+        ));
         let future = now + Duration::from_secs(1);
         let _ = future;
     }

@@ -209,12 +209,14 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     };
     let pack = match crate::posters::load_pack(&req.posters_dir, req.now) {
         Ok(pack) => pack,
-        Err(PackError::Missing) => return refused("missing_pack", "The poster pack is missing. Refusing."),
-        Err(PackError::BadHash) => {
-            return refused("bad_hash", "The poster pack hash does not match. Refusing.")
+        Err(err) => {
+            let code = match err {
+                PackError::Missing => "missing_pack",
+                PackError::BadHash | PackError::Unreadable => "bad_hash",
+                PackError::Expired => "expired_pack",
+            };
+            return refused(code, err.refusal());
         }
-        Err(PackError::Expired) => return refused("expired_pack", "The poster pack is expired. Refusing."),
-        Err(PackError::Unreadable) => return refused("bad_hash", "The poster pack could not be read. Refusing."),
     };
     if pack.perception == PERCEPTION_ONNX && !bundle.weights_ready {
         return refused(

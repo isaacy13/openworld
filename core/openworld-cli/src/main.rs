@@ -394,10 +394,12 @@ fn run(cli: Cli) -> Result<i32, String> {
         Cmd::Delete { out } => match delete_output(&out) {
             Ok(()) => {
                 emit(cli.json, json!({ "deleted": true }));
+                speak(cli.json, ["Deleted."]);
                 Ok(0)
             }
             Err(err) => {
-                emit(cli.json, json!({ "deleted": false, "message": err }));
+                emit(cli.json, json!({ "deleted": false, "message": &err }));
+                speak(cli.json, [err.as_str()]);
                 Ok(2)
             }
         },
@@ -414,7 +416,8 @@ fn run(cli: Cli) -> Result<i32, String> {
                 Ok(0)
             }
             Err(err) => {
-                emit(cli.json, json!({ "message": err }));
+                emit(cli.json, json!({ "message": &err }));
+                speak(cli.json, [err.as_str()]);
                 Ok(2)
             }
         },
@@ -444,13 +447,13 @@ fn run(cli: Cli) -> Result<i32, String> {
                                 "expires_at": pack.expires_at,
                             }),
                         );
+                        speak(cli.json, poster_check_lines(&pack));
                         Ok(0)
                     }
                     Err(err) => {
-                        emit(
-                            cli.json,
-                            json!({ "status": "refused", "message": err.to_string() }),
-                        );
+                        let message = err.refusal();
+                        emit(cli.json, json!({ "status": "refused", "message": message }));
+                        speak(cli.json, [message]);
                         Ok(2)
                     }
                 }
@@ -467,6 +470,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                         "note": "Fixture posters. Real FBI photos stay off.",
                     }),
                 );
+                speak(cli.json, ["Fixture posters. Real FBI photos stay off."]);
                 Ok(0)
             }
             PosterCmd::Update => {
@@ -958,6 +962,29 @@ fn prompt(text: &str) -> Result<String, String> {
     Ok(line.trim().to_string())
 }
 
+fn speak(json_mode: bool, lines: impl IntoIterator<Item = impl AsRef<str>>) {
+    if json_mode {
+        return;
+    }
+    for line in lines {
+        println!("{}", line.as_ref());
+    }
+}
+
+fn poster_check_lines(pack: &openworld_core::PosterPack) -> Vec<String> {
+    let mut lines = Vec::new();
+    if pack.perception == openworld_core::fiducial::PERCEPTION_FIDUCIAL {
+        lines.push("Fixture posters. Real FBI photos stay off.".into());
+    }
+    let count = pack.posters.len();
+    lines.push(if count == 1 {
+        "1 poster.".into()
+    } else {
+        format!("{count} posters.")
+    });
+    lines
+}
+
 fn emit(json_mode: bool, value: serde_json::Value) {
     if json_mode || value.get("schema").and_then(|v| v.as_str()) == Some("openworld.measurement.v1")
     {
@@ -1430,6 +1457,39 @@ mod cli_tests {
         assert_eq!(
             still.last().map(String::as_str),
             Some("Missing and wanted.")
+        );
+    }
+
+    #[test]
+    fn delete_leave_and_poster_check_say_what_the_screen_says() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = delete_output(dir.path()).unwrap_err();
+        assert_eq!(
+            err,
+            "Refusing to delete a directory that is not an OpenWorld result."
+        );
+        let blocked = leave_prompt("https://example.com").unwrap_err();
+        assert_eq!(blocked, "OpenWorld only opens an FBI page.");
+        let pack = write_fixture_pack(dir.path(), SystemTime::now()).unwrap();
+        assert_eq!(
+            poster_check_lines(&pack),
+            vec![
+                "Fixture posters. Real FBI photos stay off.".to_string(),
+                "3 posters.".to_string(),
+            ]
+        );
+        assert_eq!(
+            run_cli(
+                false,
+                &[
+                    "posters",
+                    "check",
+                    "--posters",
+                    dir.path().join("missing").to_str().unwrap()
+                ]
+            )
+            .unwrap(),
+            2
         );
     }
 }
