@@ -663,7 +663,7 @@ final class OpenWorldUITests: XCTestCase {
         let model = FlowModel(phone: true)
         _ = FlowView(model: model, importControl: control).body
 
-        model.choose(URL(fileURLWithPath: "/tmp/scene.png"))
+        model.choose(try self.still("blank"))
         let step = model.step
         XCTAssertEqual(step, .device)
         _ = FlowView(model: model, importControl: control).body
