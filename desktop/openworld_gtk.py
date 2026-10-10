@@ -53,6 +53,32 @@ def find_bundles() -> str:
     return os.environ.get("OPENWORLD_BUNDLES", str(repo_root() / "bundles"))
 
 
+def drain_scan_pipes(proc: subprocess.Popen[str], on_line) -> str:
+    """Read the report and the crop lines together.
+
+    The report is larger than a pipe buffer on a long file. Reading the crop
+    lines to the end first leaves the screen on Scanning.
+    """
+    stdout_box: list[str] = []
+
+    def read_stdout() -> None:
+        stream = proc.stdout
+        if stream is not None:
+            stdout_box.append(stream.read())
+
+    reader = threading.Thread(target=read_stdout, daemon=True)
+    reader.start()
+    try:
+        stream = proc.stderr
+        if stream is not None:
+            for line in stream:
+                on_line(line)
+    finally:
+        reader.join()
+        proc.wait()
+    return stdout_box[0] if stdout_box else ""
+
+
 class OpenWorld(Gtk.Application):
     def __init__(self) -> None:
         super().__init__(application_id="app.openworld.desktop")
@@ -741,18 +767,18 @@ class OpenWorld(Gtk.Application):
             stderr=subprocess.PIPE,
             text=True,
         )
-        assert proc.stderr is not None
-        for line in proc.stderr:
+
+        def on_line(line: str) -> None:
             line = line.strip()
             if not line:
-                continue
+                return
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                continue
+                return
             GLib.idle_add(self._add_crop, event)
-        stdout = proc.stdout.read() if proc.stdout else ""
-        proc.wait()
+
+        stdout = drain_scan_pipes(proc, on_line)
         try:
             report = json.loads(stdout)
         except json.JSONDecodeError:
@@ -2270,6 +2296,8 @@ class OpenWorld(Gtk.Application):
             )
             return False
         os.chmod(kept_aside, 0o755)
+        if not self._exercise_large_report():
+            return False
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
             json.dumps({"ok": True, "summary": report.get("summary"), "work": str(self.work)})
         )
@@ -2278,6 +2306,43 @@ class OpenWorld(Gtk.Application):
         finally:
             self.quit()
         return False
+
+    def _exercise_large_report(self) -> bool:
+        child = self.work / "wide-report.py"
+        child.write_text(
+            "import sys\n"
+            "sys.stderr.write('{\"kind\":\"face\",\"label\":\"Possible candidate. Not an identification.\",\"crop\":\"crops/a.png\",\"frame_label\":\"Frame 1.\"}\\n')\n"
+            "sys.stderr.flush()\n"
+            "sys.stdout.write('{\"pad\":\"' + ('x' * 200000) + '\"}')\n"
+            "sys.stdout.flush()\n"
+        )
+        proc = subprocess.Popen(
+            ["python3", str(child)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        box: dict = {}
+
+        def run() -> None:
+            lines: list[str] = []
+            box["stdout"] = drain_scan_pipes(proc, lines.append)
+            box["lines"] = lines
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(5)
+        if worker.is_alive():
+            proc.kill()
+            worker.join(2)
+            self._exercise_fail("a large report left the screen on Scanning")
+            return False
+        stdout = box.get("stdout") or ""
+        lines = box.get("lines") or []
+        if "Frame 1." not in "".join(lines) or len(stdout) < 200000 or not stdout.startswith("{\"pad\":"):
+            self._exercise_fail(f"a large report dropped a crop or the report: {len(stdout)} {lines!r}")
+            return False
+        return True
 
     def _exercise_fail(self, message: str) -> None:
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
