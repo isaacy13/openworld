@@ -464,7 +464,10 @@ class OpenWorld(Gtk.Application):
                 name = Path(base).name
         if not name or name in (".", ".."):
             name = "file"
-        dest = self.work / name
+        # The scan writes the poster pack at work/posters. The copy stays beside that.
+        folder = self.work / "imports"
+        folder.mkdir(exist_ok=True)
+        dest = folder / name
         if dest.exists():
             dest = self.work / f"{Path(name).stem}-{time.time_ns()}{Path(name).suffix}"
         try:

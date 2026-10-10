@@ -83,6 +83,14 @@ def main() -> None:
             raise SystemExit(f"an old file with no local path lost its age: {app.warn_label.get_text()!r}")
         if app.pick_notice.get_visible():
             raise SystemExit("a file that opened left the refusal on the page")
+        app._on_drop(None, RemoteFile(b"png-bytes", "posters", 0), 0, 0)
+        pack = app.work / "posters"
+        if app.file_label.get_text() != "posters" or app.stack.get_visible_child_name() != "device":
+            raise SystemExit(
+                f"a file named posters stayed off the page: {app.file_label.get_text()!r} {app.stack.get_visible_child_name()!r}"
+            )
+        if app.input_path is None or Path(app.input_path) == pack or pack.is_file():
+            raise SystemExit(f"a file named posters occupied the poster pack: {app.input_path}")
         local = app.work / "local.png"
         local.write_bytes(b"png")
         app._on_drop(None, desktop.Gio.File.new_for_path(str(local)), 0, 0)
