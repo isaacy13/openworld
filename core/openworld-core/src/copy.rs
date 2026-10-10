@@ -15,6 +15,7 @@ pub const PLATE_UNPUBLISHED: &str = "No poster publishes a plate.";
 pub const FACE_UNSCORED: &str = "This face could not be scored.";
 pub const FIXTURE_MARKERS: &str = "Fixture markers were read.";
 pub const NO_CLASS: &str = "No class was on.";
+pub const CHOOSE_CLASS: &str = "Choose missing, wanted, or both.";
 
 /// The classes compared for this scan. A clearance names them so both classes are not assumed.
 pub fn class_note(missing: bool, wanted: bool) -> &'static str {
@@ -23,6 +24,15 @@ pub fn class_note(missing: bool, wanted: bool) -> &'static str {
         (true, false) => "Missing.",
         (false, true) => "Wanted.",
         (false, false) => NO_CLASS,
+    }
+}
+
+/// The class line on the estimate. Both off keeps Analyze from starting.
+pub fn estimate_class_line(missing: bool, wanted: bool) -> &'static str {
+    if missing || wanted {
+        class_note(missing, wanted)
+    } else {
+        CHOOSE_CLASS
     }
 }
 
@@ -91,6 +101,7 @@ pub fn product_copy() -> serde_json::Value {
         "face_unscored": FACE_UNSCORED,
         "fixture_markers": FIXTURE_MARKERS,
         "no_class": NO_CLASS,
+        "choose_class": CHOOSE_CLASS,
         "disclosure": DISCLOSURE,
         "on_device": ON_DEVICE,
         "old_file": OLD_FILE,

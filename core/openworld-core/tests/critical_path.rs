@@ -295,7 +295,10 @@ fn a_text_file_refuses_and_a_stopped_scan_is_incomplete() {
     assert_eq!(refused.refusal.as_deref(), Some("bad_codec"));
     assert_ne!(refused.summary, NO_CLEARANCE);
     assert!(refused.disclosure.iter().all(|line| line != NO_CLEARANCE));
-    assert!(refused.disclosure.iter().any(|line| line.contains("Nothing is uploaded.")));
+    assert!(refused
+        .disclosure
+        .iter()
+        .any(|line| line.contains("Nothing is uploaded.")));
 
     let still = save_face(dir.path(), 7, 16, 16, 16);
     let mut extra = RequestExtra::default();
@@ -556,8 +559,26 @@ fn product_sentences_and_catalog_edges_stay_closed() {
     }
     assert_eq!(copy["no_class"].as_str(), Some("No class was on."));
     assert_eq!(openworld_core::copy::class_note(false, true), "Wanted.");
-    assert_eq!(openworld_core::posters::PosterClass::Missing.label(), "Missing");
-    assert_eq!(openworld_core::posters::PosterClass::Wanted.label(), "Wanted");
+    assert_eq!(
+        openworld_core::copy::estimate_class_line(true, true),
+        "Missing and wanted."
+    );
+    assert_eq!(
+        openworld_core::copy::estimate_class_line(true, false),
+        "Missing."
+    );
+    assert_eq!(
+        openworld_core::copy::estimate_class_line(false, false),
+        "Choose missing, wanted, or both."
+    );
+    assert_eq!(
+        openworld_core::posters::PosterClass::Missing.label(),
+        "Missing"
+    );
+    assert_eq!(
+        openworld_core::posters::PosterClass::Wanted.label(),
+        "Wanted"
+    );
     assert!(Coverage::parse("sometimes").is_none());
     assert!(DetectionSize::parse("100").is_none());
     assert_eq!(DetectionSize::Px(100).label(), "Custom");

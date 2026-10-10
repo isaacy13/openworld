@@ -52,6 +52,12 @@ enum Cmd {
         form_factor: String,
         #[arg(long, default_value = "cpu")]
         provider: String,
+        /// Leave missing posters out. The estimate then says "Wanted."
+        #[arg(long)]
+        no_missing: bool,
+        /// Leave wanted posters out. The estimate then says "Missing."
+        #[arg(long)]
+        no_wanted: bool,
         #[command(flatten)]
         media: PlatformMedia,
     },
@@ -108,6 +114,12 @@ enum Cmd {
         out: Option<PathBuf>,
         #[arg(long, default_value = "computer")]
         form_factor: String,
+        /// Leave missing posters out. The estimate then says "Wanted."
+        #[arg(long)]
+        no_missing: bool,
+        /// Leave wanted posters out. The estimate then says "Missing."
+        #[arg(long)]
+        no_wanted: bool,
         #[arg(long)]
         yes: bool,
     },
@@ -262,6 +274,8 @@ fn run(cli: Cli) -> Result<i32, String> {
             coverage,
             form_factor,
             provider,
+            no_missing,
+            no_wanted,
             media,
         } => {
             let req = request(
@@ -274,8 +288,8 @@ fn run(cli: Cli) -> Result<i32, String> {
                 &provider,
                 PathBuf::from("."),
                 PathBuf::from("."),
-                true,
-                true,
+                !no_missing,
+                !no_wanted,
                 None,
                 None,
                 media.facts()?,
@@ -288,7 +302,14 @@ fn run(cli: Cli) -> Result<i32, String> {
                     );
                     if !cli.json {
                         let name = bundle_display_name(&bundles, &req.bundle_id);
-                        for line in estimate_lines(&est, &name, req.detection, req.coverage) {
+                        for line in estimate_lines(
+                            &est,
+                            &name,
+                            req.detection,
+                            req.coverage,
+                            req.missing,
+                            req.wanted,
+                        ) {
                             println!("{line}");
                         }
                     }
@@ -349,6 +370,8 @@ fn run(cli: Cli) -> Result<i32, String> {
             posters,
             out,
             form_factor,
+            no_missing,
+            no_wanted,
             yes,
         } => analyze(
             cli.json,
@@ -360,6 +383,8 @@ fn run(cli: Cli) -> Result<i32, String> {
             posters,
             out,
             &form_factor,
+            no_missing,
+            no_wanted,
             yes,
         ),
         Cmd::Demo { out } => demo(&bundles, &out, cli.json),
@@ -508,6 +533,8 @@ fn analyze(
     posters: Option<PathBuf>,
     out: Option<PathBuf>,
     form_factor: &str,
+    no_missing: bool,
+    no_wanted: bool,
     yes: bool,
 ) -> Result<i32, String> {
     println!("{}", openworld_core::copy::ON_DEVICE);
@@ -592,6 +619,16 @@ fn analyze(
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:")?),
     };
+    let (missing, wanted) = if yes || no_missing || no_wanted {
+        (!no_missing, !no_wanted)
+    } else {
+        if !json_mode {
+            for line in class_menu_lines() {
+                println!("{line}");
+            }
+        }
+        (prompt_on("Missing")?, prompt_on("Wanted")?)
+    };
     let req = request(
         bundles,
         &input,
@@ -602,8 +639,8 @@ fn analyze(
         "cpu",
         posters,
         out,
-        true,
-        true,
+        missing,
+        wanted,
         None,
         None,
         None,
@@ -615,11 +652,28 @@ fn analyze(
                 .find(|item| item.id == req.bundle_id)
                 .map(|item| item.name.as_str())
                 .unwrap_or(req.bundle_id.as_str());
-            for line in estimate_lines(&est, name, req.detection, req.coverage) {
+            for line in estimate_lines(
+                &est,
+                name,
+                req.detection,
+                req.coverage,
+                req.missing,
+                req.wanted,
+            ) {
                 println!("{line}");
             }
         }
         Err(report) => return finish_report(json_mode, &report),
+    }
+    if !req.missing && !req.wanted {
+        emit(
+            json_mode,
+            json!({
+                "status": "refused",
+                "message": openworld_core::copy::CHOOSE_CLASS,
+            }),
+        );
+        return Ok(2);
     }
     if !yes {
         let answer = prompt("Analyze? [y/N]:")?;
@@ -865,6 +919,8 @@ fn estimate_lines(
     bundle_name: &str,
     detection: DetectionSize,
     coverage: Coverage,
+    missing: bool,
+    wanted: bool,
 ) -> Vec<String> {
     let mut lines = vec![est.human.clone(), est.caveat.clone()];
     if let Some(note) = &est.device_note {
@@ -887,8 +943,28 @@ fn estimate_lines(
     if coverage == Coverage::Measured {
         lines.push(openworld_core::copy::BRIEF_FACE.into());
     }
-    lines.push("Missing and wanted.".into());
+    lines.push(openworld_core::copy::estimate_class_line(missing, wanted).into());
     lines
+}
+
+fn class_menu_lines() -> Vec<String> {
+    vec![
+        "Classes:".into(),
+        "  missing — Missing".into(),
+        "  wanted — Wanted".into(),
+    ]
+}
+
+fn parse_class_answer(answer: &str) -> Result<bool, String> {
+    match answer.trim().to_ascii_lowercase().as_str() {
+        "" | "y" | "yes" => Ok(true),
+        "n" | "no" => Ok(false),
+        _ => Err(openworld_core::copy::CHOOSE_CLASS.into()),
+    }
+}
+
+fn prompt_on(label: &str) -> Result<bool, String> {
+    parse_class_answer(&prompt(&format!("{label}? [Y/n]:"))?)
 }
 
 fn bundle_display_name(bundles: &Path, id: &str) -> String {
@@ -1004,6 +1080,7 @@ fn copy_lines(words: &serde_json::Value) -> Vec<String> {
         "face_unscored",
         "fixture_markers",
         "no_class",
+        "choose_class",
         "cpu_note",
         "gpu_note",
         "heat_note",
@@ -1492,6 +1569,8 @@ mod cli_tests {
             "Fast",
             DetectionSize::Px(640),
             Coverage::Measured,
+            true,
+            true,
         );
         assert_eq!(lines[0], measured.human);
         assert_eq!(
@@ -1523,6 +1602,35 @@ mod cli_tests {
             lines.last().map(String::as_str),
             Some("Missing and wanted.")
         );
+        let missing_only = estimate_lines(
+            &measured,
+            "Fast",
+            DetectionSize::Px(640),
+            Coverage::Measured,
+            true,
+            false,
+        );
+        let brief = missing_only
+            .iter()
+            .position(|line| line == "A brief face can be missed.")
+            .expect("brief");
+        assert!(brief + 1 == missing_only.len() - 1);
+        assert_eq!(missing_only.last().map(String::as_str), Some("Missing."));
+        assert!(missing_only
+            .iter()
+            .all(|line| line != "Missing and wanted."));
+        let neither = estimate_lines(
+            &measured,
+            "Fast",
+            DetectionSize::Px(640),
+            Coverage::Measured,
+            false,
+            false,
+        );
+        assert_eq!(
+            neither.last().map(String::as_str),
+            Some("Choose missing, wanted, or both.")
+        );
 
         let still = estimate_lines(
             &openworld_core::estimate::estimate(&openworld_core::estimate::EstimateInput {
@@ -1539,6 +1647,8 @@ mod cli_tests {
             "Fast",
             DetectionSize::Full,
             Coverage::Complete,
+            false,
+            true,
         );
         assert!(still
             .iter()
@@ -1548,9 +1658,20 @@ mod cli_tests {
             still.iter().rev().nth(1).map(String::as_str),
             Some("Fast. Full resolution. Every decoded frame.")
         );
+        assert_eq!(still.last().map(String::as_str), Some("Wanted."));
         assert_eq!(
-            still.last().map(String::as_str),
-            Some("Missing and wanted.")
+            class_menu_lines(),
+            vec![
+                "Classes:".to_string(),
+                "  missing — Missing".to_string(),
+                "  wanted — Wanted".to_string(),
+            ]
+        );
+        assert_eq!(parse_class_answer("").unwrap(), true);
+        assert_eq!(parse_class_answer("n").unwrap(), false);
+        assert_eq!(
+            parse_class_answer("maybe").unwrap_err(),
+            "Choose missing, wanted, or both."
         );
     }
 
@@ -1600,6 +1721,7 @@ mod cli_tests {
             "This file stays on this device.",
             "Nothing is uploaded.",
             "Not measured yet.",
+            "Choose missing, wanted, or both.",
         ] {
             assert!(lines.iter().any(|line| line == phrase), "{phrase} missing");
         }
