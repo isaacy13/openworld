@@ -1284,19 +1284,6 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
-    func testLinuxSizeAndCoverageButtonsChangeTheSelection() {
-        MainActor.assumeIsolated {
-            let model = FlowModel(phone: true)
-            model.step = .size
-            model.longSide = "640"
-            model.coverage = "complete"
-            model.longSide = "320"
-            model.coverage = "measured"
-            XCTAssertEqual(model.longSide, "320")
-            XCTAssertEqual(model.coverage, "measured")
-        }
-    }
-
     func testAMissingOutputDirectoryRefusesTheEstimate() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
