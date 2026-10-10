@@ -1652,6 +1652,16 @@ mod cli_tests {
                 .any(|line| line == "Frame 1."));
         }
         assert!(lines.iter().any(|line| line == "Bundle: Fast"));
+        let mut untitled = report.clone();
+        untitled.candidates[0].poster_title.clear();
+        untitled.candidates[0].poster_class_label = "Missing".into();
+        let unnamed = human_lines(&untitled);
+        assert!(unnamed.iter().any(|line| line == "Missing"));
+        assert!(unnamed.iter().all(|line| line != " (Missing)"));
+        untitled.candidates[0].poster_title = "Fixture subject A".into();
+        untitled.candidates[0].poster_class_label.clear();
+        assert!(human_lines(&untitled).iter().any(|line| line == "Fixture subject A"));
+
         assert!(lines.iter().any(|line| line == "1 frame analyzed."));
         assert!(lines.iter().any(|line| line == "Every decoded frame."));
         assert!(lines.iter().all(|line| {

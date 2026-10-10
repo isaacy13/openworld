@@ -93,7 +93,7 @@ public enum PhonePreview {
                 if candidate.crop?.isEmpty == false { lines.append("Crop") }
                 if candidate.frame?.isEmpty == false { lines.append(candidate.frameLabel) }
                 if !candidate.uncertainty.isEmpty { lines.append(candidate.uncertainty) }
-                lines.append(candidate.posterLine)
+                if !candidate.posterLine.isEmpty { lines.append(candidate.posterLine) }
                 lines.append("Open FBI page")
             }
             if let items = model.report?.inventory, !items.isEmpty {

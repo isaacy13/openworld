@@ -177,8 +177,11 @@ public struct Candidate: Decodable, Identifiable {
     public var posterTitle: String
     public var posterClass: String
     public var posterClassLabel: String
+    /// Title and class together read "Title (Class)". Either one alone keeps that text.
     public var posterLine: String {
-        posterClassLabel.isEmpty ? posterTitle : "\(posterTitle) (\(posterClassLabel))"
+        if posterTitle.isEmpty { return posterClassLabel }
+        if posterClassLabel.isEmpty { return posterTitle }
+        return "\(posterTitle) (\(posterClassLabel))"
     }
     public var fbiUrl: String
     public var crop: String?

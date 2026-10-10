@@ -843,13 +843,14 @@ class OpenWorld(Gtk.Application):
         title = candidate.get("poster_title", "")
         class_label = candidate.get("poster_class_label", "")
         poster_line = f"{title} ({class_label})" if title and class_label else title or class_label
-        poster = Gtk.Label(
-            label=poster_line,
-            xalign=0,
-            wrap=True,
-        )
         box.append(uncertainty)
-        box.append(poster)
+        if poster_line:
+            poster = Gtk.Label(
+                label=poster_line,
+                xalign=0,
+                wrap=True,
+            )
+            box.append(poster)
         button = Gtk.Button(label="Open FBI page")
         button.set_halign(Gtk.Align.START)
         button.connect("clicked", lambda *_c, url=candidate.get("fbi_url", ""): self.confirm_leave(url))
@@ -1357,10 +1358,22 @@ class OpenWorld(Gtk.Application):
                 "class_note": "Missing and wanted.",
                 "warnings": [PHRASES["old"], "The file timestamps disagree."],
                 "disclosure": ["Nothing is uploaded."],
-                "candidates": [],
+                "candidates": [
+                    {
+                        "wording": PHRASES["possible"],
+                        "uncertainty": "",
+                        "poster_title": "",
+                        "poster_class_label": "Missing",
+                        "fbi_url": "https://www.fbi.gov/wanted",
+                    }
+                ],
                 "inventory": [],
             }
         )
+        labels = self._labels_under(self.detail)
+        if "Missing" not in labels or " (Missing)" in labels:
+            self._exercise_fail(f"a poster with no title lost its class: {labels!r}")
+            return False
         if (
             PHRASES["old"] not in self.warning_note.get_text()
             or "The file timestamps disagree." not in self.warning_note.get_text()

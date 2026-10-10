@@ -1142,6 +1142,30 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aPosterWithoutATitleKeepsTheClass() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "Possible candidate. Not an identification."
+        model.candidateRows = listOf(
+            CandidateRow(
+                wording = "Possible candidate. Not an identification.",
+                uncertainty = "Score 0.90.",
+                title = "",
+                posterClassLabel = "Missing",
+                url = "https://www.fbi.gov/wanted",
+                cropPath = null,
+                framePath = null,
+            )
+        )
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Missing").assertExists()
+        compose.onAllNodesWithText(" (Missing)", substring = true).assertCountEquals(0)
+        assertEquals("Fixture subject A", posterLine("Fixture subject A", ""))
+        assertEquals("", posterLine("", ""))
+    }
+
+    @Test
     fun aRefusedEstimateDoesNotAskForAClass() {
         val model = FlowModel()
         model.step = Step.Estimate

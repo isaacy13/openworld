@@ -28,6 +28,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+internal fun posterLine(title: String, classLabel: String): String {
+    return when {
+        title.isBlank() -> classLabel
+        classLabel.isBlank() -> title
+        else -> "$title ($classLabel)"
+    }
+}
+
 internal fun markedChoice(title: String, selected: Boolean): String {
     if (!selected) return title
     return if (title.endsWith(".")) "$title Selected." else "$title. Selected."
@@ -196,9 +204,8 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 evidencePicture(row.framePath, row.frameLabel)
                             }
                             if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
-                            if (row.title.isNotBlank()) {
-                                Text(if (row.posterClassLabel.isBlank()) row.title else "${row.title} (${row.posterClassLabel})")
-                            }
+                            val poster = posterLine(row.title, row.posterClassLabel)
+                            if (poster.isNotBlank()) Text(poster)
                             Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
                         }
                         if (model.strip.isNotEmpty()) {

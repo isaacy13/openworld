@@ -764,7 +764,9 @@ public struct FlowView: View {
                                 labeledCrop(candidate.frame, candidate.frameLabel)
                             }
                             Text(candidate.uncertainty)
-                            Text(candidate.posterLine)
+                            if !candidate.posterLine.isEmpty {
+                                Text(candidate.posterLine)
+                            }
                             prominent("Open FBI page") {
                                 model.requestLeave(candidate.fbiUrl)
                             }

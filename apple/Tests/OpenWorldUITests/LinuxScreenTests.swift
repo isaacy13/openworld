@@ -66,6 +66,25 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertLessThan(bundleAt, sizeAt)
             XCTAssertLessThan(sizeAt, coverageAt)
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" || $0.posterClassLabel == "Wanted" } == true)
+            var untitled = try XCTUnwrap(model.report?.candidates.first { $0.posterClassLabel == "Missing" })
+            untitled.posterTitle = ""
+            XCTAssertEqual(untitled.posterLine, "Missing")
+            untitled.posterTitle = "Fixture subject A"
+            untitled.posterClassLabel = ""
+            XCTAssertEqual(untitled.posterLine, "Fixture subject A")
+            untitled.posterTitle = ""
+            XCTAssertEqual(untitled.posterLine, "")
+            let saved = model.report
+            if var report = model.report, var card = report.candidates.first {
+                card.posterTitle = ""
+                card.posterClassLabel = "Missing"
+                report.candidates = [card]
+                model.report = report
+                let unnamed = PhonePreview.lines(screen: "results", model: model)
+                XCTAssertTrue(unnamed.contains("Missing"))
+                XCTAssertFalse(unnamed.contains(" (Missing)"))
+            }
+            model.report = saved
             let disclosure = model.report?.disclosure ?? []
             XCTAssertTrue(disclosure.contains("Nothing is uploaded."))
             XCTAssertTrue(disclosure.contains("Nobody is enrolled."))
