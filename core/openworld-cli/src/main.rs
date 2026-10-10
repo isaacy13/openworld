@@ -545,21 +545,14 @@ fn analyze(
         println!("{line}");
     }
     let all = load_bundles(bundles).map_err(|e| e.to_string())?;
-    if !json_mode {
-        println!("Bundles:");
-        for item in &all {
-            println!(
-                "  {} — {}",
-                item.id,
-                marked_name(&item.name, item.preselected())
-            );
-            println!("    {}", item.best_for);
-            println!("    {}", item.curve_line);
-        }
-    }
     let bundle = match bundle {
         Some(id) => id,
         None => {
+            if !json_mode {
+                for line in bundle_menu_lines(&all) {
+                    println!("{line}");
+                }
+            }
             let entered = prompt("Bundle [fast]:")?;
             if entered.is_empty() {
                 "fast".into()
@@ -1108,6 +1101,23 @@ fn bundles_dir(flag: Option<PathBuf>) -> PathBuf {
     PathBuf::from("bundles")
 }
 
+fn bundle_menu_lines(items: &[openworld_core::Bundle]) -> Vec<String> {
+    let mut lines = vec![
+        "Model bundle".into(),
+        openworld_core::copy::BUNDLE_NOTE.into(),
+    ];
+    for item in items {
+        lines.push(format!(
+            "  {} — {}",
+            item.id,
+            marked_name(&item.name, item.preselected())
+        ));
+        lines.push(format!("    {}", item.best_for));
+        lines.push(format!("    {}", item.curve_line));
+    }
+    lines
+}
+
 fn choose_lines() -> Vec<String> {
     vec![
         "Choose a photo or video".into(),
@@ -1183,6 +1193,7 @@ fn copy_lines(words: &serde_json::Value) -> Vec<String> {
         "estimate_caveat",
         "no_camera",
         "size_hint",
+        "bundle_note",
     ];
     let mut lines = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -1215,7 +1226,10 @@ fn push_copy(lines: &mut Vec<String>, value: &serde_json::Value) {
 }
 
 fn bundle_lines(rows: &[serde_json::Value]) -> Vec<String> {
-    let mut lines = Vec::new();
+    let mut lines = vec![
+        "Model bundle".into(),
+        openworld_core::copy::BUNDLE_NOTE.into(),
+    ];
     for row in rows {
         let name = row["name"].as_str().unwrap_or("");
         lines.push(marked_name(
@@ -1888,6 +1902,7 @@ mod cli_tests {
             "Not measured yet.",
             "Choose missing, wanted, or both.",
             "Import a file you already have. There is no camera.",
+            "Scores are not comparable across bundles. Results name the bundle you pick.",
         ] {
             assert!(lines.iter().any(|line| line == phrase), "{phrase} missing");
         }
@@ -1916,10 +1931,19 @@ mod cli_tests {
         let all = load_bundles(Path::new(&bundles())).unwrap();
         let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
         let listed = bundle_lines(&rows);
+        assert_eq!(listed[0], "Model bundle");
+        assert_eq!(
+            listed[1],
+            "Scores are not comparable across bundles. Results name the bundle you pick."
+        );
         assert!(listed.iter().any(|line| line == "Fast. Selected."));
         assert!(listed.iter().any(|line| line == "Accurate"));
         assert!(listed.iter().all(|line| line != "Accurate. Selected."));
         assert!(listed.iter().any(|line| line.contains("Not measured yet.")));
+        let menu = bundle_menu_lines(&all);
+        assert_eq!(menu[0], "Model bundle");
+        assert_eq!(menu[1], listed[1]);
+        assert!(menu.iter().any(|line| line == "  fast — Fast. Selected."));
         assert_eq!(marked_name("Fast", true), "Fast. Selected.");
         assert_eq!(marked_name("Accurate", false), "Accurate");
         assert_eq!(

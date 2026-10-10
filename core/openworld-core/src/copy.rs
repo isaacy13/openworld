@@ -85,6 +85,8 @@ pub const SUGGEST_COMPUTER: &str =
 pub const NOT_MEASURED: &str = "Not measured yet.";
 pub const ESTIMATE_CAVEAT: &str = "This is a planning estimate, not a thermal measurement.";
 pub const NO_CAMERA: &str = "Import a file you already have. There is no camera.";
+pub const BUNDLE_NOTE: &str =
+    "Scores are not comparable across bundles. Results name the bundle you pick.";
 pub const SIZE_HINT: &str = "Smaller frames are a resize of each decoded frame in memory. A face under 64 px on that image is left out. Evidence crops come from the original frame. If that crop is under 112 px on the short side, the label is \"Not compared.\" Full resolution is slower.";
 
 pub fn product_copy() -> serde_json::Value {
@@ -117,5 +119,6 @@ pub fn product_copy() -> serde_json::Value {
         "estimate_caveat": ESTIMATE_CAVEAT,
         "no_camera": NO_CAMERA,
         "size_hint": SIZE_HINT,
+        "bundle_note": BUNDLE_NOTE,
     })
 }
