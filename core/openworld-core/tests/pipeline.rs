@@ -318,6 +318,8 @@ fn measured_banner_and_a_stopped_job_is_incomplete() {
     assert_eq!(stopped.status, "incomplete");
     assert_eq!(stopped.summary, INCOMPLETE);
     assert_ne!(stopped.summary, NO_CLEARANCE);
+    assert!(stopped.disclosure.iter().all(|line| line != NO_CLEARANCE));
+    assert!(stopped.disclosure.iter().any(|line| line.contains("Nothing is uploaded.")));
     assert!(stopped.frames_analyzed < frames.len() as u64);
 }
 

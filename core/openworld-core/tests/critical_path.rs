@@ -294,6 +294,8 @@ fn a_text_file_refuses_and_a_stopped_scan_is_incomplete() {
     );
     assert_eq!(refused.refusal.as_deref(), Some("bad_codec"));
     assert_ne!(refused.summary, NO_CLEARANCE);
+    assert!(refused.disclosure.iter().all(|line| line != NO_CLEARANCE));
+    assert!(refused.disclosure.iter().any(|line| line.contains("Nothing is uploaded.")));
 
     let still = save_face(dir.path(), 7, 16, 16, 16);
     let mut extra = RequestExtra::default();
@@ -304,6 +306,7 @@ fn a_text_file_refuses_and_a_stopped_scan_is_incomplete() {
     );
     assert_eq!(stopped.status, "incomplete");
     assert_eq!(stopped.summary, INCOMPLETE);
+    assert!(stopped.disclosure.iter().all(|line| line != NO_CLEARANCE));
 }
 
 #[test]

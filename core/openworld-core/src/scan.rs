@@ -887,7 +887,7 @@ impl<'a> Engine<'a> {
             execution: execution.as_str().into(),
             device_note: execution.device_note().map(str::to_string),
             warnings: self.opts.warnings.clone(),
-            disclosure: DISCLOSURE.iter().map(|s| (*s).to_string()).collect(),
+            disclosure: disclosure_lines(!incomplete),
             frames_decoded: self.frames_decoded,
             frames_analyzed: self.frames_analyzed,
             faces_embedded: self.faces_embedded,
@@ -996,7 +996,7 @@ pub fn refused(code: &str, message: &str) -> ScanReport {
         execution: String::new(),
         device_note: None,
         warnings: Vec::new(),
-        disclosure: DISCLOSURE.iter().map(|s| (*s).to_string()).collect(),
+        disclosure: disclosure_lines(false),
         frames_decoded: 0,
         frames_analyzed: 0,
         faces_embedded: 0,
@@ -1006,6 +1006,16 @@ pub fn refused(code: &str, message: &str) -> ScanReport {
         candidates: Vec::new(),
         comparisons: Vec::new(),
     }
+}
+
+/// A finished scan keeps the clearance sentence. An unfinished or refused scan does not.
+fn disclosure_lines(include_clearance: bool) -> Vec<String> {
+    DISCLOSURE
+        .iter()
+        .copied()
+        .filter(|line| include_clearance || *line != NO_CLEARANCE)
+        .map(str::to_string)
+        .collect()
 }
 
 pub fn delete_output(dir: &Path) -> Result<(), String> {

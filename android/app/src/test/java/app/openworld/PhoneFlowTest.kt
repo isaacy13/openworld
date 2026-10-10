@@ -120,6 +120,10 @@ class PhoneFlowTest {
         assertEquals("Incomplete.", json.getString("summary"))
         val reason = json.getString("message")
         assertEquals("The scan stopped before every selected frame was analyzed.", reason)
+        val disclosure = json.getJSONArray("disclosure")
+        val lines = (0 until disclosure.length()).map { disclosure.getString(it) }
+        assertTrue(lines.contains("Nothing is uploaded."))
+        assertFalse(lines.contains("No candidate is not a clearance."))
         val model = FlowModel()
         model.status = json.getString("status")
         model.summary = json.getString("summary")
