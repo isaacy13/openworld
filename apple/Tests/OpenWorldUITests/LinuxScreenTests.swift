@@ -1089,6 +1089,37 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAMissingOutputDirectoryRefusesTheEstimate() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertNotNil(model.estimate)
+            XCTAssertTrue(model.showsAnalyze)
+            let blocker = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ow-not-a-dir-\(UUID().uuidString)")
+            XCTAssertTrue(FileManager.default.createFile(atPath: blocker.path, contents: Data("keep".utf8)))
+            defer { try? FileManager.default.removeItem(at: blocker) }
+            model.scratchDirectory = blocker
+            model.analyze()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertNil(model.report)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertFalse(model.showsAnalyze)
+            XCTAssertEqual(model.error, "The output directory could not be created. Refusing.")
+            let lines = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertTrue(lines.contains("The output directory could not be created. Refusing."))
+            XCTAssertFalse(lines.contains("Analyze"))
+            XCTAssertFalse(lines.contains("Missing"))
+            XCTAssertFalse(lines.contains("Wanted"))
+            XCTAssertFalse(lines.contains(Copy.clearance))
+            _ = FlowView(model: model, importControl: self.control).body
+            XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
+        }
+    }
+
     @MainActor
     private var control: AnyView {
         AnyView(Button(action: {}) { Text("Choose File") })

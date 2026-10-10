@@ -119,6 +119,8 @@ public final class FlowModel: ObservableObject {
     public var progressHold: DispatchSemaphore?
     /// When set, the next scan writes the fixture pack here. A file at this path is refused.
     public var fixturePackDirectory: URL?
+    /// When set, the result folder is created here. A file at this path cannot hold that folder.
+    public var scratchDirectory: URL?
     let phone: Bool
     private let core = CoreClient()
     private var scanRoot: URL?
@@ -331,7 +333,10 @@ public final class FlowModel: ObservableObject {
     public func analyze() {
         guard canAnalyze, let file else { return }
         guard releaseResult() else { return }
-        let paths = makeScanPaths()
+        guard let paths = makeScanPaths() else {
+            refuseUncreatableOutput()
+            return
+        }
         apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, missing: includeMissing, wanted: includeWanted, paths: paths))
     }
 
@@ -339,9 +344,12 @@ public final class FlowModel: ObservableObject {
     public func startScan() {
         guard !scanning, canAnalyze, let file else { return }
         guard releaseResult() else { return }
+        guard let paths = makeScanPaths() else {
+            refuseUncreatableOutput()
+            return
+        }
         scanning = true
         liveCrops = []
-        let paths = makeScanPaths()
         let core = core
         let bundleID = bundleID
         let longSide = longSide
@@ -416,11 +424,25 @@ public final class FlowModel: ObservableObject {
         }
     }
 
-    private func makeScanPaths() -> ScanPaths {
+    /// The result folder could not be created. The estimate stays, and Analyze stays off.
+    private func refuseUncreatableOutput() {
+        estimate = nil
+        canAnalyze = false
+        scanning = false
+        error = "The output directory could not be created. Refusing."
+    }
+
+    private func makeScanPaths() -> ScanPaths? {
         leavingURL = nil
         leaveError = nil
         deleteNotice = nil
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let parent = scratchDirectory ?? FileManager.default.temporaryDirectory
+        let root = parent.appendingPathComponent("openworld-" + UUID().uuidString)
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
         scanRoot = root
         return ScanPaths(
             root: root,
