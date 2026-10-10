@@ -169,7 +169,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             }
                             if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
                             if (row.title.isNotBlank()) {
-                                Text(if (row.posterClass.isBlank()) row.title else "${row.title} (${row.posterClass})")
+                                Text(if (row.posterClassLabel.isBlank()) row.title else "${row.title} (${row.posterClassLabel})")
                             }
                             Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
                         }

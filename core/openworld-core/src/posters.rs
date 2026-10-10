@@ -50,6 +50,14 @@ impl PosterClass {
             PosterClass::Wanted => "wanted",
         }
     }
+
+    /// The word on a candidate card. The stored class stays `missing` or `wanted`.
+    pub fn label(self) -> &'static str {
+        match self {
+            PosterClass::Missing => "Missing",
+            PosterClass::Wanted => "Wanted",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

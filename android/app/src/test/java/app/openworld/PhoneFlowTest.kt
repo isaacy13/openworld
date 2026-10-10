@@ -893,7 +893,7 @@ class PhoneScreenTest {
                 wording = "Possible candidate. Not an identification.",
                 uncertainty = "Score 0.90.",
                 title = "Fixture subject A",
-                posterClass = "missing",
+                posterClassLabel = "Missing",
                 url = "https://www.fbi.gov/wanted",
                 cropPath = null,
                 framePath = null,
@@ -909,6 +909,8 @@ class PhoneScreenTest {
         val openAt = texts.indexOfFirst { it == "Open FBI page" }
         val disclosureAt = texts.indexOfFirst { it.contains("Nothing is uploaded.") }
         assertTrue("$texts", classAt >= 0 && openAt > classAt && disclosureAt > openAt)
+        assertTrue(texts.any { it == "Fixture subject A (Missing)" })
+        assertTrue(texts.none { it.contains("(missing)") || it.contains("(wanted)") })
     }
 
     @Test
@@ -968,8 +970,10 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("Open").assertCountEquals(0)
         assertTrue(model.candidateRows.size >= 2)
         compose.onAllNodesWithText("Open FBI page").assertCountEquals(model.candidateRows.size)
-        compose.onNodeWithText("Fixture subject A", substring = true).assertExists()
-        compose.onNodeWithText("Fixture vehicle C", substring = true).assertExists()
+        compose.onNodeWithText("Fixture subject A (Missing)").assertExists()
+        compose.onNodeWithText("Fixture vehicle C (Wanted)").assertExists()
+        compose.onAllNodesWithText("(missing)", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("(wanted)", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Crops from this file.").assertExists()
         compose.onAllNodesWithText("Crop").assertCountEquals(model.candidateRows.size)
         compose.onAllNodesWithText("Frame").assertCountEquals(model.candidateRows.size)

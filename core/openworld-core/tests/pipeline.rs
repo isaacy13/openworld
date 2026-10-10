@@ -281,6 +281,7 @@ fn wanted_class_off_skips_that_class_with_the_same_cutoff() {
     opts.fps = 0.0;
     let report = scan_images(&[image.clone()], &bundle, &pack, &opts, &mut |_| {});
     assert!(report.candidates.iter().all(|c| c.poster_class == "missing"));
+    assert!(report.candidates.iter().all(|c| c.poster_class_label == "Missing"));
     assert!(report.candidates.iter().all(|c| c.kind != "plate"));
     assert_eq!(report.plates_ocr_attempted, 0);
     assert_eq!(report.class_note.as_deref(), Some("Missing."));
@@ -289,6 +290,7 @@ fn wanted_class_off_skips_that_class_with_the_same_cutoff() {
     opts.wanted = true;
     let wanted_only = scan_images(&[image.clone()], &bundle, &pack, &opts, &mut |_| {});
     assert!(wanted_only.candidates.iter().all(|c| c.poster_class == "wanted"));
+    assert!(wanted_only.candidates.iter().all(|c| c.poster_class_label == "Wanted"));
     assert!(wanted_only.candidates.iter().any(|c| c.kind == "plate"));
     assert_eq!(wanted_only.class_note.as_deref(), Some("Wanted."));
     opts.wanted = false;

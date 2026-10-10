@@ -168,6 +168,10 @@ public struct Candidate: Decodable, Identifiable {
     public var uncertainty: String
     public var posterTitle: String
     public var posterClass: String
+    public var posterClassLabel: String
+    public var posterLine: String {
+        posterClassLabel.isEmpty ? posterTitle : "\(posterTitle) (\(posterClassLabel))"
+    }
     public var fbiUrl: String
     public var crop: String?
     public var frame: String?
@@ -178,6 +182,7 @@ public struct Candidate: Decodable, Identifiable {
         case wording, kind, uncertainty, crop, frame, leaving
         case posterTitle = "poster_title"
         case posterClass = "poster_class"
+        case posterClassLabel = "poster_class_label"
         case fbiUrl = "fbi_url"
         case frameIndex = "frame_index"
         case posterId = "poster_id"

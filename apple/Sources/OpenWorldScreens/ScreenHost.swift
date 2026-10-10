@@ -139,7 +139,7 @@ enum ScreenCopy {
                 if let candidate = model.report?.candidates.first {
                     if candidate.crop?.isEmpty == false { lines.append("Crop") }
                     if candidate.frame?.isEmpty == false { lines.append("Frame") }
-                    lines.append(candidate.posterTitle + " (" + candidate.posterClass + ")")
+                    lines.append(candidate.posterLine)
                 }
                 lines.append("Open FBI page")
             }

@@ -782,8 +782,11 @@ class OpenWorld(Gtk.Application):
                     images.append(pair)
         box.append(images)
         uncertainty = Gtk.Label(label=candidate.get("uncertainty", ""), xalign=0, wrap=True)
+        title = candidate.get("poster_title", "")
+        class_label = candidate.get("poster_class_label", "")
+        poster_line = f"{title} ({class_label})" if title and class_label else title or class_label
         poster = Gtk.Label(
-            label=f"{candidate.get('poster_title', '')} ({candidate.get('poster_class', '')})",
+            label=poster_line,
             xalign=0,
             wrap=True,
         )
@@ -1333,6 +1336,9 @@ class OpenWorld(Gtk.Application):
             return False
         if "Score " not in card_text or "Cosine" in card_text or "FIX123" not in card_text:
             self._exercise_fail(f"the card did not explain the score and the plate: {card_text}")
+            return False
+        if "(missing)" in card_text or "(wanted)" in card_text or "(Missing)" not in card_text or "(Wanted)" not in card_text:
+            self._exercise_fail(f"a card showed the raw poster class: {card_text}")
             return False
         if self.strip_heading.get_text() != "Crops from this file." or not self.strip_heading.get_visible():
             self._exercise_fail("the other crops are not labeled under the cards")

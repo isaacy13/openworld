@@ -603,7 +603,7 @@ public struct FlowView: View {
                                 labeledCrop(candidate.frame, "Frame")
                             }
                             Text(candidate.uncertainty)
-                            Text("\(candidate.posterTitle) (\(candidate.posterClass))")
+                            Text(candidate.posterLine)
                             prominent("Open FBI page") {
                                 model.requestLeave(candidate.fbiUrl)
                             }

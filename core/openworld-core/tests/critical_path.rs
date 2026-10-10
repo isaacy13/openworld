@@ -556,6 +556,8 @@ fn product_sentences_and_catalog_edges_stay_closed() {
     }
     assert_eq!(copy["no_class"].as_str(), Some("No class was on."));
     assert_eq!(openworld_core::copy::class_note(false, true), "Wanted.");
+    assert_eq!(openworld_core::posters::PosterClass::Missing.label(), "Missing");
+    assert_eq!(openworld_core::posters::PosterClass::Wanted.label(), "Wanted");
     assert!(Coverage::parse("sometimes").is_none());
     assert!(DetectionSize::parse("100").is_none());
     assert_eq!(DetectionSize::Px(100).label(), "Custom");
