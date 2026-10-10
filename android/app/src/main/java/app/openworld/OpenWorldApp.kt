@@ -75,6 +75,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.pickNotice?.let { Text(it, color = warningColor) }
+                if (model.step != Step.Estimate && model.step != Step.Results) {
+                    model.deleteNotice?.let { Text(it, color = warningColor) }
+                }
                 if (model.step != Step.Choose) {
                     TextButton(onClick = model::back, enabled = !model.scanning) { Text("Back") }
                 }

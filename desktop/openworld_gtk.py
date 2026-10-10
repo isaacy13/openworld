@@ -1100,6 +1100,11 @@ class OpenWorld(Gtk.Application):
             return
         self.history.pop()
         self._show(self.history[-1])
+        notice = self.delete_notice.get_text()
+        if notice and self.pick_notice.get_text() == notice:
+            self.pick_notice.set_visible(False)
+        self.delete_notice.set_text("")
+        self.delete_notice.set_visible(False)
 
     def _go(self, name: str) -> None:
         if self.history[-1] != name:
@@ -1956,6 +1961,32 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(
                 "a file chosen from the device page hid a result that could not be deleted: "
                 f"{self.pick_notice.get_text()!r} {self.input_path!r}"
+            )
+            return False
+        self.on_primary()
+        self.on_primary()
+        self.on_primary()
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.pick_notice.get_text() != "The result could not be deleted."
+            or not self.pick_notice.get_visible()
+            or self._labels_under(self.page_estimate).count("The result could not be deleted.") != 0
+        ):
+            self._exercise_fail(
+                "the estimate repeated a result that could not be deleted: "
+                f"{self.pick_notice.get_text()!r} {self.stack.get_visible_child_name()!r}"
+            )
+            return False
+        self.go_back()
+        if (
+            self.stack.get_visible_child_name() != "size"
+            or self.pick_notice.get_visible()
+            or self.delete_notice.get_visible()
+            or self.delete_notice.get_text()
+        ):
+            self._exercise_fail(
+                "Back left the delete sentence on the size page: "
+                f"{self.pick_notice.get_text()!r} {self.delete_notice.get_text()!r}"
             )
             return False
         self.pick_notice.set_visible(False)

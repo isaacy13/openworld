@@ -1207,6 +1207,20 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(lines.contains(file.lastPathComponent))
             XCTAssertFalse(lines.contains(next.lastPathComponent))
             _ = FlowView(model: model, importControl: self.control).body
+            model.loadBundles()
+            model.continueFromBundles()
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.filter { $0 == "The result could not be deleted." }.count, 1)
+            XCTAssertTrue(estimate.contains("Estimate"))
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertNil(model.deleteNotice)
+            let size = PhonePreview.lines(screen: "size", model: model)
+            XCTAssertFalse(size.contains("The result could not be deleted."))
         }
     }
 

@@ -114,12 +114,8 @@ class FlowModel {
         }
         if (!removeResult(abandonUnmarked = true)) {
             copy.delete()
-            if (step == Step.Results || step == Step.Estimate) {
-                if (pickNotice == "The file could not be read. Refusing.") {
-                    pickNotice = null
-                }
-            } else {
-                pickNotice = deleteNotice ?: "The result could not be deleted."
+            if (pickNotice == "The file could not be read. Refusing.") {
+                pickNotice = null
             }
             return
         }
