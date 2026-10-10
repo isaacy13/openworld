@@ -396,6 +396,8 @@ class OpenWorld(Gtk.Application):
             self.estimate_delete.set_visible(False)
             return
         self.pick_notice.set_visible(False)
+        self.estimate_delete.set_text("")
+        self.estimate_delete.set_visible(False)
         self.input_path = path
         self.file_label.set_text(Path(path).name)
         age = time.time() - os.stat(path).st_mtime
@@ -1031,6 +1033,8 @@ class OpenWorld(Gtk.Application):
             self.out_dir = None
             self.delete_notice.set_text("")
             self.delete_notice.set_visible(False)
+            self.estimate_delete.set_text("")
+            self.estimate_delete.set_visible(False)
             self._show_delete(False)
             return True
         return self.delete_result()
@@ -1052,6 +1056,8 @@ class OpenWorld(Gtk.Application):
         self.out_dir = None
         self.delete_notice.set_text("")
         self.delete_notice.set_visible(False)
+        self.estimate_delete.set_text("")
+        self.estimate_delete.set_visible(False)
         self._show_delete(False)
 
     def _remove_work(self) -> None:
@@ -1092,6 +1098,8 @@ class OpenWorld(Gtk.Application):
             return
         if not self.release_result():
             return
+        self.estimate_delete.set_text("")
+        self.estimate_delete.set_visible(False)
         self.input_path = None
         self.scan_thread = None
         self._clear_results()
@@ -2200,6 +2208,46 @@ class OpenWorld(Gtk.Application):
             or not (orphan / "notes.txt").is_file()
         ):
             self._exercise_fail("choose another deleted a folder that is not a result, or stayed put")
+            return False
+        stuck = self.work / "stuck-result"
+        stuck.mkdir()
+        (stuck / "result.json").write_text("{}\n")
+        self.out_dir = stuck
+        self._show("estimate")
+        self.pick_notice.set_text("The file could not be read. Refusing.")
+        self.pick_notice.set_visible(True)
+        os.chmod(stuck, 0o555)
+        self.start_scan()
+        os.chmod(stuck, 0o755)
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.estimate_delete.get_text() != "The result could not be deleted."
+            or not self.estimate_delete.get_visible()
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not stuck.is_dir()
+        ):
+            self._exercise_fail(
+                "Analyze dropped the delete sentence beside an unread file: "
+                f"{self.estimate_delete.get_text()!r} {self.pick_notice.get_text()!r}"
+            )
+            return False
+        self.choose_file(scene or "")
+        self.on_primary()
+        self.on_primary()
+        self.on_primary()
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.estimate_delete.get_visible()
+            or self.estimate_delete.get_text()
+            or self._labels_under(self.page_estimate).count("The result could not be deleted.") != 0
+            or self.pick_notice.get_visible()
+            or stuck.exists()
+            or self.input_path != scene
+        ):
+            self._exercise_fail(
+                "a readable file left the delete sentence on the next estimate: "
+                f"{self.estimate_delete.get_text()!r} {self.pick_notice.get_text()!r} {self.input_path!r}"
+            )
             return False
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
             json.dumps({"ok": True, "summary": report.get("summary"), "work": str(self.work)})

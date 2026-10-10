@@ -1230,6 +1230,21 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertNil(model.deleteNotice)
             let size = PhonePreview.lines(screen: "size", model: model)
             XCTAssertFalse(size.contains("The result could not be deleted."))
+            model.loadEstimate()
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: result.path)
+            model.startScan()
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: result.path)
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.deleteNotice)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.file?.path, next.path)
+            model.loadBundles()
+            model.continueFromBundles()
+            model.loadEstimate()
+            let cleared = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertFalse(cleared.contains("The result could not be deleted."))
         }
     }
 
