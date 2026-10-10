@@ -62,6 +62,49 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testThePhonePreviewKeepsTheSizeRulesAndAnalyze() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "measured"
+            let sizeLines = PhonePreview.lines(screen: "size", model: model)
+            XCTAssertTrue(sizeLines.contains(Copy.sizeHint))
+            XCTAssertEqual(sizeLines.last, "Continue")
+            let size = PhonePreview.wrapped(screen: "size", model: model)
+            let sizeText = size.joined(separator: "\n")
+            XCTAssertTrue(sizeText.contains("face under 64 px on that image is"))
+            XCTAssertTrue(sizeText.contains("the label is \"Not compared.\""))
+            XCTAssertTrue(size.contains("640 px on the long side. Selected."))
+            XCTAssertTrue(size.contains(Copy.brief))
+            XCTAssertEqual(size.last, "Continue")
+            model.loadEstimate()
+            let estimate = PhonePreview.wrapped(screen: "estimate", model: model)
+            XCTAssertTrue(estimate.contains("Missing. Selected."))
+            XCTAssertTrue(estimate.contains("Wanted. Selected."))
+            XCTAssertTrue(estimate.contains("Missing and wanted."))
+            XCTAssertTrue(estimate.contains(Copy.brief))
+            XCTAssertEqual(estimate.last, "Analyze")
+            let file = try XCTUnwrap(model.file)
+            let old = Date().addingTimeInterval(-40 * 24 * 3600)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: file.path)
+            model.choose(file)
+            model.loadBundles()
+            model.coverage = "measured"
+            model.loadEstimate()
+            let warned = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertTrue(warned.contains(Copy.oldFile))
+            XCTAssertEqual(warned.last, "Analyze")
+            model.includeMissing = false
+            model.includeWanted = false
+            model.applyClassGate()
+            let blocked = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertTrue(blocked.contains("Choose missing, wanted, or both."))
+            XCTAssertEqual(blocked.last, "Analyze")
+        }
+    }
+
     func testTheChosenBundleIsMarked() throws {
         XCTAssertTrue(Copy.sizeHint.contains("A face under 64 px on that image is left out."))
         XCTAssertTrue(Copy.sizeHint.contains("the label is \"Not compared.\""))

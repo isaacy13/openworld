@@ -45,3 +45,16 @@ printf '%s\n' "$out" | grep -q "OpenSwiftUI backend: stdout" || {
     printf '%s\n' "$out" >&2
     exit 1
 }
+check_screen() {
+    name="$1"
+    needle="$2"
+    shown="$(OPENWORLD_SCREEN="$name" "$screen")"
+    printf '%s\n' "$shown" | grep -q "$needle" || {
+        echo "The $name screen did not print: $needle" >&2
+        printf '%s\n' "$shown" >&2
+        exit 1
+    }
+}
+check_screen size 'the label is "Not compared."'
+check_screen size Continue
+check_screen estimate Analyze

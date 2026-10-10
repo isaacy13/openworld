@@ -46,8 +46,7 @@ enum ScreenCopy {
         let screen = ProcessInfo.processInfo.environment["OPENWORLD_SCREEN"] ?? "choose"
         let model = FlowModel(phone: true)
         prepare(model, screen: screen)
-        let wrapped = words(screen, model).flatMap { wrap($0, width: 34) }
-        return Array(wrapped.prefix(12))
+        return PhonePreview.wrapped(screen: screen, model: model)
     }
 
     @MainActor
@@ -81,120 +80,6 @@ enum ScreenCopy {
     }
 
     @MainActor
-    private static func words(_ screen: String, _ model: FlowModel) -> [String] {
-        switch screen {
-        case "device":
-            var lines = [Copy.onDevice, model.file?.lastPathComponent ?? ""]
-            if model.oldFile { lines.append(Copy.oldFile) }
-            lines.append(contentsOf: Copy.disclosure)
-            lines.append("Fixture posters. Real FBI photos stay off.")
-            return lines
-        case "bundle":
-            var lines = ["Model bundle", "Scores are not comparable across bundles."]
-            for row in model.bundles {
-                lines.append(markedChoice(row.name, selected: row.id == model.bundleID))
-                lines.append(row.bestFor)
-                lines.append(row.curveLine)
-            }
-            if model.bundles.isEmpty, let error = model.error {
-                lines.append(error)
-            }
-            return lines
-        case "size":
-            return [
-                "Detection size",
-                markedChoice("640 px on the long side", selected: model.longSide == "640"),
-                markedChoice("Complete. Every decoded frame.", selected: model.coverage == "complete"),
-                markedChoice("Measured. 5 frames a second, plus the tracker.", selected: model.coverage == "measured"),
-                Copy.brief,
-                Copy.sizeHint,
-            ]
-        case "estimate":
-            var lines = ["Estimate"]
-            if let warning = model.estimateWarning { lines.append(warning) }
-            if let estimate = model.estimate {
-                lines.append(estimate.human)
-                lines.append(estimate.caveat)
-                if let note = estimate.deviceNote { lines.append(note) }
-                if let note = estimate.heatNote { lines.append(note) }
-                if let note = estimate.batteryNote { lines.append(note) }
-                lines.append(model.choiceLine)
-                lines.append(model.classLine)
-                lines.append(markedChoice("Missing", selected: model.includeMissing))
-                lines.append(markedChoice("Wanted", selected: model.includeWanted))
-                if model.showsAnalyze {
-                    lines.append(model.scanning ? "Scanning" : "Analyze")
-                }
-            } else if let error = model.error {
-                lines.append(error)
-            }
-            return lines
-        case "results", "leaving":
-            var lines = [model.report?.summary ?? model.error ?? Copy.incomplete, "Choose another file", "Back"]
-            if model.report?.status == "incomplete",
-               let reason = model.report?.message,
-               !reason.isEmpty,
-               reason != model.report?.summary {
-                lines.append(reason)
-            }
-            if let banner = model.report?.coverageBanner { lines.append(banner) }
-            if let classes = model.report?.classNote { lines.append(classes) }
-            if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
-            if let note = model.report?.perceptionNote { lines.append(note) }
-            lines.append(contentsOf: model.report?.warnings ?? [])
-            if model.report?.candidates.isEmpty == false {
-                if let candidate = model.report?.candidates.first {
-                    if candidate.crop?.isEmpty == false { lines.append("Crop") }
-                    if candidate.frame?.isEmpty == false { lines.append("Frame") }
-                    lines.append(candidate.posterLine)
-                }
-                lines.append("Open FBI page")
-            }
-            if model.report?.inventory.isEmpty == false {
-                lines.append("Crops from this file.")
-            }
-            for item in model.report?.inventory ?? [] where !lines.contains(item.label) {
-                lines.append(item.label)
-            }
-            if model.resultDirectory != nil {
-                lines.append("Delete")
-            }
-            if screen == "leaving" {
-                lines.append(Copy.leaving)
-                if let page = model.leavingURL?.absoluteString { lines.append(page) }
-                lines.append("Stay")
-            }
-            return lines
-        default:
-            var lines = [
-                "Choose a photo or video",
-                "Import a file you already have. There is no camera.",
-                "Choose File",
-            ]
-            if let error = model.error { lines.append(error) }
-            return lines
-        }
-    }
-
-    private static func wrap(_ text: String, width: Int) -> [String] {
-        if text.isEmpty { return [""] }
-        var lines: [String] = []
-        var line = ""
-        for word in text.split(separator: " ") {
-            let word = String(word)
-            if line.isEmpty {
-                line = word
-            } else if line.count + 1 + word.count <= width {
-                line += " " + word
-            } else {
-                lines.append(line)
-                line = word
-            }
-        }
-        if !line.isEmpty { lines.append(line) }
-        return lines
-    }
-
     private static func still() -> URL? {
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("ow-screen-\(UUID().uuidString).png")
         let process = Process()
