@@ -695,6 +695,10 @@ public struct FlowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(Copy.leaving)
                 Text(model.leavingURL?.absoluteString ?? "")
+                prominent("Open") {
+                    if let url = model.leavingURL { openURL(url) }
+                    model.leavingURL = nil
+                }
                 prominent("Stay") { model.leavingURL = nil }
             }
         }
