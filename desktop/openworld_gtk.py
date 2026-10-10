@@ -418,19 +418,68 @@ class OpenWorld(Gtk.Application):
             return
         if chosen is None:
             return
-        path = chosen.get_path()
+        self.take_file(chosen)
+
+    def _on_drop(self, _target, value, _x, _y) -> bool:
+        self.take_file(value)
+        return True
+
+    def take_file(self, chosen) -> None:
+        """Open a chooser result. A file with no local path is copied onto this device."""
+        if self.closed:
+            return
+        path = None
+        if chosen is not None:
+            getter = getattr(chosen, "get_path", None)
+            path = getter() if getter is not None else None
+            if not path:
+                path = self._copy_choice(chosen)
         if path:
             self.choose_file(path)
         else:
             self._refuse_pick()
 
-    def _on_drop(self, _target, value, _x, _y) -> bool:
-        path = value.get_path() if value is not None else None
-        if path:
-            self.choose_file(path)
-        else:
-            self._refuse_pick()
-        return True
+    def _copy_choice(self, chosen) -> str | None:
+        try:
+            stream = chosen.read(None)
+        except Exception:
+            return None
+        name = "file"
+        modified = None
+        try:
+            info = chosen.query_info(
+                "standard::display-name,time::modified",
+                Gio.FileQueryInfoFlags.NONE,
+                None,
+            )
+            display = info.get_display_name()
+            if display:
+                name = Path(display).name
+            when = info.get_modification_date_time()
+            if when is not None:
+                modified = when.to_unix()
+        except Exception:
+            base = getattr(chosen, "get_basename", lambda: None)()
+            if base:
+                name = Path(base).name
+        if not name or name in (".", ".."):
+            name = "file"
+        dest = self.work / name
+        if dest.exists():
+            dest = self.work / f"{Path(name).stem}-{time.time_ns()}{Path(name).suffix}"
+        try:
+            out = Gio.File.new_for_path(str(dest)).replace(None, False, Gio.FileCreateFlags.NONE, None)
+            out.splice(
+                stream,
+                Gio.OutputStreamSpliceFlags.CLOSE_SOURCE | Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
+                None,
+            )
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return None
+        if modified is not None:
+            os.utime(dest, (modified, modified))
+        return str(dest)
 
     def _refuse_pick(self) -> None:
         self.pick_notice.set_text("The file could not be read. Refusing.")
