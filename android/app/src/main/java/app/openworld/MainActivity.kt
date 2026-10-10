@@ -14,11 +14,16 @@ class MainActivity : ComponentActivity() {
         if (uri != null) model.choose(uri, contentResolver)
     }
 
+    companion object {
+        /** Photos and video, and every other file. An extensionless video stays selectable. */
+        internal val chooseFileMimeTypes = arrayOf("image/*", "video/*", "*/*")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleShare(intent)
         setContent {
-            OpenWorldApp(model = model, onChoose = { picker.launch(arrayOf("image/*", "video/*")) }, onOpen = { url ->
+            OpenWorldApp(model = model, onChoose = { picker.launch(chooseFileMimeTypes) }, onOpen = { url ->
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             })
         }

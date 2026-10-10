@@ -9,6 +9,13 @@ import XCTest
 /// Linux CI runs the phone model against the same fixture stills as the other
 /// shells. The iPhone and Mac app is not part of this package on Linux.
 final class OpenWorldUITests: XCTestCase {
+    func testChooseFileKeepsEveryFileAvailable() {
+        XCTAssertEqual(
+            ChooseFile.typeIdentifiers,
+            ["public.image", "public.movie", "public.data"]
+        )
+    }
+
     func testPhoneScreensBuild() throws {
         try MainActor.assumeIsolated {
             try self.drawScreens()

@@ -2133,6 +2133,23 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun chooseFileKeepsEveryFileAvailable() {
+        assertEquals(
+            listOf("image/*", "video/*", "*/*"),
+            MainActivity.chooseFileMimeTypes.toList(),
+        )
+        val intent = androidx.activity.result.contract.ActivityResultContracts.OpenDocument().createIntent(
+            ApplicationProvider.getApplicationContext(),
+            MainActivity.chooseFileMimeTypes,
+        )
+        assertEquals("*/*", intent.type)
+        assertEquals(
+            listOf("image/*", "video/*", "*/*"),
+            intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)!!.toList(),
+        )
+    }
+
+    @Test
     fun coldStartAsksForAFileTheUserAlreadyHas() {
         compose.onNodeWithText("Choose a photo or video").assertExists()
         compose.onNodeWithText("Import a file you already have, or receive it from the share sheet. There is no camera.").assertExists()

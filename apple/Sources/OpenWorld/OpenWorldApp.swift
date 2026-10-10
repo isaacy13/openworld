@@ -8,6 +8,13 @@ import AppKit
 import UIKit
 #endif
 
+/// Photos and video, and every other file. An extensionless video stays selectable.
+private let chooseFileTypes: [UTType] = {
+    let types = ChooseFile.typeIdentifiers.compactMap(UTType.init)
+    precondition(types.count == ChooseFile.typeIdentifiers.count)
+    return types
+}()
+
 @main
 struct OpenWorldApp: App {
     var body: some Scene {
@@ -44,7 +51,7 @@ struct PhoneRoot: View {
     private var importButton: some View {
         Button("Choose File") { showPicker = true }
             .buttonStyle(.borderedProminent)
-            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.image, .movie]) { result in
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: chooseFileTypes) { result in
                 if case .success(let url) = result {
                     model.choose(url)
                 }
@@ -81,7 +88,7 @@ struct MacRoot: View {
                     Button("Choose File") { showPicker = true }
                 }
             }
-            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.image, .movie]) { result in
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: chooseFileTypes) { result in
                 if case .success(let url) = result {
                     model.choose(url)
                 }
