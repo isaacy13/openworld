@@ -1825,6 +1825,22 @@ fn an_edit_list_scans_the_frames_a_player_shows() {
     assert_eq!(plain.status, "complete", "{}", plain.message);
     assert_eq!(plain.frames_decoded, 8);
     assert_eq!(plain.summary, POSSIBLE_CANDIDATE);
+    let faces: Vec<_> = plain.candidates.iter().filter(|card| card.kind == "face").collect();
+    let plates: Vec<_> = plain.candidates.iter().filter(|card| card.kind == "plate").collect();
+    assert_eq!(faces.len(), 1);
+    assert_eq!(plates.len(), 1);
+    assert_eq!(faces[0].poster_id, "fixture-missing-a");
+    assert_eq!(plates[0].poster_id, "fixture-plate-c");
+    let best = plain
+        .comparisons
+        .iter()
+        .filter(|row| row.passed && row.poster_id == faces[0].poster_id)
+        .map(|row| row.cosine)
+        .fold(f32::MIN, f32::max);
+    assert_eq!(faces[0].cosine, Some(best));
+    assert!(plain.inventory.len() > plain.candidates.len());
+    assert!(plain.comparisons.len() > plain.candidates.len());
+    assert!(plain.inventory.iter().any(|item| item.label == NOT_COMPARED));
     let shown = openworld_core::decode::probe(&show_scene).unwrap();
     let hidden = openworld_core::decode::probe(&hidden_blank).unwrap();
     assert!(shown.frames_exact);

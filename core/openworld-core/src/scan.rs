@@ -846,6 +846,7 @@ impl<'a> Engine<'a> {
         if let Some(message) = self.runtime_failure {
             return refused("missing_weights", &message);
         }
+        let candidates = strongest_cards(self.candidates);
         let incomplete = self.stopped || self.incomplete_reason.is_some();
         let (status, summary, message) = if incomplete {
             (
@@ -853,7 +854,7 @@ impl<'a> Engine<'a> {
                 INCOMPLETE,
                 self.incomplete_reason.unwrap_or_else(|| INCOMPLETE.to_string()),
             )
-        } else if self.candidates.is_empty() {
+        } else if candidates.is_empty() {
             ("complete", NO_CLEARANCE, NO_CLEARANCE.to_string())
         } else {
             ("complete", POSSIBLE_CANDIDATE, POSSIBLE_CANDIDATE.to_string())
@@ -893,12 +894,42 @@ impl<'a> Engine<'a> {
             plates_ocr_attempted: self.plates_ocr_attempted,
             faces_seen_not_compared: self.faces_seen_not_compared,
             inventory: self.inventory,
-            candidates: self.candidates,
+            candidates,
             comparisons: self.comparisons,
         }
     }
 }
 
+
+/// One card per track and poster. The card is the frame with the highest cosine.
+/// A plate has no cosine, so the earliest frame of that track is kept.
+/// Inventory rows and comparison rows stay one per frame.
+fn strongest_cards(candidates: Vec<Candidate>) -> Vec<Candidate> {
+    let mut chosen: Vec<Candidate> = Vec::new();
+    for card in candidates {
+        if let Some(slot) = chosen.iter_mut().find(|kept| {
+            kept.kind == card.kind && kept.track_id == card.track_id && kept.poster_id == card.poster_id
+        }) {
+            if keeps_stronger(&card, slot) {
+                *slot = card;
+            }
+        } else {
+            chosen.push(card);
+        }
+    }
+    chosen
+}
+
+fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {
+    match (next.cosine, kept.cosine) {
+        (Some(next_score), Some(kept_score)) => {
+            next_score > kept_score || (next_score == kept_score && next.frame_index < kept.frame_index)
+        }
+        (Some(_), None) => true,
+        (None, Some(_)) => false,
+        (None, None) => next.frame_index < kept.frame_index,
+    }
+}
 
 fn landmarks_in_crop(map: FrameMap, points: [(f32, f32); 5], orig: Rect) -> [(f32, f32); 5] {
     let scale = map.det_to_orig;

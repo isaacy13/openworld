@@ -4,7 +4,7 @@
 
 The published Fast curve is a separate file. These trials use other fixture
 identities, other placements, a real compressed video with no marker, a
-lossless video of a fixture still, a one-frame GIF, a three-frame GIF
+lossless video of a fixture still that keeps one card per track, a one-frame GIF, a three-frame GIF
 whose marker is only on the middle frame, an animated PNG of that marker,
 a JPEG with a camera orientation tag, a still WebP with a camera
 orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
@@ -488,8 +488,24 @@ def main() -> int:
             fail(f"lossless video summary {report.get('summary')!r} {report.get('message')}")
         if DISAGREE not in (report.get("warnings") or []):
             fail(f"lossless video warnings {report.get('warnings')}")
-        if not report.get("candidates"):
-            fail("lossless video of the fixture scene produced no candidate")
+        cards = report.get("candidates") or []
+        faces = [card for card in cards if card.get("kind") == "face"]
+        plates = [card for card in cards if card.get("kind") == "plate"]
+        if len(faces) != 1 or len(plates) != 1:
+            fail(f"lossless video cards {[(c.get('kind'), c.get('track_id'), c.get('poster_id'), c.get('frame_index')) for c in cards]}")
+        if faces[0].get("poster_id") != "fixture-missing-a" or plates[0].get("poster_id") != "fixture-plate-c":
+            fail(f"lossless video posters {faces[0].get('poster_id')} {plates[0].get('poster_id')}")
+        passed = [
+            row.get("cosine")
+            for row in report.get("comparisons") or []
+            if row.get("passed") and row.get("poster_id") == faces[0].get("poster_id")
+        ]
+        if not passed or abs(float(faces[0].get("cosine")) - max(passed)) > 1e-5:
+            fail(f"lossless video kept cosine {faces[0].get('cosine')} over {passed}")
+        if len(report.get("inventory") or []) <= len(cards):
+            fail("lossless video dropped per-frame inventory")
+        if len(report.get("comparisons") or []) <= len(faces):
+            fail("lossless video dropped per-frame comparisons")
         counts["lossless_video_candidate"] += 1
         counts["timestamp_disagree"] += 1
 

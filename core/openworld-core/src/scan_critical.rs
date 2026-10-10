@@ -3,7 +3,7 @@
 use super::{landmarks_in_crop, Engine, ScanOpts};
 use crate::bundle::Bundle;
 use crate::copy::{BELOW_CUTOFF, POSSIBLE_CANDIDATE};
-use crate::embed::unit_embedding;
+use crate::embed::{fixture_probe, unit_embedding};
 use crate::estimate::{Coverage, DetectionSize, FormFactor};
 use crate::geom::{FrameMap, Rect};
 use crate::hardware::Execution;
@@ -96,6 +96,59 @@ fn a_probe_that_matches_the_poster_is_a_candidate() {
     let report = engine.finish();
     assert_eq!(report.summary, POSSIBLE_CANDIDATE);
     assert_eq!(report.status, "complete");
+}
+
+#[test]
+fn repeated_frames_of_one_track_keep_the_strongest_card() {
+    let dir = tempfile::tempdir().unwrap();
+    let pack = write_fixture_pack(
+        dir.path(),
+        SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+    )
+    .unwrap();
+    let bundle = bundle();
+    let opts = opts(None);
+    let mut engine = Engine::new(&bundle, &pack, &opts, None);
+    let frame = RgbImage::new(160, 160);
+    let rect = Rect {
+        x: 8,
+        y: 8,
+        w: 128,
+        h: 128,
+    };
+    let mut weaker = None;
+    for index in 0..40 {
+        let (probe, score) = fixture_probe(7, 16, 16, 128, 128, index);
+        if score >= bundle.threshold && score < 0.95 {
+            weaker = Some(probe);
+            break;
+        }
+    }
+    let weaker = weaker.expect("a passing probe under the clean poster vector");
+    let strong = unit_embedding(7);
+    let score = |engine: &mut Engine, index: u64, probe: &[f32], id: u16| {
+        engine.score_face(index, &frame, rect, rect, 3, probe, id, None, &mut |_| {});
+    };
+    score(&mut engine, 2, &weaker, 7);
+    score(&mut engine, 8, &strong, 7);
+    score(&mut engine, 1, &strong, 7);
+    score(&mut engine, 6, &unit_embedding(99), 99);
+    assert!(engine.candidates.len() > 1);
+    assert!(engine.comparisons.len() > engine.candidates.len());
+    assert_eq!(engine.inventory.len(), 4);
+    let report = engine.finish();
+    assert_eq!(report.candidates.len(), 1);
+    assert_eq!(report.candidates[0].frame_index, 1);
+    assert_eq!(report.candidates[0].track_id, 3);
+    assert_eq!(report.candidates[0].poster_id, "fixture-missing-a");
+    assert!(report.candidates[0].cosine.unwrap() > bundle.threshold);
+    assert!(report.comparisons.iter().any(|row| row.frame_index == 6 && !row.passed));
+    assert!(report
+        .comparisons
+        .iter()
+        .any(|row| row.frame_index == 2 && row.passed));
+    assert_eq!(report.inventory.len(), 4);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
 }
 
 #[test]
