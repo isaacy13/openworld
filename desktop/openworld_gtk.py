@@ -429,17 +429,20 @@ class OpenWorld(Gtk.Application):
         if self.closed:
             return
         path = None
+        display = None
         if chosen is not None:
             getter = getattr(chosen, "get_path", None)
             path = getter() if getter is not None else None
             if not path:
-                path = self._copy_choice(chosen)
+                copied = self._copy_choice(chosen)
+                if copied is not None:
+                    path, display = copied
         if path:
-            self.choose_file(path)
+            self.choose_file(path, display)
         else:
             self._refuse_pick()
 
-    def _copy_choice(self, chosen) -> str | None:
+    def _copy_choice(self, chosen) -> tuple[str, str] | None:
         try:
             stream = chosen.read(None)
         except Exception:
@@ -464,12 +467,22 @@ class OpenWorld(Gtk.Application):
                 name = Path(base).name
         if not name or name in (".", ".."):
             name = "file"
-        # The scan writes the poster pack at work/posters. The copy stays beside that.
+        # The scan writes the poster pack at work/posters. Every copy stays in imports.
         folder = self.work / "imports"
         folder.mkdir(exist_ok=True)
         dest = folder / name
-        if dest.exists():
-            dest = self.work / f"{Path(name).stem}-{time.time_ns()}{Path(name).suffix}"
+        stem = Path(name).stem
+        suffix = Path(name).suffix
+        # A second file with the same name stays in this folder. The screen keeps the name the person picked.
+        placed = None
+        for _ in range(8):
+            if not dest.exists():
+                placed = dest
+                break
+            dest = folder / f"{stem}-{time.time_ns()}{suffix}"
+        if placed is None:
+            return None
+        dest = placed
         try:
             out = Gio.File.new_for_path(str(dest)).replace(None, False, Gio.FileCreateFlags.NONE, None)
             out.splice(
@@ -482,13 +495,13 @@ class OpenWorld(Gtk.Application):
             return None
         if modified is not None:
             os.utime(dest, (modified, modified))
-        return str(dest)
+        return str(dest), name
 
     def _refuse_pick(self) -> None:
         self.pick_notice.set_text("The file could not be read. Refusing.")
         self.pick_notice.set_visible(True)
 
-    def choose_file(self, path: str) -> None:
+    def choose_file(self, path: str, display_name: str | None = None) -> None:
         if self.closed:
             return
         if self.scan_thread is not None and self.scan_thread.is_alive():
@@ -514,7 +527,7 @@ class OpenWorld(Gtk.Application):
         self.estimate_delete.set_text("")
         self.estimate_delete.set_visible(False)
         self.input_path = path
-        self.file_label.set_text(Path(path).name)
+        self.file_label.set_text(display_name or Path(path).name)
         age = time.time() - os.stat(path).st_mtime
         if age > 30 * 24 * 3600:
             self._set_line(self.warn_label, PHRASES["old"])

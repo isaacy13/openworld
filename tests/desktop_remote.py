@@ -91,6 +91,21 @@ def main() -> None:
             )
         if app.input_path is None or Path(app.input_path) == pack or pack.is_file():
             raise SystemExit(f"a file named posters occupied the poster pack: {app.input_path}")
+        app._on_drop(None, RemoteFile(b"second-posters", "posters", 0), 0, 0)
+        opened = Path(app.input_path) if app.input_path else None
+        if (
+            app.file_label.get_text() != "posters"
+            or app.stack.get_visible_child_name() != "device"
+            or opened is None
+            or opened.read_bytes() != b"second-posters"
+            or app.work / "imports" not in opened.parents
+            or pack.exists()
+        ):
+            raise SystemExit(
+                f"a second file named posters left the import folder: {app.file_label.get_text()!r} {opened}"
+            )
+        if app.warn_label.get_text() != "This file is older than about 30 days.":
+            raise SystemExit(f"a second old file lost its age: {app.warn_label.get_text()!r}")
         local = app.work / "local.png"
         local.write_bytes(b"png")
         app._on_drop(None, desktop.Gio.File.new_for_path(str(local)), 0, 0)
