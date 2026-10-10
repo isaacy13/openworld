@@ -330,7 +330,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             ) {
                 Ok(req) => req,
                 Err(message) => {
-                    return finish_report(
+                    return finish_notice(
                         cli.json,
                         &openworld_core::scan::refused("bad_request", &message),
                     );
@@ -358,7 +358,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                     }
                     Ok(0)
                 }
-                Err(report) => finish_report(cli.json, &report),
+                Err(report) => finish_notice(cli.json, &report),
             }
         }
         Cmd::Scan {
@@ -401,7 +401,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             ) {
                 Ok(req) => req,
                 Err(message) => {
-                    return finish_report(
+                    return finish_notice(
                         cli.json,
                         &openworld_core::scan::refused("bad_request", &message),
                     );
@@ -610,7 +610,7 @@ fn analyze(
         }
     };
     if !openworld_core::scan::input_readable(&input) {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused("unreadable", "The file could not be read. Refusing."),
         );
@@ -618,7 +618,7 @@ fn analyze(
     let all = match load_bundles(bundles) {
         Ok(all) => all,
         Err(err) => {
-            return finish_report(
+            return finish_notice(
                 json_mode,
                 &openworld_core::scan::refused("catalog", &err.refusal()),
             );
@@ -626,7 +626,7 @@ fn analyze(
     };
     speak(json_mode, device_lines(&input));
     if all.is_empty() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused(
                 "missing_program",
@@ -656,7 +656,7 @@ fn analyze(
         }
     };
     if !all.iter().any(|item| item.id == bundle) {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused(
                 "bundle_not_found",
@@ -682,7 +682,7 @@ fn analyze(
         }
     };
     if openworld_core::DetectionSize::parse(&long_side).is_none() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused("bad_request", openworld_core::copy::BAD_DETECTION_SIZE),
         );
@@ -705,7 +705,7 @@ fn analyze(
         }
     };
     if openworld_core::Coverage::parse(&coverage).is_none() {
-        return finish_report(
+        return finish_notice(
             json_mode,
             &openworld_core::scan::refused("bad_request", openworld_core::copy::BAD_COVERAGE),
         );
@@ -721,14 +721,14 @@ fn analyze(
             | openworld_core::posters::PackError::Unreadable => "bad_hash",
             openworld_core::posters::PackError::Expired => "expired_pack",
         };
-        return finish_report(json_mode, &openworld_core::scan::refused(code, err.refusal()));
+        return finish_notice(json_mode, &openworld_core::scan::refused(code, err.refusal()));
     }
     let out = match out {
         Some(path) => path,
         None => PathBuf::from(prompt("Result directory:", json_mode)?),
     };
     if let Some(message) = openworld_core::scan::output_creation_blocked(&out) {
-        return finish_report(json_mode, &openworld_core::scan::refused("unreadable", message));
+        return finish_notice(json_mode, &openworld_core::scan::refused("unreadable", message));
     }
     let (missing, wanted) = if yes || no_missing || no_wanted {
         (!no_missing, !no_wanted)
@@ -773,7 +773,7 @@ fn analyze(
     ) {
         Ok(req) => req,
         Err(message) => {
-            return finish_report(json_mode, &openworld_core::scan::refused("bad_request", &message));
+            return finish_notice(json_mode, &openworld_core::scan::refused("bad_request", &message));
         }
     };
     match estimate_for(&req) {
@@ -796,7 +796,7 @@ fn analyze(
                 ),
             );
         }
-        Err(report) => return finish_report(json_mode, &report),
+        Err(report) => return finish_notice(json_mode, &report),
     }
     if !req.missing && !req.wanted {
         emit(
@@ -1115,6 +1115,23 @@ fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result
     Ok(if report.status == "complete" { 0 } else { 2 })
 }
 
+/// A refusal before a scan result. The estimate and the bundle page show the sentence. They do not repeat the on-device lines.
+fn finish_notice(json_mode: bool, report: &openworld_core::ScanReport) -> Result<i32, String> {
+    emit(
+        json_mode,
+        serde_json::to_value(report).map_err(|e| e.to_string())?,
+    );
+    if !json_mode {
+        let line = if report.summary.is_empty() {
+            report.message.as_str()
+        } else {
+            report.summary.as_str()
+        };
+        println!("{line}");
+    }
+    Ok(if report.status == "complete" { 0 } else { 2 })
+}
+
 /// The lines a person reads. The order matches the result screen.
 fn human_lines(report: &openworld_core::ScanReport) -> Vec<String> {
     let mut lines = Vec::new();
@@ -1326,7 +1343,7 @@ fn platform_facts(
             } else {
                 "bad_request"
             };
-            Err(finish_report(
+            Err(finish_notice(
                 json_mode,
                 &openworld_core::scan::refused(code, &message),
             ))

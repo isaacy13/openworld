@@ -372,8 +372,9 @@ fn a_missing_file_is_not_a_bad_codec() {
             ],
         );
         assert_eq!(code, Some(2), "{err}\n{text}");
-        assert_eq!(text.lines().next(), Some("The file could not be read. Refusing."), "{text}");
+        assert_eq!(text.trim(), "The file could not be read. Refusing.", "{text}");
         assert!(!text.contains("Bad codec"));
+        assert!(!text.contains("Nothing is uploaded."));
         assert!(!text.contains("This file stays on this device."));
     }
     let junk = dir.path().join("notes.txt");
@@ -393,7 +394,55 @@ fn a_missing_file_is_not_a_bad_codec() {
         ],
     );
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert!(text.contains("Bad codec or unreadable file. Refusing."), "{text}");
+    assert_eq!(text.trim(), "Bad codec or unreadable file. Refusing.", "{text}");
+    let (code, text, err) = run(
+        false,
+        &[
+            "estimate",
+            "--input",
+            junk.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "100",
+            "--coverage",
+            "complete",
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(
+        text.trim(),
+        "Detection size must be 320, 480, 640, or full. Refusing."
+    );
+    let (code, text, err) = run(
+        false,
+        &[
+            "scan",
+            "--input",
+            missing.to_str().unwrap(),
+            "--bundle",
+            "fast",
+            "--long-side",
+            "640",
+            "--coverage",
+            "complete",
+            "--posters",
+            dir.path().join("posters").to_str().unwrap(),
+            "--out",
+            dir.path().join("scan-out").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines.first().copied(), Some("Scanning"));
+    assert_eq!(
+        lines.get(1).copied(),
+        Some("The file could not be read. Refusing.")
+    );
+    assert!(lines.iter().any(|line| *line == "Nothing is uploaded."));
+    assert!(lines
+        .iter()
+        .all(|line| *line != "No candidate is not a clearance."));
     let (code, text, err) = run(
         false,
         &[
@@ -410,8 +459,9 @@ fn a_missing_file_is_not_a_bad_codec() {
         ],
     );
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some("The file could not be read. Refusing."), "{text}");
+    assert_eq!(text.trim(), "The file could not be read. Refusing.");
     assert!(!text.contains("This file stays on this device."));
+    assert!(!text.contains("Nothing is uploaded."));
     assert!(!err.contains("Poster pack"));
     let (code, text, err) = run(
         true,
@@ -432,6 +482,16 @@ fn a_missing_file_is_not_a_bad_codec() {
     let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
     assert_eq!(doc["status"], "refused");
     assert_eq!(doc["message"], "The file could not be read. Refusing.");
+    assert!(doc["disclosure"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|line| line == "Nothing is uploaded."));
+    assert!(doc["disclosure"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|line| line != "No candidate is not a clearance."));
     assert!(!text.contains("This file stays on this device."));
 }
 
@@ -472,12 +532,9 @@ fn an_unreadable_catalog_is_a_refusal() {
     let text = String::from_utf8(output.stdout).unwrap();
     let err = String::from_utf8(output.stderr).unwrap();
     assert_eq!(output.status.code(), Some(2), "{err}\n{text}");
-    assert_eq!(
-        text.lines().next(),
-        Some("The bundle catalog could not be read. Refusing."),
-        "{text}"
-    );
+    assert_eq!(text.trim(), "The bundle catalog could not be read. Refusing.");
     assert!(!text.contains("This file stays on this device."), "{text}");
+    assert!(!text.contains("Nothing is uploaded."), "{text}");
 }
 
 #[test]
@@ -508,6 +565,16 @@ fn a_bad_size_or_an_empty_catalog_stops_before_the_poster_pack() {
         .position(|line| line == "The scan program is not on this device. Refusing.")
         .expect("refusal");
     assert!(device < refusal, "{text}");
+    let uploaded = text
+        .lines()
+        .position(|line| line == "Nothing is uploaded.")
+        .expect("file page");
+    assert!(uploaded < refusal, "{text}");
+    assert_eq!(
+        text.lines().filter(|line| *line == "Nothing is uploaded.").count(),
+        1,
+        "{text}"
+    );
     assert!(!text.lines().any(|line| line == "Detection size"), "{text}");
     assert!(!text.contains("Poster pack directory:"), "{text}");
 
@@ -601,6 +668,16 @@ fn a_missing_poster_pack_stops_before_the_estimate() {
         .position(|line| line == "The poster pack is missing. Refusing.")
         .expect("refusal");
     assert!(device < refusal, "{text}");
+    let uploaded = text
+        .lines()
+        .position(|line| line == "Nothing is uploaded.")
+        .expect("file page");
+    assert!(uploaded < refusal, "{text}");
+    assert_eq!(
+        text.lines().filter(|line| *line == "Nothing is uploaded.").count(),
+        1,
+        "{text}"
+    );
     assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
     assert!(!text.contains("Result directory:"), "{text}");
     assert!(!text.contains("Analyze? [y/N]:"), "{text}");
@@ -690,6 +767,16 @@ fn a_result_file_stops_before_the_estimate() {
         .position(|line| line == "The output directory could not be created. Refusing.")
         .expect("refusal");
     assert!(device < refusal, "{text}");
+    let uploaded = text
+        .lines()
+        .position(|line| line == "Nothing is uploaded.")
+        .expect("file page");
+    assert!(uploaded < refusal, "{text}");
+    assert_eq!(
+        text.lines().filter(|line| *line == "Nothing is uploaded.").count(),
+        1,
+        "{text}"
+    );
     assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
     assert!(!text.contains("Missing and wanted."), "{text}");
     assert!(!text.contains("Analyze? [y/N]:"), "{text}");
@@ -904,7 +991,7 @@ fn a_zero_size_platform_decode_is_the_bad_codec_refusal() {
         ],
     );
     assert_eq!(code, Some(2), "{err}\n{text}");
-    assert_eq!(text.lines().next(), Some(sentence), "{text}");
+    assert_eq!(text.trim(), sentence);
     assert!(err.is_empty(), "{err}");
     assert!(!text.lines().any(|line| line == "Estimate"), "{text}");
 
