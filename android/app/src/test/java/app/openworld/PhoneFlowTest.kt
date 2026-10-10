@@ -4,6 +4,7 @@ package app.openworld
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.database.MatrixCursor
 import android.graphics.Bitmap
 import android.os.ParcelFileDescriptor
@@ -17,7 +18,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -33,9 +34,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 import org.robolectric.shadows.ShadowContentResolver
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.android.controller.ActivityController
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
@@ -2000,11 +2004,28 @@ class PhoneScreenTest {
         }
 }
 
+/** Opens and closes the phone window directly so a singleTask launch can shut down. */
+private class PhoneWindowRule : ExternalResource() {
+    lateinit var controller: ActivityController<MainActivity>
+    val activity: MainActivity
+        get() = controller.get()
+
+    override fun before() {
+        controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+    }
+
+    override fun after() {
+        controller.pause().stop().destroy()
+    }
+}
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w360dp-h800dp")
 class PhoneLaunchTest {
     @get:Rule
-    val compose = createAndroidComposeRule<MainActivity>()
+    val compose = AndroidComposeTestRule<ExternalResource, MainActivity>(PhoneWindowRule()) { rule ->
+        (rule as PhoneWindowRule).activity
+    }
 
     @Test
     fun coldStartAsksForAFileTheUserAlreadyHas() {
@@ -2023,15 +2044,26 @@ class PhoneLaunchTest {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
         }
-        compose.activityRule.scenario.onActivity { activity ->
+        compose.runOnUiThread {
             val method = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
             method.isAccessible = true
-            method.invoke(activity, intent)
+            method.invoke(compose.activity, intent)
+            assertEquals(Intent.ACTION_SEND, compose.activity.intent.action)
+            assertEquals(
+                uri,
+                compose.activity.intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java),
+            )
         }
         compose.waitForIdle()
         compose.onNodeWithText("This file stays on this device.").assertExists()
         compose.onNodeWithText("Nothing is uploaded.").assertExists()
         compose.onNodeWithText("shared.png").assertExists()
+    }
+
+    @Test
+    fun aShareReusesTheOpenWindow() {
+        val info = compose.activity.packageManager.getActivityInfo(compose.activity.componentName, 0)
+        assertEquals(ActivityInfo.LAUNCH_SINGLE_TASK, info.launchMode)
     }
 }
 
