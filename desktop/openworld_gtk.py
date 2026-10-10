@@ -281,8 +281,8 @@ class OpenWorld(Gtk.Application):
 
     def _estimate_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        title = Gtk.Label(label="Estimate", xalign=0)
-        title.add_css_class("title")
+        self.estimate_title = Gtk.Label(label="Estimate", xalign=0, wrap=True)
+        self.estimate_title.add_css_class("title")
         self.estimate_warn = Gtk.Label(xalign=0, wrap=True)
         self.estimate_warn.add_css_class("warn")
         self.estimate_warn.set_visible(False)
@@ -294,7 +294,7 @@ class OpenWorld(Gtk.Application):
         self.missing_button.connect("toggled", self._on_class)
         self.wanted_button.connect("toggled", self._on_class)
         self.class_label = Gtk.Label(label="Missing and wanted.", xalign=0, wrap=True)
-        box.append(title)
+        box.append(self.estimate_title)
         box.append(self.estimate_warn)
         box.append(self.estimate_body)
         box.append(self.class_label)
@@ -543,11 +543,20 @@ class OpenWorld(Gtk.Application):
             ]
         )
         if payload.get("status") == "refused":
-            self.estimate_body.set_text(payload.get("message", "Refusing."))
+            message = payload.get("message") or "Refusing."
+            self.estimate_title.set_text(message)
+            self.estimate_title.add_css_class("warn")
+            self.estimate_body.set_text("")
+            self.estimate_body.set_visible(False)
+            self.estimate_warn.set_visible(False)
             self.estimate_ok = False
             self.can_analyze = False
             self._show_classes(False)
             return
+        self.estimate_title.set_text("Estimate")
+        self.estimate_title.remove_css_class("warn")
+        self.estimate_body.set_visible(True)
+        self.estimate_warn.set_visible(self.estimate_warn.get_text() == PHRASES["old"])
         self.estimate_ok = True
         self.can_analyze = True
         self._show_classes(True)
@@ -1341,16 +1350,41 @@ class OpenWorld(Gtk.Application):
             self._grab(size_shot)
         self.refresh_estimate()
         self._go("estimate")
-        if self.primary.get_visible() or self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():
-            self._exercise_fail(f"a bad file offered Analyze: {self.estimate_body.get_text()!r}")
+        if (
+            self.primary.get_visible()
+            or self.primary.get_sensitive()
+            or self.estimate_title.get_text() != "Bad codec or unreadable file. Refusing."
+            or self.estimate_body.get_visible()
+            or self.estimate_body.get_text()
+        ):
+            self._exercise_fail(
+                f"a bad file offered Analyze: {self.estimate_title.get_text()!r} {self.estimate_body.get_text()!r}"
+            )
             return False
         if (
             self.missing_button.get_visible()
             or self.wanted_button.get_visible()
             or self.class_label.get_visible()
             or "Choose missing, wanted, or both." in self.estimate_body.get_text()
+            or "Estimate" == self.estimate_title.get_text()
         ):
             self._exercise_fail("a refused estimate asked for a poster class")
+            return False
+        aged = time.time() - 40 * 24 * 3600
+        os.utime(junk, (aged, aged))
+        self.choose_file(str(junk))
+        self.load_bundles()
+        self._go("size")
+        self.refresh_estimate()
+        self._go("estimate")
+        if (
+            self.estimate_warn.get_visible()
+            or self.warn_label.get_text() != PHRASES["old"]
+            or self.estimate_title.get_text() != "Bad codec or unreadable file. Refusing."
+        ):
+            self._exercise_fail(
+                f"a refused estimate kept the old-file warning: {self.estimate_title.get_text()!r} {self.estimate_warn.get_visible()}"
+            )
             return False
         refusal_shot = os.environ.get("OPENWORLD_REFUSAL_SHOT")
         if refusal_shot:
@@ -1429,12 +1463,13 @@ class OpenWorld(Gtk.Application):
                     return False
                 self.refresh_estimate()
                 if (
-                    self.estimate_body.get_text() != "The scan could not be read. Refusing."
+                    self.estimate_title.get_text() != "The scan could not be read. Refusing."
+                    or self.estimate_body.get_visible()
                     or self.estimate_ok
                     or self.can_analyze
                 ):
                     self._exercise_fail(
-                        f"a program answer that is not an estimate stayed runnable: {self.estimate_body.get_text()!r}"
+                        f"a program answer that is not an estimate stayed runnable: {self.estimate_title.get_text()!r}"
                     )
                     return False
                 blank = os.path.join(empty, "blank.sh")
@@ -1509,6 +1544,9 @@ class OpenWorld(Gtk.Application):
         self.refresh_estimate()
         self._go("estimate")
         text = self.estimate_body.get_text()
+        if self.estimate_title.get_text() != "Estimate" or not self.estimate_body.get_visible():
+            self._exercise_fail(f"a runnable estimate was titled {self.estimate_title.get_text()!r}")
+            return False
         if "CPU" not in text or "second" not in text.lower() and "Less than" not in text:
             self._exercise_fail(f"estimate missing time or CPU note: {text}")
             return False

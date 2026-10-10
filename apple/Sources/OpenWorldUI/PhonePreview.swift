@@ -54,7 +54,7 @@ public enum PhonePreview {
             lines.append("Continue")
             return lines
         case "estimate":
-            var lines = ["Back", model.scanning ? "Scanning" : "Estimate"]
+            var lines = ["Back", model.estimateHeadline]
             if model.scanning, !model.liveCrops.isEmpty {
                 lines.append("Crops from this file.")
                 for crop in model.liveCrops {
@@ -62,8 +62,8 @@ public enum PhonePreview {
                     lines.append(crop.label)
                 }
             }
-            if let warning = model.estimateWarning { lines.append(warning) }
             if let estimate = model.estimate {
+                if let warning = model.estimateWarning { lines.append(warning) }
                 lines.append(estimate.human)
                 lines.append(estimate.caveat)
                 if let note = estimate.deviceNote { lines.append(note) }
@@ -77,8 +77,6 @@ public enum PhonePreview {
                 lines.append(model.classLine)
                 lines.append(markedChoice("Missing", selected: model.includeMissing))
                 lines.append(markedChoice("Wanted", selected: model.includeWanted))
-            } else if let error = model.error {
-                lines.append(error)
             }
             if model.showsAnalyze {
                 lines.append(model.scanning ? "Scanning" : "Analyze")

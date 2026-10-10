@@ -282,8 +282,15 @@ public final class FlowModel: ObservableObject {
     /// A refusal has no estimate, so Analyze is not on that page. Both classes off keeps the button.
     public var showsAnalyze: Bool { estimate != nil }
 
-    /// The file page and the estimate both warn. The result repeats it after the scan.
-    public var estimateWarning: String? { oldFile ? Copy.oldFile : nil }
+    /// The file page and an estimate that can run both warn. A refusal is the headline instead.
+    public var estimateWarning: String? { estimate != nil && oldFile ? Copy.oldFile : nil }
+
+    /// A scan that can run is titled Estimate. A refusal is the headline, so the page does not say Estimate.
+    public var estimateHeadline: String {
+        if scanning { return "Scanning" }
+        if estimate == nil, let error, !error.isEmpty { return error }
+        return "Estimate"
+    }
 
     /// Back stays off while a scan is running.
     public var backEnabled: Bool { !scanning }
@@ -424,7 +431,7 @@ public final class FlowModel: ObservableObject {
         }
     }
 
-    /// The result folder could not be created. The estimate stays, and Analyze stays off.
+    /// The result folder could not be created. The page stays here, and the refusal is the headline.
     private func refuseUncreatableOutput() {
         estimate = nil
         canAnalyze = false
@@ -741,7 +748,9 @@ public struct FlowView: View {
     private var estimateColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
-            Text(model.scanning ? "Scanning" : "Estimate").font(model.phone ? .largeTitle : .title)
+            Text(model.estimateHeadline)
+                .font(model.phone ? .largeTitle : .title)
+                .foregroundStyle(model.estimate == nil && !model.scanning && model.error != nil ? .orange : .primary)
             if model.scanning, !model.liveCrops.isEmpty {
                 Text("Crops from this file.")
                     .font(model.phone ? .title3 : .headline)
@@ -753,10 +762,10 @@ public struct FlowView: View {
                     }
                 }
             }
-            if let warning = model.estimateWarning {
-                Text(warning).foregroundStyle(.orange)
-            }
             if let estimate = model.estimate {
+                if let warning = model.estimateWarning {
+                    Text(warning).foregroundStyle(.orange)
+                }
                 Text(estimate.human).font(.headline)
                 Text(estimate.caveat).foregroundStyle(.secondary)
                 if let note = estimate.deviceNote { Text(note) }
@@ -776,8 +785,6 @@ public struct FlowView: View {
                     model.includeWanted.toggle()
                     model.applyClassGate()
                 }
-            } else if let error = model.error {
-                Text(error)
             }
             if model.showsAnalyze {
                 prominent(model.scanning ? "Scanning" : "Analyze") { model.startScan() }

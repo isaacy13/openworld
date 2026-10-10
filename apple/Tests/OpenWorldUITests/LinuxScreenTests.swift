@@ -234,7 +234,9 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.error, "The scan could not be read. Refusing.")
             XCTAssertFalse(model.showsAnalyze)
             let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.dropFirst().first, "The scan could not be read. Refusing.")
             XCTAssertEqual(estimate.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(estimate.contains("Estimate"))
             XCTAssertFalse(estimate.contains("Analyze"))
 
             model.canAnalyze = true
@@ -1096,10 +1098,17 @@ final class OpenWorldUITests: XCTestCase {
     func testAMissingOutputDirectoryRefusesTheEstimate() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
-            model.choose(try self.still("blank"))
+            let file = try self.still("blank")
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-40 * 24 * 3600)],
+                ofItemAtPath: file.path
+            )
+            model.choose(file)
+            XCTAssertTrue(model.oldFile)
             model.loadBundles()
             model.loadEstimate()
             XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.estimateWarning, Copy.oldFile)
             XCTAssertTrue(model.showsAnalyze)
             let blocker = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ow-not-a-dir-\(UUID().uuidString)")
@@ -1114,7 +1123,10 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertFalse(model.showsAnalyze)
             XCTAssertEqual(model.error, "The output directory could not be created. Refusing.")
             let lines = PhonePreview.lines(screen: "estimate", model: model)
-            XCTAssertTrue(lines.contains("The output directory could not be created. Refusing."))
+            XCTAssertEqual(lines.dropFirst().first, "The output directory could not be created. Refusing.")
+            XCTAssertEqual(lines.filter { $0 == "The output directory could not be created. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("Estimate"))
+            XCTAssertFalse(lines.contains(Copy.oldFile))
             XCTAssertFalse(lines.contains("Analyze"))
             XCTAssertFalse(lines.contains("Missing"))
             XCTAssertFalse(lines.contains("Wanted"))

@@ -135,7 +135,12 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Button(onClick = model::continueFromSize) { Text("Continue") }
                     }
                     Step.Estimate -> {
-                        Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
+                        val refused = !model.scanning && !model.estimateOk && model.estimateText.isNotBlank()
+                        if (refused) {
+                            Text(model.estimateText, style = MaterialTheme.typography.headlineMedium, color = warningColor)
+                        } else {
+                            Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
+                        }
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
                             model.liveCrops.forEach { crop ->
@@ -153,9 +158,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 }
                             }
                         }
-                        if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
-                        Text(model.estimateText)
                         if (model.estimateOk) {
+                            if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
+                            Text(model.estimateText)
                             Row {
                                 Checkbox(
                                     checked = model.includeMissing,

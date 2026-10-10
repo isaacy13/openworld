@@ -1232,6 +1232,7 @@ class PhoneScreenTest {
         model.canAnalyze = false
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
         compose.onNodeWithText("Bad codec or unreadable file. Refusing.").assertExists()
+        compose.onAllNodesWithText("Estimate").assertCountEquals(0)
         compose.onAllNodesWithText("Missing").assertCountEquals(0)
         compose.onAllNodesWithText("Wanted").assertCountEquals(0)
         compose.onAllNodesWithText("Choose missing, wanted, or both.").assertCountEquals(0)
@@ -1527,8 +1528,11 @@ class PhoneScreenTest {
         assertEquals("The output directory could not be created. Refusing.", model.estimateText)
         model.refreshClassLine()
         assertEquals("The output directory could not be created. Refusing.", model.estimateText)
+        model.oldFile = true
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
         compose.onNodeWithText("The output directory could not be created. Refusing.").assertExists()
+        compose.onAllNodesWithText("Estimate").assertCountEquals(0)
+        compose.onAllNodesWithText("This file is older than about 30 days.").assertCountEquals(0)
         compose.onAllNodesWithText("Analyze").assertCountEquals(0)
         compose.onAllNodesWithText("Missing").assertCountEquals(0)
         compose.onAllNodesWithText("Wanted").assertCountEquals(0)
