@@ -1484,6 +1484,48 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anUnreadableProgramAnswerUsesTheCommandRefusal() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/unreadable.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        Core.stdoutForTest = { "" }
+        try {
+            model.continueFromDevice()
+            assertEquals("The bundle catalog could not be read. Refusing.", model.bundleNotice)
+            Core.stdoutForTest = { "not json" }
+            model.continueFromDevice()
+            compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+            compose.onNodeWithText("The bundle catalog could not be read. Refusing.").assertExists()
+            compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(0)
+            model.continueFromSize()
+            assertEquals("The scan could not be read. Refusing.", model.estimateText)
+            assertFalse(model.canAnalyze)
+            compose.onNodeWithText("The scan could not be read. Refusing.").assertExists()
+            compose.onAllNodesWithText("Analyze").assertCountEquals(0)
+            Core.stdoutForTest = null
+            model.continueFromSize()
+            assertTrue(model.canAnalyze)
+            Core.stdoutForTest = { args ->
+                if (args.contains("posters")) """{"id":"fixture-v0","posters":3}""" else "not json"
+            }
+            model.analyze()
+            assertEquals(Step.Results, model.step)
+            assertEquals("The scan could not be read. Refusing.", model.summary)
+            assertNull(model.resultDir)
+            assertTrue(model.detail.contains("Nothing is uploaded."))
+            assertFalse(model.detail.contains("No candidate is not a clearance."))
+            compose.onNodeWithText("The scan could not be read. Refusing.").assertExists()
+            compose.onNodeWithText("Nothing is uploaded.", substring = true).assertExists()
+            compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+            compose.onAllNodesWithText("Delete").assertCountEquals(0)
+        } finally {
+            Core.stdoutForTest = null
+        }
+    }
+
+    @Test
     fun deleteRemovesTheResultFromTheScreen() {
         val model = FlowModel()
         val uri = Uri.parse("content://app.openworld/delete.png")

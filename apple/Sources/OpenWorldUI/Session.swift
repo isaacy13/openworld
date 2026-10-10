@@ -7,6 +7,49 @@ import Glibc
 import Foundation
 import OpenWorldContract
 
+/// A stand-in answer for tests. Production leaves `stdoutForTest` unset.
+public enum ProgramAnswer {
+    public static var stdoutForTest: (([String]) -> Data)?
+
+    /// The refusal when a command's answer is blank or not JSON.
+    public static func refusal(forUnreadable args: [String]) -> String {
+        switch commandWord(args) {
+        case "posters":
+            return "The poster pack could not be read. Refusing."
+        case "bundles":
+            return "The bundle catalog could not be read. Refusing."
+        case "leave":
+            return "OpenWorld only opens an FBI page."
+        case "delete":
+            return "The result could not be deleted."
+        default:
+            return "The scan could not be read. Refusing."
+        }
+    }
+
+    private static func commandWord(_ args: [String]) -> String? {
+        let valued: Set<String> = [
+            "--bundles", "--input", "--out", "--url", "--posters", "--frames", "--bundle",
+            "--long-side", "--coverage", "--form-factor", "--provider", "--width", "--height",
+            "--fps", "--frame-count", "--duration", "--container-unix",
+        ]
+        var index = 0
+        while index < args.count {
+            let token = args[index]
+            if valued.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return token
+        }
+        return nil
+    }
+}
+
 /// Talks to the Rust library when it is linked, and otherwise to the `openworld` program. This file does not detect or compare.
 struct CoreFailure: LocalizedError {
     var message: String
@@ -60,17 +103,25 @@ struct CoreClient {
     }
 
     func bundlesJSON() throws -> [BundleRow] {
-        let data = try run(PhoneArguments.bundles(catalog: bundles))
+        let args = PhoneArguments.bundles(catalog: bundles)
+        let data = try run(args)
         if let message = Self.refusalMessage(data) {
             throw CoreFailure(message: message)
         }
-        let decoded = try JSONDecoder().decode(BundleList.self, from: data)
-        return decoded.bundles
+        if data.isEmpty {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
+        do {
+            let decoded = try JSONDecoder().decode(BundleList.self, from: data)
+            return decoded.bundles
+        } catch {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
     }
 
     func estimate(input: URL, bundle: String, longSide: String, coverage: String, phone: Bool) throws -> Estimate {
         let facts = try PlatformDecoder.facts(url: input)
-        let data = try run(PhoneArguments.estimate(
+        let args = PhoneArguments.estimate(
             catalog: bundles,
             input: input.path,
             bundle: bundle,
@@ -78,11 +129,19 @@ struct CoreClient {
             coverage: coverage,
             phone: phone,
             media: facts.media
-        ))
+        )
+        let data = try run(args)
         if let message = Self.refusalMessage(data) {
             throw CoreFailure(message: message)
         }
-        return try JSONDecoder().decode(Estimate.self, from: data)
+        if data.isEmpty {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
+        do {
+            return try JSONDecoder().decode(Estimate.self, from: data)
+        } catch {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
     }
 
     static func refusalMessage(_ data: Data) -> String? {
@@ -118,10 +177,20 @@ struct CoreClient {
             args.append("--progress")
         }
         let data = try run(args, onProgress: onProgress)
-        return try JSONDecoder().decode(ScanReport.self, from: data)
+        if data.isEmpty {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
+        do {
+            return try JSONDecoder().decode(ScanReport.self, from: data)
+        } catch {
+            throw CoreFailure(message: ProgramAnswer.refusal(forUnreadable: args))
+        }
     }
 
     func run(_ args: [String], onProgress: ((String) -> Void)? = nil) throws -> Data {
+        if let override = ProgramAnswer.stdoutForTest {
+            return override(args)
+        }
         if let linked = LinkedCore.invoke(args, onProgress: onProgress) {
             return linked
         }

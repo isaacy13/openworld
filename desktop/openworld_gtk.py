@@ -403,7 +403,10 @@ class OpenWorld(Gtk.Application):
         self._go("device")
 
     def load_bundles(self) -> None:
-        payload = self._run_json(["--json", "--bundles", self.bundles, "bundles"])
+        payload = self._run_json(
+            ["--json", "--bundles", self.bundles, "bundles"],
+            "The bundle catalog could not be read. Refusing.",
+        )
         if payload.get("status") == "refused":
             self.rows = []
             message = payload.get("message") or "The bundle catalog could not be read. Refusing."
@@ -632,7 +635,8 @@ class OpenWorld(Gtk.Application):
         self.posters = self.work / "posters"
         self.out_dir = self.work / "result"
         written = self._run_json(
-            ["--json", "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)]
+            ["--json", "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)],
+            "The poster pack could not be read. Refusing.",
         )
         if written.get("status") == "refused" or not written.get("id"):
             message = written.get("message") or written.get("summary") or "The poster pack could not be read. Refusing."
@@ -902,7 +906,10 @@ class OpenWorld(Gtk.Application):
         return frame
 
     def leave_decision(self, url: str) -> tuple[str, str | None]:
-        payload = self._run_json(["--json", "leave", "--url", url])
+        payload = self._run_json(
+            ["--json", "leave", "--url", url],
+            "OpenWorld only opens an FBI page.",
+        )
         allowed = payload.get("url") or ""
         message = payload.get("message") or ""
         if message != PHRASES["leaving"] or not allowed:
@@ -946,7 +953,10 @@ class OpenWorld(Gtk.Application):
         if not self.out_dir.exists():
             self._mark_deleted()
             return True
-        payload = self._run_json(["--json", "delete", "--out", str(self.out_dir)])
+        payload = self._run_json(
+            ["--json", "delete", "--out", str(self.out_dir)],
+            "The result could not be deleted.",
+        )
         if not payload.get("deleted"):
             self.delete_notice.set_text(payload.get("message") or "The result could not be deleted.")
             self.delete_notice.set_visible(True)
@@ -1082,11 +1092,24 @@ class OpenWorld(Gtk.Application):
         refused_estimate = name == "estimate" and not self.estimate_ok
         self.primary.set_visible(name != "choose" and not refused_estimate)
 
-    def _run_json(self, args: list[str]) -> dict:
-        proc = subprocess.run([self.bin, *args], check=False, capture_output=True, text=True)
-        if not proc.stdout.strip():
-            return {"status": "refused", "message": proc.stderr.strip() or "No response."}
-        return json.loads(proc.stdout)
+    def _run_json(self, args: list[str], refusal: str = "The scan could not be read. Refusing.") -> dict:
+        try:
+            proc = subprocess.run([self.bin, *args], check=False, capture_output=True, text=True)
+        except OSError:
+            message = "The scan program is not on this device. Refusing."
+            return {"status": "refused", "summary": message, "message": message}
+        text = (proc.stdout or "").strip()
+        parsed: dict | None = None
+        if text:
+            try:
+                value = json.loads(text)
+            except json.JSONDecodeError:
+                value = None
+            if isinstance(value, dict):
+                parsed = value
+        if parsed is None:
+            return {"status": "refused", "summary": refusal, "message": refusal}
+        return parsed
 
     def _open_env_input(self) -> bool:
         path = os.environ.get("OPENWORLD_INPUT")
@@ -1344,6 +1367,52 @@ class OpenWorld(Gtk.Application):
                     f"an unreadable catalog used the missing-program sentence: {self.rows!r} {self.bundle_notice.get_text()!r}"
                 )
                 return False
+            saved_bin = self.bin
+            try:
+                garbage = os.path.join(empty, "garbage.sh")
+                with open(garbage, "w", encoding="utf-8") as handle:
+                    handle.write("#!/bin/sh\nprintf '%s\\n' 'not json'\n")
+                os.chmod(garbage, 0o755)
+                self.bin = garbage
+                self.load_bundles()
+                if (
+                    self.rows
+                    or self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing."
+                ):
+                    self._exercise_fail(
+                        f"a program answer that is not a catalog used another sentence: {self.bundle_notice.get_text()!r}"
+                    )
+                    return False
+                self.refresh_estimate()
+                if (
+                    self.estimate_body.get_text() != "The scan could not be read. Refusing."
+                    or self.estimate_ok
+                    or self.can_analyze
+                ):
+                    self._exercise_fail(
+                        f"a program answer that is not an estimate stayed runnable: {self.estimate_body.get_text()!r}"
+                    )
+                    return False
+                blank = os.path.join(empty, "blank.sh")
+                with open(blank, "w", encoding="utf-8") as handle:
+                    handle.write("#!/bin/sh\nexit 0\n")
+                os.chmod(blank, 0o755)
+                self.bin = blank
+                self.load_bundles()
+                if self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing.":
+                    self._exercise_fail(
+                        f"an empty program answer used another sentence: {self.bundle_notice.get_text()!r}"
+                    )
+                    return False
+                self.bin = os.path.join(empty, "missing-bin")
+                self.load_bundles()
+                if self.bundle_notice.get_text() != "The scan program is not on this device. Refusing.":
+                    self._exercise_fail(
+                        f"a missing program used another sentence: {self.bundle_notice.get_text()!r}"
+                    )
+                    return False
+            finally:
+                self.bin = saved_bin
         finally:
             self.bundles = saved_bundles
             shutil.rmtree(empty, ignore_errors=True)

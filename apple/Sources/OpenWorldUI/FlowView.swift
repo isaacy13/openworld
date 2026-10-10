@@ -838,7 +838,7 @@ public struct FlowView: View {
                     }
                     #endif
                 }
-                ForEach(model.report?.disclosure ?? [], id: \.self) { line in
+                ForEach(PhonePreview.disclosureLines(model), id: \.self) { line in
                     Text(line).font(.footnote)
                 }
                 if let notice = model.leaveError {

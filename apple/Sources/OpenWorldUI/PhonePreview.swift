@@ -112,7 +112,7 @@ public enum PhonePreview {
                     lines.append(item.label)
                 }
             }
-            lines.append(contentsOf: model.report?.disclosure ?? [])
+            lines.append(contentsOf: disclosureLines(model))
             if let notice = model.leaveError { lines.append(notice) }
             if model.resultDirectory != nil {
                 lines.append("Delete")
@@ -133,6 +133,17 @@ public enum PhonePreview {
                 "Choose File",
             ]
         }
+    }
+
+    /// Disclosure from the report. An unreadable scan still names what stays on the device, and it leaves out the clearance sentence.
+    public static func disclosureLines(_ model: FlowModel) -> [String] {
+        if let report = model.report {
+            return report.disclosure
+        }
+        if model.error == "The scan could not be read. Refusing." {
+            return Copy.disclosure.filter { $0 != Copy.clearance }
+        }
+        return []
     }
 
     /// Lines under the headline. A refusal leaves the bundle and the perception line empty, so those stay off the screen.

@@ -212,6 +212,50 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnUnreadableProgramAnswerUsesTheCommandRefusal() throws {
+        defer { ProgramAnswer.stdoutForTest = nil }
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            ProgramAnswer.stdoutForTest = { _ in Data() }
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.error, "The bundle catalog could not be read. Refusing.")
+            ProgramAnswer.stdoutForTest = { _ in Data("not json".utf8) }
+            model.loadBundles()
+            let bundle = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(bundle.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(bundle.contains("The scan program is not on this device. Refusing."))
+
+            model.choose(try self.still("blank"))
+            model.loadEstimate()
+            XCTAssertNil(model.estimate)
+            XCTAssertEqual(model.error, "The scan could not be read. Refusing.")
+            XCTAssertFalse(model.showsAnalyze)
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(estimate.contains("Analyze"))
+
+            model.canAnalyze = true
+            ProgramAnswer.stdoutForTest = { args in
+                if args.contains("posters") {
+                    return Data(#"{"id":"fixture-v0"}"#.utf8)
+                }
+                return Data("not json".utf8)
+            }
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertEqual(model.error, "The scan could not be read. Refusing.")
+            let results = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(results.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(results.contains("Nothing is uploaded."))
+            XCTAssertFalse(results.contains("No candidate is not a clearance."))
+            XCTAssertFalse(results.contains("Delete"))
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testAnUnreadableCatalogNamesTheCatalog() throws {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("openworld-missing-bundles-\(UUID().uuidString)", isDirectory: true)

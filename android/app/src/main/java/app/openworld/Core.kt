@@ -53,7 +53,14 @@ object Core {
         return "bundles"
     }
 
+    /** A test can answer instead of the library. Production leaves this unset. */
+    internal var stdoutForTest: ((List<String>) -> String)? = null
+
     fun json(args: List<String>, onProgress: ((String) -> Unit)? = null): JSONObject {
+        val override = stdoutForTest
+        if (override != null) {
+            return parseAnswer(args, override(args))
+        }
         if (linked) {
             val request = JSONObject().put("argv", JSONArray(args)).toString()
             val stdout = if (onProgress != null) {
@@ -61,10 +68,7 @@ object Core {
             } else {
                 nativeCommand(request)
             }
-            if (stdout.isBlank()) {
-                throw IOException("The scan library returned nothing. Refusing.")
-            }
-            return JSONObject(stdout)
+            return parseAnswer(args, stdout)
         }
         val process = ProcessBuilder(listOf(binary()) + args)
             .redirectErrorStream(false)
@@ -83,17 +87,56 @@ object Core {
         val stdout = process.inputStream.bufferedReader().readText()
         val code = process.waitFor()
         stderr?.join()
-        if (stdout.isBlank()) {
-            throw IOException("The scan program is not on this device. Refusing.")
-        }
-        val parsed = JSONObject(stdout)
+        val parsed = parseAnswer(args, stdout)
         if (code != 0 && !parsed.has("status") && !parsed.has("human")) {
             throw IOException(parsed.optString("message", "Refusing."))
         }
         return parsed
     }
 
+    private fun parseAnswer(args: List<String>, stdout: String): JSONObject {
+        if (stdout.isBlank()) throw IOException(unreadableCommand(args))
+        try {
+            return JSONObject(stdout)
+        } catch (_: org.json.JSONException) {
+            throw IOException(unreadableCommand(args))
+        }
+    }
+
     fun linkedLibrary(): Boolean = linked
+
+    /** The refusal for a program answer that is blank or not JSON. */
+    internal fun unreadableCommand(args: List<String>): String {
+        return when (commandWord(args)) {
+            "posters" -> "The poster pack could not be read. Refusing."
+            "bundles" -> "The bundle catalog could not be read. Refusing."
+            "leave" -> "OpenWorld only opens an FBI page."
+            "delete" -> "The result could not be deleted."
+            else -> "The scan could not be read. Refusing."
+        }
+    }
+
+    private fun commandWord(args: List<String>): String? {
+        val valued = setOf(
+            "--bundles", "--input", "--out", "--url", "--posters", "--frames", "--bundle",
+            "--long-side", "--coverage", "--form-factor", "--provider", "--width", "--height",
+            "--fps", "--frame-count", "--duration", "--container-unix",
+        )
+        var index = 0
+        while (index < args.size) {
+            val token = args[index]
+            if (token in valued) {
+                index += 2
+                continue
+            }
+            if (token.startsWith("-")) {
+                index += 1
+                continue
+            }
+            return token
+        }
+        return null
+    }
 
     private external fun nativeCommand(request: String): String
 

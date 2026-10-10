@@ -130,9 +130,14 @@ class FlowModel {
     fun continueFromDevice() {
         try {
             applyBundlePayload(Core.json(listOf("--json", "--bundles", Core.bundlesDir(), "bundles")))
-        } catch (_: IOException) {
+        } catch (err: IOException) {
             bundleRows = emptyList()
-            bundleNotice = "The scan program is not on this device. Refusing."
+            val message = err.message
+            bundleNotice = if (!message.isNullOrBlank() && "Refusing." in message) {
+                message
+            } else {
+                "The scan program is not on this device. Refusing."
+            }
         }
         step = Step.Bundle
     }
@@ -493,7 +498,11 @@ class FlowModel {
             )
         } catch (err: IOException) {
             root.deleteRecursively()
-            decodeFailure(err.message)
+            val message = err.message
+            if (message == "The scan could not be read. Refusing.") {
+                return ScanOutcome(status = "refused", summary = message, detail = refusalDisclosure())
+            }
+            decodeFailure(message)
         }
     }
 
@@ -546,6 +555,16 @@ class FlowModel {
         deleteNotice = null
         step = Step.Results
     }
+
+    private fun refusalDisclosure(): String = listOf(
+        "Nothing is uploaded.",
+        "Nobody is enrolled.",
+        "OpenWorld does not train on this file.",
+        "OpenWorld does not contact an agency.",
+        "A candidate is not an identification.",
+        "This file is not authenticated.",
+        "On-device does not mean the file is real.",
+    ).joinToString("\n")
 
     internal fun decodeFailure(message: String?): ScanOutcome {
         val text = message?.takeIf { it.isNotBlank() } ?: "Incomplete."
