@@ -154,6 +154,7 @@ final class OpenWorldUITests: XCTestCase {
         try MainActor.assumeIsolated {
             let model = try self.scan("scene", wanted: false)
             XCTAssertEqual(model.classArguments(), ["--no-wanted"])
+            XCTAssertEqual(model.report?.classNote, "Missing.")
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClass == "missing" } == true)
             XCTAssertTrue(model.report?.candidates.contains { $0.kind == "face" } == true)
             XCTAssertFalse(model.report?.candidates.contains { $0.kind == "plate" } == true)

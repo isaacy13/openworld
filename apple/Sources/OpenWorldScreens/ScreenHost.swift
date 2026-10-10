@@ -131,6 +131,7 @@ enum ScreenCopy {
                 lines.append(reason)
             }
             if let banner = model.report?.coverageBanner { lines.append(banner) }
+            if let classes = model.report?.classNote { lines.append(classes) }
             if let name = model.report?.bundleName { lines.append("Bundle: \(name)") }
             if let note = model.report?.perceptionNote { lines.append(note) }
             lines.append(contentsOf: model.report?.warnings ?? [])

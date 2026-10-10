@@ -132,6 +132,7 @@ public struct ScanReport: Decodable {
     public var bundleName: String?
     public var disclosure: [String]
     public var coverageBanner: String?
+    public var classNote: String?
     public var perceptionNote: String?
     public var warnings: [String]
     public var inventory: [InventoryItem]
@@ -142,6 +143,7 @@ public struct ScanReport: Decodable {
         case status, summary, message, disclosure, warnings, inventory, candidates, comparisons
         case bundleName = "bundle_name"
         case coverageBanner = "coverage_banner"
+        case classNote = "class_note"
         case perceptionNote = "perception_note"
         case facesSeenNotCompared = "faces_seen_not_compared"
     }

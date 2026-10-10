@@ -14,6 +14,17 @@ pub const PLATE_UNREAD: &str = "The plate could not be read.";
 pub const PLATE_UNPUBLISHED: &str = "No poster publishes a plate.";
 pub const FACE_UNSCORED: &str = "This face could not be scored.";
 pub const FIXTURE_MARKERS: &str = "Fixture markers were read.";
+pub const NO_CLASS: &str = "No class was on.";
+
+/// The classes compared for this scan. A clearance names them so both classes are not assumed.
+pub fn class_note(missing: bool, wanted: bool) -> &'static str {
+    match (missing, wanted) {
+        (true, true) => "Missing and wanted.",
+        (true, false) => "Missing.",
+        (false, true) => "Wanted.",
+        (false, false) => NO_CLASS,
+    }
+}
 
 pub const DISCLOSURE: &[&str] = &[
     "Nothing is uploaded.",
@@ -55,6 +66,7 @@ pub fn product_copy() -> serde_json::Value {
         "plate_unpublished": PLATE_UNPUBLISHED,
         "face_unscored": FACE_UNSCORED,
         "fixture_markers": FIXTURE_MARKERS,
+        "no_class": NO_CLASS,
         "disclosure": DISCLOSURE,
         "on_device": ON_DEVICE,
         "old_file": OLD_FILE,

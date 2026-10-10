@@ -25,6 +25,7 @@ private class ScanOutcome(
     val status: String = "",
     val summary: String = "",
     val incompleteReason: String = "",
+    val context: String = "",
     val detail: String = "",
     val rows: List<CandidateRow> = emptyList(),
     val strip: List<Pair<String, String>> = emptyList(),
@@ -56,6 +57,7 @@ class FlowModel {
     var summary by mutableStateOf("")
     var status by mutableStateOf("")
     var incompleteReason by mutableStateOf("")
+    var context by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
     var leaveNotice by mutableStateOf<String?>(null)
@@ -164,6 +166,7 @@ class FlowModel {
         summary = ""
         status = ""
         incompleteReason = ""
+        context = ""
         detail = ""
         strip = emptyList()
         fbiUrl = null
@@ -182,6 +185,7 @@ class FlowModel {
         summary = "Deleted."
         status = "deleted"
         incompleteReason = ""
+        context = ""
         detail = ""
         strip = emptyList()
         candidateRows = emptyList()
@@ -360,16 +364,18 @@ class FlowModel {
                 else -> "Incomplete."
             }
             val reason = json.present("message")
-            val lines = mutableListOf<String>()
-            json.present("coverage_banner")?.let(lines::add)
-            json.present("bundle_name")?.let { lines.add("Bundle: $it") }
-            json.present("perception_note")?.let(lines::add)
+            val context = mutableListOf<String>()
+            json.present("coverage_banner")?.let(context::add)
+            json.present("class_note")?.let(context::add)
+            json.present("bundle_name")?.let { context.add("Bundle: $it") }
+            json.present("perception_note")?.let(context::add)
             val warnings = json.optJSONArray("warnings")
             if (warnings != null) {
                 for (i in 0 until warnings.length()) {
-                    if (!warnings.isNull(i)) lines.add(warnings.getString(i))
+                    if (!warnings.isNull(i)) context.add(warnings.getString(i))
                 }
             }
+            val lines = mutableListOf<String>()
             val disclosure = json.optJSONArray("disclosure")
             if (disclosure != null) {
                 for (i in 0 until disclosure.length()) lines.add(disclosure.getString(i))
@@ -408,6 +414,7 @@ class FlowModel {
                 status = status,
                 summary = summary,
                 incompleteReason = if (status == "incomplete" && reason != null && reason != summary) reason else "",
+                context = context.joinToString("\n"),
                 detail = lines.joinToString("\n"),
                 rows = rows,
                 strip = pictures,
@@ -437,6 +444,7 @@ class FlowModel {
         status = outcome.status
         summary = outcome.summary
         incompleteReason = outcome.incompleteReason
+        context = outcome.context
         detail = outcome.detail
         candidateRows = outcome.rows
         fbiUrl = outcome.rows.firstOrNull()?.url

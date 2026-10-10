@@ -6,6 +6,9 @@ import android.graphics.Bitmap
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -137,7 +140,9 @@ class PhoneFlowTest {
         assertTrue(model.detail.contains("No candidate is not a clearance."))
         assertTrue(model.detail.contains("This file is not authenticated."))
         assertTrue(model.detail.contains("On-device does not mean the file is real."))
-        assertTrue(model.detail.contains("Fixture markers were read."))
+        assertTrue(model.context.contains("Fixture markers were read."))
+        assertTrue(model.context.contains("Missing and wanted."))
+        assertFalse(model.detail.contains("Missing and wanted."))
         assertFalse(model.detail.lineSequence().any { it == "null" })
         val labels = model.strip.map { it.first }
         assertTrue(labels.contains("Possible candidate. Not an identification."))
@@ -159,6 +164,7 @@ class PhoneFlowTest {
     fun blankStillIsAClearance() {
         val model = drive("blank")
         assertEquals("No candidate is not a clearance.", model.summary)
+        assertTrue(model.context.contains("Missing and wanted."))
         assertFalse(model.detail.lineSequence().any { it == "null" })
         assertTrue(model.strip.isEmpty())
         assertNull(model.fbiUrl)
@@ -362,7 +368,7 @@ class PhoneFlowTest {
         model.continueFromSize()
         model.analyze()
         assertEquals("No candidate is not a clearance.", model.summary)
-        assertTrue(model.detail.contains("This file is older than about 30 days."))
+        assertTrue(model.context.contains("This file is older than about 30 days."))
         assertFalse(model.detail.contains("Open FBI page"))
     }
 
@@ -838,6 +844,37 @@ class PhoneScreenTest {
         waitForScan(compose, model)
         compose.onAllNodesWithText("Scanning").assertCountEquals(0)
         compose.onNodeWithText("No candidate is not a clearance.").assertExists()
+    }
+
+    @Test
+    fun theClassLineSitsAboveTheCandidate() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "Possible candidate. Not an identification."
+        model.context = "Missing and wanted."
+        model.detail = "Nothing is uploaded."
+        model.candidateRows = listOf(
+            CandidateRow(
+                wording = "Possible candidate. Not an identification.",
+                uncertainty = "Score 0.90.",
+                title = "Fixture subject A",
+                posterClass = "missing",
+                url = "https://www.fbi.gov/wanted",
+                cropPath = null,
+                framePath = null,
+            )
+        )
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val texts = compose.onAllNodes(SemanticsMatcher("has text") {
+            it.config.getOrNull(SemanticsProperties.Text) != null
+        }, useUnmergedTree = true).fetchSemanticsNodes().map { node ->
+            node.config[SemanticsProperties.Text].joinToString { it.text }
+        }
+        val classAt = texts.indexOfFirst { it.contains("Missing and wanted.") }
+        val openAt = texts.indexOfFirst { it == "Open FBI page" }
+        val disclosureAt = texts.indexOfFirst { it.contains("Nothing is uploaded.") }
+        assertTrue("$texts", classAt >= 0 && openAt > classAt && disclosureAt > openAt)
     }
 
     @Test

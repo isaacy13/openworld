@@ -565,6 +565,9 @@ public struct FlowView: View {
                 if let banner = model.report?.coverageBanner {
                     Text(banner)
                 }
+                if let classes = model.report?.classNote {
+                    Text(classes)
+                }
                 if let name = model.report?.bundleName {
                     Text("Bundle: \(name)")
                 }

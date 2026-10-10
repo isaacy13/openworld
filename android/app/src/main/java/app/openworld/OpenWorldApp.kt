@@ -155,6 +155,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             style = MaterialTheme.typography.headlineMedium,
                         )
                         if (model.incompleteReason.isNotBlank()) Text(model.incompleteReason)
+                        if (model.context.isNotBlank()) Text(model.context)
                         model.candidateRows.forEach { row ->
                             Text(row.wording, style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

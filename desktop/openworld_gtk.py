@@ -284,6 +284,7 @@ class OpenWorld(Gtk.Application):
         self.reason = Gtk.Label(xalign=0, wrap=True)
         self.reason.add_css_class("warn")
         self.reason.set_visible(False)
+        self.context_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note.add_css_class("dim")
         self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0)
@@ -294,12 +295,14 @@ class OpenWorld(Gtk.Application):
         self.strip.set_selection_mode(Gtk.SelectionMode.NONE)
         self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         scroll = Gtk.ScrolledWindow()
+        self.results_scroll = scroll
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_overlay_scrolling(False)
         scroll.set_vexpand(True)
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
         inner.append(self.reason)
+        inner.append(self.context_note)
         inner.append(self.detail)
         inner.append(self.strip_heading)
         inner.append(self.strip)
@@ -534,6 +537,7 @@ class OpenWorld(Gtk.Application):
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         self._clear_results()
+        self.context_note.set_text("")
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
@@ -651,18 +655,20 @@ class OpenWorld(Gtk.Application):
         else:
             self.reason.set_text("")
             self.reason.set_visible(False)
-        notes = []
+        context = []
         if report.get("coverage_banner"):
-            notes.append(report["coverage_banner"])
+            context.append(report["coverage_banner"])
+        if report.get("class_note"):
+            context.append(report["class_note"])
         if report.get("bundle_name"):
-            notes.append(f"Bundle: {report['bundle_name']}")
+            context.append(f"Bundle: {report['bundle_name']}")
         if report.get("perception_note"):
-            notes.append(report["perception_note"])
+            context.append(report["perception_note"])
         for warning in report.get("warnings") or []:
-            notes.append(warning)
-        for line in report.get("disclosure") or []:
-            notes.append(line)
-        self.result_note.set_text("\n".join(notes))
+            context.append(warning)
+        self.context_note.set_text("\n".join(context))
+        self.result_note.set_text("\n".join(report.get("disclosure") or []))
+        self.results_scroll.get_vadjustment().set_value(0)
         self._fill_strip(report)
         for candidate in report.get("candidates") or []:
             self.detail.append(self._candidate_card(candidate))
@@ -824,6 +830,7 @@ class OpenWorld(Gtk.Application):
 
     def _mark_deleted(self) -> None:
         self._clear_results()
+        self.context_note.set_text("")
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
@@ -871,6 +878,7 @@ class OpenWorld(Gtk.Application):
         self.scan_thread = None
         self._clear_results()
         self.summary.set_text("")
+        self.context_note.set_text("")
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
@@ -969,6 +977,7 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
+        self.context_note.set_text("")
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
@@ -1003,6 +1012,7 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = None
         self._clear_results()
         self.summary.set_text("")
+        self.context_note.set_text("")
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
@@ -1128,12 +1138,14 @@ class OpenWorld(Gtk.Application):
         if not self.primary.get_sensitive() or self.class_label.get_text() != "Missing and wanted." or self._class_args():
             self._exercise_fail("restoring both classes left Analyze off")
             return False
+        self.context_note.set_text("Missing and wanted.")
         self.result_note.set_text(PHRASES["clearance"])
         self.reason.set_text("The file was not fully decoded.")
         self.reason.set_visible(True)
         self.start_scan()
         if (
             self.summary.get_text() != "Scanning"
+            or self.context_note.get_text()
             or self.result_note.get_text()
             or self.reason.get_text()
             or self.reason.get_visible()
@@ -1186,6 +1198,17 @@ class OpenWorld(Gtk.Application):
                 if phrase not in blob:
                     self._exercise_fail(f"missing {phrase}")
                     return False
+        if "Missing and wanted." not in self.context_note.get_text():
+            self._exercise_fail(f"the result did not name the classes under the headline: {self.context_note.get_text()!r}")
+            return False
+        result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
+        if result_shot and not getattr(self, "_result_shot_saved", False):
+            self._result_shot_saved = True
+            subprocess.run(
+                ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
+                check=False,
+            )
+            self._grab(result_shot)
         if report.get("status") != "complete":
             self._exercise_fail(report.get("message", "not complete"))
             return False
@@ -1219,7 +1242,13 @@ class OpenWorld(Gtk.Application):
         if result is None or not (result / "result.json").is_file() or not self.delete_button.get_sensitive():
             self._exercise_fail("no result to delete")
             return False
-        if not self.delete_result() or result.exists() or self.summary.get_text() != "Deleted." or self.result_note.get_text():
+        if (
+            not self.delete_result()
+            or result.exists()
+            or self.summary.get_text() != "Deleted."
+            or self.context_note.get_text()
+            or self.result_note.get_text()
+        ):
             self._exercise_fail("result remained after delete")
             return False
         blocked, opened = self.leave_decision("https://www.fbi.gov.evil.com/wanted")

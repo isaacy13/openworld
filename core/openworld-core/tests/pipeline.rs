@@ -128,6 +128,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     let report = scan_images(&[scene.image], &bundle, &pack, &opts, &mut |_| {});
     assert_eq!(report.status, "complete");
     assert_eq!(report.bundle_name, "Fast");
+    assert_eq!(report.class_note.as_deref(), Some("Missing and wanted."));
     assert!(report.disclosure.iter().any(|l| l == "Nothing is uploaded."));
     assert!(report.disclosure.iter().any(|l| l == "Nobody is enrolled."));
     assert!(report.disclosure.iter().any(|l| l.contains("does not train")));
@@ -274,14 +275,27 @@ fn wanted_class_off_skips_that_class_with_the_same_cutoff() {
     posters::write_fixture_pack(dir.path(), now()).unwrap();
     let pack = posters::load_pack(dir.path(), now()).unwrap();
     let scene = demo_scene(bundle.threshold);
+    let image = scene.image;
     let mut opts = opts(DetectionSize::Px(640), Coverage::Complete);
     opts.wanted = false;
     opts.fps = 0.0;
-    let report = scan_images(&[scene.image], &bundle, &pack, &opts, &mut |_| {});
+    let report = scan_images(&[image.clone()], &bundle, &pack, &opts, &mut |_| {});
     assert!(report.candidates.iter().all(|c| c.poster_class == "missing"));
     assert!(report.candidates.iter().all(|c| c.kind != "plate"));
     assert_eq!(report.plates_ocr_attempted, 0);
+    assert_eq!(report.class_note.as_deref(), Some("Missing."));
     assert_eq!(report.threshold, bundle.threshold);
+    opts.missing = false;
+    opts.wanted = true;
+    let wanted_only = scan_images(&[image.clone()], &bundle, &pack, &opts, &mut |_| {});
+    assert!(wanted_only.candidates.iter().all(|c| c.poster_class == "wanted"));
+    assert!(wanted_only.candidates.iter().any(|c| c.kind == "plate"));
+    assert_eq!(wanted_only.class_note.as_deref(), Some("Wanted."));
+    opts.wanted = false;
+    let neither = scan_images(&[image], &bundle, &pack, &opts, &mut |_| {});
+    assert!(neither.candidates.is_empty());
+    assert_eq!(neither.summary, NO_CLEARANCE);
+    assert_eq!(neither.class_note.as_deref(), Some("No class was on."));
 }
 
 #[test]
