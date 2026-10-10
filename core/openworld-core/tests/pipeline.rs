@@ -143,7 +143,11 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert!(report.inventory.iter().any(|i| i.crop.is_some()));
     assert!(report.perception_note.contains("not a SCRFD"));
     let face = report.candidates.iter().find(|c| c.kind == "face").unwrap();
-    assert!(face.uncertainty.contains("Fast"));
+    assert!(face.uncertainty.contains("Score "));
+    assert!(face.uncertainty.contains("Fast keeps a candidate at"));
+    assert!(!face.uncertainty.contains("Cosine"));
+    let plate = report.candidates.iter().find(|c| c.kind == "plate").unwrap();
+    assert!(plate.uncertainty.contains("FIX123"));
     assert_eq!(face.leaving, "You are leaving OpenWorld.");
     assert!(face.cosine.unwrap() >= bundle.threshold);
 }

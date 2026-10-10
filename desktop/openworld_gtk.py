@@ -938,6 +938,9 @@ class OpenWorld(Gtk.Application):
         if card_text.count("Crop") < expected or card_text.count("Frame") < expected:
             self._exercise_fail(f"a candidate card is missing its crop or frame: {card_text}")
             return False
+        if "Score " not in card_text or "Cosine" in card_text or "FIX123" not in card_text:
+            self._exercise_fail(f"the card did not explain the score and the plate: {card_text}")
+            return False
         if self.strip_heading.get_text() != "Crops from this file." or not self.strip_heading.get_visible():
             self._exercise_fail("the other crops are not labeled under the cards")
             return False

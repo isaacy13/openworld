@@ -633,10 +633,7 @@ impl<'a> Engine<'a> {
                     track_id,
                     cosine: Some(score),
                     threshold: self.bundle.threshold,
-                    uncertainty: format!(
-                        "Cosine {score:.2} is above the locked cutoff {:.2} for {}. {POSSIBLE_CANDIDATE}",
-                        self.bundle.threshold, self.bundle.name
-                    ),
+                    uncertainty: face_uncertainty(score, self.bundle.threshold, &self.bundle.name),
                     poster_id: poster.id.clone(),
                     poster_class: poster.class.as_str().into(),
                     poster_title: poster.title.clone(),
@@ -710,10 +707,7 @@ impl<'a> Engine<'a> {
                     track_id,
                     cosine: Some(score),
                     threshold: self.bundle.threshold,
-                    uncertainty: format!(
-                        "Cosine {score:.2} is above the locked cutoff {:.2} for {}. {POSSIBLE_CANDIDATE}",
-                        self.bundle.threshold, self.bundle.name
-                    ),
+                    uncertainty: face_uncertainty(score, self.bundle.threshold, &self.bundle.name),
                     poster_id: poster.id.clone(),
                     poster_class: poster.class.as_str().into(),
                     poster_title: poster.title.clone(),
@@ -792,7 +786,7 @@ impl<'a> Engine<'a> {
                 track_id,
                 cosine: None,
                 threshold: self.bundle.threshold,
-                uncertainty: format!("The plate text matches a plate published on this poster. {POSSIBLE_CANDIDATE}"),
+                uncertainty: format!("The plate reads {text}. That text is published on this poster. {POSSIBLE_CANDIDATE}"),
                 poster_id: poster.id.clone(),
                 poster_class: poster.class.as_str().into(),
                 poster_title: poster.title.clone(),
@@ -918,6 +912,10 @@ fn strongest_cards(candidates: Vec<Candidate>) -> Vec<Candidate> {
         }
     }
     chosen
+}
+
+fn face_uncertainty(score: f32, threshold: f32, bundle_name: &str) -> String {
+    format!("Score {score:.2}. {bundle_name} keeps a candidate at {threshold:.2} and above. {POSSIBLE_CANDIDATE}")
 }
 
 fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {
