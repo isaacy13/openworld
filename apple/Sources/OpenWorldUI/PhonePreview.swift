@@ -25,18 +25,14 @@ public enum PhonePreview {
             lines.append("Continue")
             return lines
         case "bundle":
-            var lines = [
-                "Back",
-                "Model bundle",
-                "Scores are not comparable across bundles. Results name the bundle you pick.",
-            ]
-            for row in model.bundles {
-                lines.append(markedChoice(row.name, selected: row.id == model.bundleID))
-                lines.append(row.bestFor)
-                lines.append(row.curveLine)
-            }
-            if model.bundles.isEmpty, let error = model.error, error != "The file could not be read. Refusing." {
-                lines.append(error)
+            var lines = ["Back", model.bundleHeadline]
+            if !model.bundles.isEmpty {
+                lines.append("Scores are not comparable across bundles. Results name the bundle you pick.")
+                for row in model.bundles {
+                    lines.append(markedChoice(row.name, selected: row.id == model.bundleID))
+                    lines.append(row.bestFor)
+                    lines.append(row.curveLine)
+                }
             }
             lines.append("Continue")
             return lines

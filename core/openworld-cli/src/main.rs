@@ -273,12 +273,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                         "message": message,
                     }),
                 );
-                if !cli.json {
-                    for line in bundle_lines(&[]) {
-                        println!("{line}");
-                    }
-                    println!("{message}");
-                }
+                speak(cli.json, [message]);
                 Ok(2)
             }
             Ok(all) => {

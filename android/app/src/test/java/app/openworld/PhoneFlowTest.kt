@@ -1094,8 +1094,9 @@ class PhoneScreenTest {
         model.step = Step.Bundle
         model.bundleRows = emptyList()
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
-        compose.onNodeWithText("Model bundle").assertExists()
-        compose.onNodeWithText("The scan program is not on this device. Refusing.").assertExists()
+        compose.onAllNodesWithText("Model bundle").assertCountEquals(0)
+        compose.onAllNodesWithText("Scores are not comparable across bundles. Results name the bundle you pick.").assertCountEquals(0)
+        compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(1)
         compose.onNodeWithText("Continue").assertIsNotEnabled()
         model.continueFromBundle()
         assertEquals(Step.Bundle, model.step)
@@ -1111,8 +1112,9 @@ class PhoneScreenTest {
         )
         model.step = Step.Bundle
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
-        compose.onNodeWithText("Model bundle").assertExists()
-        compose.onNodeWithText("The bundle catalog could not be read. Refusing.").assertExists()
+        compose.onAllNodesWithText("Model bundle").assertCountEquals(0)
+        compose.onAllNodesWithText("Scores are not comparable across bundles. Results name the bundle you pick.").assertCountEquals(0)
+        compose.onAllNodesWithText("The bundle catalog could not be read. Refusing.").assertCountEquals(1)
         compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(0)
         compose.onNodeWithText("Continue").assertIsNotEnabled()
         model.continueFromBundle()
@@ -1622,7 +1624,8 @@ class PhoneScreenTest {
             Core.stdoutForTest = { "not json" }
             model.continueFromDevice()
             compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
-            compose.onNodeWithText("The bundle catalog could not be read. Refusing.").assertExists()
+            compose.onAllNodesWithText("Model bundle").assertCountEquals(0)
+            compose.onAllNodesWithText("The bundle catalog could not be read. Refusing.").assertCountEquals(1)
             compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(0)
             model.continueFromSize()
             assertEquals("The scan could not be read. Refusing.", model.estimateText)

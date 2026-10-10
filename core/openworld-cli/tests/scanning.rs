@@ -1059,11 +1059,10 @@ fn an_empty_catalog_names_the_missing_program_on_bundles() {
     let sentence = "The scan program is not on this device. Refusing.";
     let (code, text, err) = catalog_run(false, &empty, &["bundles"]);
     assert_eq!(code, Some(2), "{err}\n{text}");
-    let lines: Vec<_> = text.lines().collect();
-    assert_eq!(lines.first().copied(), Some("Model bundle"));
-    assert_eq!(
-        lines.iter().filter(|line| **line == sentence).count(),
-        1,
+    assert_eq!(text.trim(), sentence);
+    assert!(!text.contains("Model bundle"), "{text}");
+    assert!(
+        !text.contains("Scores are not comparable across bundles."),
         "{text}"
     );
     assert!(err.is_empty(), "{err}");

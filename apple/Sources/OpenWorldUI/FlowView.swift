@@ -193,6 +193,18 @@ public final class FlowModel: ObservableObject {
         step = .bundle
     }
 
+    /// A catalog that can run is titled Model bundle. A refusal is the headline.
+    public var bundleHeadline: String {
+        guard bundles.isEmpty else { return "Model bundle" }
+        if let error, !error.isEmpty, error != "The file could not be read. Refusing." {
+            return error
+        }
+        if error == "The file could not be read. Refusing." {
+            return "Model bundle"
+        }
+        return "The scan program is not on this device. Refusing."
+    }
+
     /// An empty or unreadable catalog already says why. Continue does not open the size page.
     public func continueFromBundles() {
         guard !bundles.isEmpty else { return }
@@ -692,20 +704,21 @@ public struct FlowView: View {
     private var bundleColumn: some View {
         VStack(alignment: .leading, spacing: 8) {
             backControl
-            Text("Model bundle").font(model.phone ? .largeTitle : .title)
-            Text("Scores are not comparable across bundles. Results name the bundle you pick.")
-                .foregroundStyle(.secondary)
-            ForEach(model.bundles) { row in
-                Button(action: { model.bundleID = row.id }) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(markedChoice(row.name, selected: model.bundleID == row.id)).font(.headline)
-                        Text(row.bestFor)
-                        Text(row.curveLine).foregroundStyle(.secondary)
+            Text(model.bundleHeadline)
+                .font(model.phone ? .largeTitle : .title)
+                .foregroundStyle(model.bundles.isEmpty && model.bundleHeadline != "Model bundle" ? .orange : .primary)
+            if !model.bundles.isEmpty {
+                Text("Scores are not comparable across bundles. Results name the bundle you pick.")
+                    .foregroundStyle(.secondary)
+                ForEach(model.bundles) { row in
+                    Button(action: { model.bundleID = row.id }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(markedChoice(row.name, selected: model.bundleID == row.id)).font(.headline)
+                            Text(row.bestFor)
+                            Text(row.curveLine).foregroundStyle(.secondary)
+                        }
                     }
                 }
-            }
-            if model.bundles.isEmpty, let error = model.error, error != "The file could not be read. Refusing." {
-                Text(error)
             }
             prominent("Continue") { model.continueFromBundles() }
                 .disabled(model.bundles.isEmpty)

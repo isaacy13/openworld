@@ -192,31 +192,24 @@ class OpenWorld(Gtk.Application):
 
     def _bundle_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        title = Gtk.Label(label="Model bundle", xalign=0)
-        title.add_css_class("title")
-        hint = Gtk.Label(
+        self.bundle_title = Gtk.Label(label="Model bundle", xalign=0, wrap=True)
+        self.bundle_title.add_css_class("title")
+        self.bundle_hint = Gtk.Label(
             label="Scores are not comparable across bundles. Results name the bundle you pick.",
             xalign=0,
             wrap=True,
         )
-        hint.add_css_class("dim")
+        self.bundle_hint.add_css_class("dim")
         self.bundle_list = Gtk.ListBox()
         self.bundle_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.bundle_list.connect("row-selected", self._on_bundle_row)
-        self.bundle_notice = Gtk.Label(
-            label="The scan program is not on this device. Refusing.",
-            xalign=0,
-            wrap=True,
-        )
-        self.bundle_notice.add_css_class("warn")
-        self.bundle_notice.set_visible(False)
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(self.bundle_list)
         scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        box.append(title)
-        box.append(hint)
-        box.append(self.bundle_notice)
+        self.bundle_scroll = scroll
+        box.append(self.bundle_title)
+        box.append(self.bundle_hint)
         box.append(scroll)
         return box
 
@@ -412,6 +405,18 @@ class OpenWorld(Gtk.Application):
         self.history = ["choose"]
         self._go("device")
 
+    def _set_bundle_headline(self, message: str | None) -> None:
+        if message:
+            self.bundle_title.set_text(message)
+            self.bundle_title.add_css_class("warn")
+            self.bundle_hint.set_visible(False)
+            self.bundle_scroll.set_visible(False)
+            return
+        self.bundle_title.set_text("Model bundle")
+        self.bundle_title.remove_css_class("warn")
+        self.bundle_hint.set_visible(True)
+        self.bundle_scroll.set_visible(True)
+
     def load_bundles(self) -> None:
         payload = self._run_json(
             ["--json", "--bundles", self.bundles, "bundles"],
@@ -420,15 +425,13 @@ class OpenWorld(Gtk.Application):
         if payload.get("status") == "refused":
             self.rows = []
             message = payload.get("message") or "The bundle catalog could not be read. Refusing."
-            self.bundle_notice.set_text(message)
-            self.bundle_notice.set_visible(True)
+            self._set_bundle_headline(message)
         else:
             self.rows = payload.get("bundles", [])
             if self.rows:
-                self.bundle_notice.set_visible(False)
+                self._set_bundle_headline(None)
             else:
-                self.bundle_notice.set_text("The scan program is not on this device. Refusing.")
-                self.bundle_notice.set_visible(True)
+                self._set_bundle_headline("The scan program is not on this device. Refusing.")
         previous = self.bundle_id
         while True:
             row = self.bundle_list.get_row_at_index(0)
@@ -1413,12 +1416,25 @@ class OpenWorld(Gtk.Application):
             self.load_bundles()
             if (
                 self.rows
-                or not self.bundle_notice.get_visible()
-                or self.bundle_notice.get_text() != "The scan program is not on this device. Refusing."
+                or self.bundle_title.get_text() != "The scan program is not on this device. Refusing."
+                or self.bundle_hint.get_visible()
+                or self.bundle_scroll.get_visible()
             ):
-                self._exercise_fail(f"an empty catalog stayed silent: {self.rows!r} {self.bundle_notice.get_text()!r}")
+                self._exercise_fail(f"an empty catalog stayed silent: {self.rows!r} {self.bundle_title.get_text()!r}")
                 return False
             self._show("bundle")
+            bundle_shot = os.environ.get("OPENWORLD_BUNDLE_SHOT")
+            if bundle_shot:
+                subprocess.run(
+                    ["xdotool", "search", "--name", "^OpenWorld$", "windowmove", "40", "40"],
+                    check=False,
+                )
+                context = GLib.MainContext.default()
+                deadline = time.time() + 0.4
+                while time.time() < deadline:
+                    context.iteration(False)
+                    time.sleep(0.05)
+                self._grab(bundle_shot)
             if self.primary.get_sensitive():
                 self._exercise_fail("an empty catalog offered Continue")
                 return False
@@ -1430,11 +1446,11 @@ class OpenWorld(Gtk.Application):
             self.load_bundles()
             if (
                 self.rows
-                or not self.bundle_notice.get_visible()
-                or self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing."
+                or self.bundle_title.get_text() != "The bundle catalog could not be read. Refusing."
+                or self.bundle_hint.get_visible()
             ):
                 self._exercise_fail(
-                    f"an unreadable catalog used the missing-program sentence: {self.rows!r} {self.bundle_notice.get_text()!r}"
+                    f"an unreadable catalog used the missing-program sentence: {self.rows!r} {self.bundle_title.get_text()!r}"
                 )
                 return False
             self._show("bundle")
@@ -1455,10 +1471,11 @@ class OpenWorld(Gtk.Application):
                 self.load_bundles()
                 if (
                     self.rows
-                    or self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing."
+                    or self.bundle_title.get_text() != "The bundle catalog could not be read. Refusing."
+                    or self.bundle_hint.get_visible()
                 ):
                     self._exercise_fail(
-                        f"a program answer that is not a catalog used another sentence: {self.bundle_notice.get_text()!r}"
+                        f"a program answer that is not a catalog used another sentence: {self.bundle_title.get_text()!r}"
                     )
                     return False
                 self.refresh_estimate()
@@ -1478,16 +1495,16 @@ class OpenWorld(Gtk.Application):
                 os.chmod(blank, 0o755)
                 self.bin = blank
                 self.load_bundles()
-                if self.bundle_notice.get_text() != "The bundle catalog could not be read. Refusing.":
+                if self.bundle_title.get_text() != "The bundle catalog could not be read. Refusing.":
                     self._exercise_fail(
-                        f"an empty program answer used another sentence: {self.bundle_notice.get_text()!r}"
+                        f"an empty program answer used another sentence: {self.bundle_title.get_text()!r}"
                     )
                     return False
                 self.bin = os.path.join(empty, "missing-bin")
                 self.load_bundles()
-                if self.bundle_notice.get_text() != "The scan program is not on this device. Refusing.":
+                if self.bundle_title.get_text() != "The scan program is not on this device. Refusing.":
                     self._exercise_fail(
-                        f"a missing program used another sentence: {self.bundle_notice.get_text()!r}"
+                        f"a missing program used another sentence: {self.bundle_title.get_text()!r}"
                     )
                     return False
             finally:
@@ -1496,8 +1513,15 @@ class OpenWorld(Gtk.Application):
             self.bundles = saved_bundles
             shutil.rmtree(empty, ignore_errors=True)
         self.load_bundles()
-        if not self.rows or self.bundle_notice.get_visible():
-            self._exercise_fail("the bundle page kept the missing-program sentence after the catalog returned")
+        if (
+            not self.rows
+            or self.bundle_title.get_text() != "Model bundle"
+            or not self.bundle_hint.get_visible()
+            or not self.bundle_scroll.get_visible()
+        ):
+            self._exercise_fail(
+                f"the bundle page kept the missing-program sentence after the catalog returned: {self.bundle_title.get_text()!r}"
+            )
             return False
         self.bundle_id = "not-in-the-catalog"
         self.load_bundles()
