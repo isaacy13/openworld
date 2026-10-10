@@ -163,13 +163,31 @@ fn analyzed_frames(input: &EstimateInput) -> u64 {
 
 pub fn human_duration(seconds: f64) -> String {
     if seconds < 1.0 {
-        "Less than a second".into()
-    } else if seconds < 90.0 {
-        format!("About {} seconds", seconds.round() as u64)
-    } else if seconds < 90.0 * 60.0 {
-        format!("About {} minutes", (seconds / 60.0).round() as u64)
+        return "Less than a second".into();
+    }
+    if seconds < 60.0 {
+        let n = seconds.round() as u64;
+        if n >= 60 {
+            return count(1, "minute", "minutes");
+        }
+        return count(n, "second", "seconds");
+    }
+    if seconds < 60.0 * 60.0 {
+        let n = (seconds / 60.0).round() as u64;
+        if n >= 60 {
+            return count(1, "hour", "hours");
+        }
+        return count(n, "minute", "minutes");
+    }
+    count((seconds / 3600.0).round() as u64, "hour", "hours")
+}
+
+fn count(n: u64, one: &str, many: &str) -> String {
+    let n = n.max(1);
+    if n == 1 {
+        format!("About 1 {one}")
     } else {
-        format!("About {} hours", (seconds / 3600.0).round() as u64)
+        format!("About {n} {many}")
     }
 }
 
@@ -208,7 +226,22 @@ mod tests {
         assert!(a < b && b < c, "{a} < {b} < {c}");
         let photo = estimate(&base());
         assert!(photo.seconds < 1.0);
+        assert_eq!(photo.human, "Less than a second");
         assert!(!photo.suggest_computer);
+        let mut one = base();
+        one.frames = 25;
+        assert_eq!(estimate(&one).human, "About 1 second");
+        assert_eq!(human_duration(1.4), "About 1 second");
+        assert_eq!(human_duration(2.0), "About 2 seconds");
+        assert_eq!(human_duration(59.4), "About 59 seconds");
+        assert_eq!(human_duration(59.6), "About 1 minute");
+        assert_eq!(human_duration(60.0), "About 1 minute");
+        assert_eq!(human_duration(89.0), "About 1 minute");
+        assert_eq!(human_duration(90.0), "About 2 minutes");
+        assert_eq!(human_duration(3540.0), "About 59 minutes");
+        assert_eq!(human_duration(3570.0), "About 1 hour");
+        assert_eq!(human_duration(3600.0), "About 1 hour");
+        assert_eq!(human_duration(7200.0), "About 2 hours");
         assert!(photo.device_note.unwrap().contains("CPU"));
         assert!(photo.heat_note.is_none());
     }
