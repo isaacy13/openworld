@@ -676,7 +676,7 @@ class OpenWorld(Gtk.Application):
         try:
             report = json.loads(stdout)
         except json.JSONDecodeError:
-            report = {"status": "refused", "summary": "The scan could not be read.", "disclosure": []}
+            report = self._unreadable_scan_report()
         GLib.idle_add(self._show_report, report)
 
     def _add_crop(self, event: dict) -> bool:
@@ -702,6 +702,24 @@ class OpenWorld(Gtk.Application):
         self.strip.append(box)
         self.strip_heading.set_visible(True)
         return False
+
+    def _unreadable_scan_report(self) -> dict:
+        return {
+            "status": "refused",
+            "summary": "The scan could not be read. Refusing.",
+            "message": "The scan could not be read. Refusing.",
+            "disclosure": [
+                "Nothing is uploaded.",
+                "Nobody is enrolled.",
+                "OpenWorld does not train on this file.",
+                "OpenWorld does not contact an agency.",
+                "A candidate is not an identification.",
+                "This file is not authenticated.",
+                "On-device does not mean the file is real.",
+            ],
+            "candidates": [],
+            "inventory": [],
+        }
 
     def _show_report(self, report: dict) -> bool:
         self.scan_thread = None
@@ -1080,6 +1098,23 @@ class OpenWorld(Gtk.Application):
             or not self.reason.get_visible()
         ):
             self._exercise_fail(f"incomplete reason missing: {self.summary.get_text()!r} {self.reason.get_text()!r}")
+            return False
+        self._exercise_report = None
+        self._clear_results()
+        self.summary.set_text("")
+        self.context_note.set_text("")
+        self.result_note.set_text("")
+        self.reason.set_text("")
+        self.reason.set_visible(False)
+        self._show_report(self._unreadable_scan_report())
+        if (
+            self.summary.get_text() != "The scan could not be read. Refusing."
+            or PHRASES["clearance"] in self.result_note.get_text()
+            or "Nothing is uploaded." not in self.result_note.get_text()
+        ):
+            self._exercise_fail(
+                f"an unreadable scan lost the refusal: {self.summary.get_text()!r} {self.result_note.get_text()!r}"
+            )
             return False
         self._exercise_report = None
         self._clear_results()

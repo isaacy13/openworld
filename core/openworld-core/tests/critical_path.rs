@@ -508,7 +508,42 @@ fn the_output_directory_cannot_be_created_under_a_file() {
     req.out_dir = blocker.join("out");
     let report = scan_path(&req, &mut |_| {});
     assert_eq!(report.status, "refused");
-    assert!(report.message.contains("output directory"));
+    assert_eq!(
+        report.summary,
+        "The output directory could not be created. Refusing."
+    );
+    assert_eq!(report.message, report.summary);
+}
+
+#[test]
+fn the_output_directory_cannot_be_replaced_when_it_cannot_be_removed() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let posters = pack(dir.path());
+    let input = dir.path().join("blank.png");
+    blank(40, 40).save(&input).unwrap();
+    let out = dir.path().join("stuck");
+    fs::create_dir(&out).unwrap();
+    fs::write(out.join("keep"), b"x").unwrap();
+    let mut perms = fs::metadata(&out).unwrap().permissions();
+    perms.set_mode(0o555);
+    fs::set_permissions(&out, perms).unwrap();
+    assert!(
+        fs::remove_file(out.join("keep")).is_err(),
+        "this account can still remove a file from a mode-555 directory"
+    );
+    let mut req = request(dir.path(), input, "fast", posters, RequestExtra::default());
+    req.out_dir = out.clone();
+    let report = scan_path(&req, &mut |_| {});
+    let mut perms = fs::metadata(&out).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&out, perms).unwrap();
+    assert_eq!(report.status, "refused");
+    assert_eq!(
+        report.summary,
+        "The output directory could not be replaced. Refusing."
+    );
+    assert_eq!(report.message, report.summary);
 }
 
 #[test]

@@ -996,9 +996,9 @@ fn detection_image(frame: &RgbImage, detection: DetectionSize) -> (RgbImage, Fra
 
 fn prepare_out(dir: &Path) -> Result<(), ScanReport> {
     if dir.exists() {
-        fs::remove_dir_all(dir).map_err(|_| refused("unreadable", "The output directory could not be replaced."))?;
+        fs::remove_dir_all(dir).map_err(|_| refused("unreadable", "The output directory could not be replaced. Refusing."))?;
     }
-    fs::create_dir_all(dir).map_err(|_| refused("unreadable", "The output directory could not be created."))?;
+    fs::create_dir_all(dir).map_err(|_| refused("unreadable", "The output directory could not be created. Refusing."))?;
     Ok(())
 }
 
