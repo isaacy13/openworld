@@ -10,6 +10,19 @@ import UIKit
 #endif
 import Foundation
 
+#if !canImport(Combine)
+/// The phone model on Linux stores these fields directly. Combine is an Apple framework.
+protocol ObservableObject: AnyObject {}
+
+@propertyWrapper
+struct Published<Value> {
+    var wrappedValue: Value
+    init(wrappedValue: Value) {
+        self.wrappedValue = wrappedValue
+    }
+}
+#endif
+
 /// The choice that will run, in the same words on every screen.
 public func markedChoice(_ title: String, selected: Bool) -> String {
     guard selected else { return title }
