@@ -74,7 +74,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                model.pickNotice?.let { Text(it) }
+                model.pickNotice?.let { Text(it, color = warningColor) }
                 if (model.step != Step.Choose) {
                     TextButton(onClick = model::back, enabled = !model.scanning) { Text("Back") }
                 }
@@ -193,7 +193,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 Text(if (model.scanning) "Scanning" else "Analyze")
                             }
                         }
-                        model.deleteNotice?.let { Text(it) }
+                        model.deleteNotice?.let { Text(it, color = warningColor) }
                     }
                     Step.Results -> {
                         val headline = model.summary.ifBlank {
@@ -249,11 +249,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             }
                         }
                         Text(model.detail)
-                        model.leaveNotice?.let { Text(it) }
+                        model.leaveNotice?.let { Text(it, color = warningColor) }
                         if (model.resultDir != null) {
                             Button(onClick = model::deleteResult) { Text("Delete") }
                         }
-                        model.deleteNotice?.let { Text(it) }
+                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
                 }

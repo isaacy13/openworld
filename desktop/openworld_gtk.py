@@ -1264,6 +1264,7 @@ class OpenWorld(Gtk.Application):
             self.stack.get_visible_child_name() != "choose"
             or self.pick_notice.get_text() != "The file could not be read. Refusing."
             or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
             or first is not self.pick_notice
             or self.input_path is not None
         ):
@@ -1886,6 +1887,7 @@ class OpenWorld(Gtk.Application):
             or self.summary.get_text() != headline
             or "not an OpenWorld result" not in self.delete_notice.get_text()
             or not self.delete_notice.get_visible()
+            or "warn" not in self.delete_notice.get_css_classes()
             or not result.exists()
             or not self.delete_button.get_visible()
             or PHRASES["possible"] not in self._labels_under(self.detail)
