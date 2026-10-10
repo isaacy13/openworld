@@ -1066,6 +1066,34 @@ class PhoneScreenTest {
         assertNotNull(result)
         assertFalse(result!!.exists())
     }
+
+    @Test
+    fun aRefusedDeleteKeepsTheResultOnScreen() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/keep.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("scene").inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromSize()
+        model.analyze()
+        val result = model.resultDir
+        assertNotNull(result)
+        assertTrue(File(result!!, "result.json").delete())
+        model.deleteResult()
+        assertEquals("Possible candidate. Not an identification.", model.summary)
+        assertTrue(model.candidateRows.isNotEmpty())
+        assertEquals(
+            "Refusing to delete a directory that is not an OpenWorld result.",
+            model.deleteNotice,
+        )
+        assertTrue(result.exists())
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        assertTrue(compose.onAllNodesWithText("Possible candidate. Not an identification.").fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText("Refusing to delete a directory that is not an OpenWorld result.").assertExists()
+        compose.onNodeWithText("Delete").assertExists()
+        assertTrue(compose.onAllNodesWithText("Open FBI page").fetchSemanticsNodes().isNotEmpty())
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)

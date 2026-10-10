@@ -311,9 +311,13 @@ class OpenWorld(Gtk.Application):
         outer.append(scroll)
         self.delete_button = Gtk.Button(label="Delete")
         self.delete_button.set_halign(Gtk.Align.START)
-        self.delete_button.set_sensitive(False)
+        self.delete_button.set_visible(False)
         self.delete_button.connect("clicked", lambda *_: self.delete_result())
+        self.delete_notice = Gtk.Label(xalign=0, wrap=True)
+        self.delete_notice.add_css_class("warn")
+        self.delete_notice.set_visible(False)
         outer.append(self.delete_button)
+        outer.append(self.delete_notice)
         return outer
 
     def pick_file(self) -> None:
@@ -548,7 +552,9 @@ class OpenWorld(Gtk.Application):
         self.reason.set_text("")
         self.reason.set_visible(False)
         self.summary.set_text("Scanning")
-        self.delete_button.set_sensitive(False)
+        self.delete_notice.set_text("")
+        self.delete_notice.set_visible(False)
+        self._show_delete(False)
         self._go("results")
         self.primary.set_label("Scanning")
         self.primary.set_sensitive(False)
@@ -680,7 +686,8 @@ class OpenWorld(Gtk.Application):
             self.detail.append(self._candidate_card(candidate))
         self.primary.set_sensitive(True)
         self.primary.set_label("Choose another file")
-        self.delete_button.set_sensitive(self.out_dir is not None)
+        self.delete_notice.set_visible(False)
+        self._show_delete(self.out_dir is not None)
         self.back.set_sensitive(len(self.history) > 1)
         self._exercise_report = report
         return False
@@ -829,10 +836,15 @@ class OpenWorld(Gtk.Application):
             return True
         payload = self._run_json(["--json", "delete", "--out", str(self.out_dir)])
         if not payload.get("deleted"):
-            self.summary.set_text(payload.get("message") or "The result could not be deleted.")
+            self.delete_notice.set_text(payload.get("message") or "The result could not be deleted.")
+            self.delete_notice.set_visible(True)
             return False
         self._mark_deleted()
         return True
+
+    def _show_delete(self, visible: bool) -> None:
+        self.delete_button.set_visible(visible)
+        self.delete_button.set_sensitive(visible)
 
     def _mark_deleted(self) -> None:
         self._clear_results()
@@ -842,7 +854,9 @@ class OpenWorld(Gtk.Application):
         self.reason.set_visible(False)
         self.summary.set_text("Deleted.")
         self.out_dir = None
-        self.delete_button.set_sensitive(False)
+        self.delete_notice.set_text("")
+        self.delete_notice.set_visible(False)
+        self._show_delete(False)
 
     def _remove_work(self) -> None:
         shutil.rmtree(self.work, ignore_errors=True)
@@ -1184,6 +1198,7 @@ class OpenWorld(Gtk.Application):
             or self.reason.get_text()
             or self.reason.get_visible()
             or self.primary.get_label() != "Scanning"
+            or self.delete_button.get_visible()
             or self.primary.get_sensitive()
             or self.back.get_sensitive()
             or self.stack.get_visible_child_name() != "results"
@@ -1273,15 +1288,32 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail("the other crops are not labeled under the cards")
             return False
         result = self.out_dir
-        if result is None or not (result / "result.json").is_file() or not self.delete_button.get_sensitive():
+        if result is None or not (result / "result.json").is_file() or not self.delete_button.get_visible():
             self._exercise_fail("no result to delete")
             return False
+        headline = self.summary.get_text()
+        saved = (result / "result.json").read_bytes()
+        (result / "result.json").unlink()
+        if (
+            self.delete_result()
+            or self.summary.get_text() != headline
+            or "not an OpenWorld result" not in self.delete_notice.get_text()
+            or not self.delete_notice.get_visible()
+            or not result.exists()
+            or not self.delete_button.get_visible()
+            or PHRASES["possible"] not in self._labels_under(self.detail)
+        ):
+            self._exercise_fail(f"a refused delete replaced the result: {self.summary.get_text()!r} {self.delete_notice.get_text()!r}")
+            return False
+        (result / "result.json").write_bytes(saved)
         if (
             not self.delete_result()
             or result.exists()
             or self.summary.get_text() != "Deleted."
             or self.context_note.get_text()
             or self.result_note.get_text()
+            or self.delete_button.get_visible()
+            or self.delete_notice.get_visible()
         ):
             self._exercise_fail("result remained after delete")
             return False

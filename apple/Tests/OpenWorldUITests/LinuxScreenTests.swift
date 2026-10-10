@@ -549,6 +549,21 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testARefusedDeleteKeepsTheResultOnScreen() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            try FileManager.default.removeItem(at: result.appendingPathComponent("result.json"))
+            model.deleteResult()
+            XCTAssertEqual(model.report?.summary, "Possible candidate. Not an identification.")
+            XCTAssertFalse(model.report?.candidates.isEmpty ?? true)
+            XCTAssertEqual(model.deleteNotice, "Refusing to delete a directory that is not an OpenWorld result.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertNil(model.error)
+            _ = FlowView(model: model, importControl: self.control).body
+        }
+    }
+
     func testAnIncompleteReportKeepsTheReason() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
