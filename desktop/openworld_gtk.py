@@ -1939,6 +1939,7 @@ class OpenWorld(Gtk.Application):
         os.chmod(result, 0o555)
         other = str(Path(scene or "").with_name("second-photo.png"))
         shutil.copy(scene or "", other)
+        self.choose_file(str(Path(scene or "").with_name("no-such-photo-before-delete.png")))
         self.choose_file(other)
         os.chmod(result, 0o755)
         root = self.window.get_child()

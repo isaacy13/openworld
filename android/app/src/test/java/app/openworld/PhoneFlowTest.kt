@@ -1396,6 +1396,8 @@ class PhoneScreenTest {
         assertEquals(Step.Device, model.step)
         result!!.setWritable(false)
         try {
+            model.choose(Uri.parse("content://app.openworld/missing-before-delete.png"), resolver)
+            assertEquals("The file could not be read. Refusing.", model.pickNotice)
             val next = still("blank")
             val uri = Uri.parse("content://app.openworld/${next.name}")
             shadowOf(resolver).registerInputStream(uri, next.inputStream())
@@ -1408,6 +1410,7 @@ class PhoneScreenTest {
             val shown = shownTexts()
             assertEquals(0, shown.indexOf("The result could not be deleted."))
             assertEquals(1, shown.count { it == "The result could not be deleted." })
+            assertFalse(shown.contains("The file could not be read. Refusing."))
             assertTrue(shown.contains("This file stays on this device."))
             assertTrue(shown.contains(kept))
         } finally {
@@ -1432,6 +1435,8 @@ class PhoneScreenTest {
         val kept = model.fileName
         result!!.setWritable(false)
         try {
+            model.choose(Uri.parse("content://app.openworld/missing-before-delete-on-result.png"), resolver)
+            assertEquals("The file could not be read. Refusing.", model.pickNotice)
             val next = still("blank")
             val uri = Uri.parse("content://app.openworld/${next.name}")
             shadowOf(resolver).registerInputStream(uri, next.inputStream())
@@ -1443,6 +1448,7 @@ class PhoneScreenTest {
             assertTrue(result.exists())
             compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
             compose.onAllNodesWithText("The result could not be deleted.").assertCountEquals(1)
+            compose.onAllNodesWithText("The file could not be read. Refusing.").assertCountEquals(0)
             compose.onNodeWithText(model.summary).assertExists()
         } finally {
             result.setWritable(true)
