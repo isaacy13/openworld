@@ -163,6 +163,7 @@ final class OpenWorldUITests: XCTestCase {
             model.step = .size
             _ = FlowView(model: model, importControl: self.control).body
             model.loadEstimate()
+            XCTAssertTrue(model.showBriefOnEstimate)
             XCTAssertEqual(model.choiceLine, "Fast. 640 px on the long side. 5 frames a second, plus the tracker.")
             XCTAssertEqual(model.estimate?.deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
             XCTAssertTrue(model.estimate?.heatNote?.contains("This phone may get hot.") == true)
@@ -265,11 +266,14 @@ final class OpenWorldUITests: XCTestCase {
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
             model.choose(gif)
+            model.coverage = "measured"
             model.loadEstimate()
             XCTAssertEqual(model.step, .estimate)
             XCTAssertNil(model.estimate)
             XCTAssertFalse(model.canAnalyze)
+            XCTAssertFalse(model.showBriefOnEstimate)
             XCTAssertTrue(model.error?.contains("Refusing") == true)
+            _ = FlowView(model: model, importControl: self.control).body
         }
     }
 

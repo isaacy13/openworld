@@ -125,6 +125,11 @@ public final class FlowModel: ObservableObject {
         return "\(name). \(size). \(cover)"
     }
 
+    /// The measured banner belongs on an estimate that can run.
+    public var showBriefOnEstimate: Bool {
+        estimate != nil && coverage == "measured"
+    }
+
     public func goBack() {
         guard !scanning else { return }
         leavingURL = nil
@@ -459,11 +464,11 @@ public struct FlowView: View {
                 if let note = estimate.batteryNote { Text(note) }
                 if let note = estimate.suggestComputerText { Text(note) }
                 Text(model.choiceLine)
+                if model.showBriefOnEstimate {
+                    Text(Copy.brief)
+                }
             } else if let error = model.error {
                 Text(error)
-            }
-            if model.coverage == "measured" {
-                Text(Copy.brief)
             }
             if model.canAnalyze && !model.scanning {
                 prominent("Analyze") { model.startScan() }
