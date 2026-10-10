@@ -2201,6 +2201,24 @@ class PhoneLaunchTest {
     }
 
     @Test
+    fun shareSheetKeepsEveryFileAvailable() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val pm = context.packageManager
+        for (type in listOf("image/jpeg", "video/mp4", "application/octet-stream")) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                this.type = type
+                addCategory(Intent.CATEGORY_DEFAULT)
+                putExtra(Intent.EXTRA_STREAM, Uri.parse("content://app.openworld/clip"))
+            }
+            val matches = pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            assertTrue(
+                "$type",
+                matches.any { it.activityInfo.name == MainActivity::class.java.name },
+            )
+        }
+    }
+
+    @Test
     fun coldStartAsksForAFileTheUserAlreadyHas() {
         compose.onNodeWithText("Choose a photo or video").assertExists()
         compose.onNodeWithText("Import a file you already have, or receive it from the share sheet. There is no camera.").assertExists()
