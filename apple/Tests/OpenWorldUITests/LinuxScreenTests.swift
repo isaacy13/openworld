@@ -100,6 +100,11 @@ final class OpenWorldUITests: XCTestCase {
             model.coverage = "measured"
             let sizeLines = PhonePreview.lines(screen: "size", model: model)
             XCTAssertTrue(sizeLines.contains(Copy.sizeHint))
+            let coverAt = try XCTUnwrap(sizeLines.firstIndex(of: "Coverage"))
+            let completeAt = try XCTUnwrap(sizeLines.firstIndex(of: "Complete. Every decoded frame."))
+            let measuredAt = try XCTUnwrap(sizeLines.firstIndex(of: "Measured. 5 frames a second, plus the tracker. Selected."))
+            XCTAssertLessThan(coverAt, completeAt)
+            XCTAssertLessThan(completeAt, measuredAt)
             XCTAssertEqual(sizeLines.last, "Continue")
             let size = PhonePreview.wrapped(screen: "size", model: model)
             let sizeText = size.joined(separator: "\n")

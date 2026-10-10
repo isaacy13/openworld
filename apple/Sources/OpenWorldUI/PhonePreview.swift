@@ -35,6 +35,7 @@ public enum PhonePreview {
             for value in ["320", "480", "640", "full"] {
                 lines.append(detectionChoice(value, selected: model.longSide))
             }
+            lines.append("Coverage")
             lines.append(coverageChoice("complete", selected: model.coverage))
             lines.append(coverageChoice("measured", selected: model.coverage))
             if model.coverage == "measured" {

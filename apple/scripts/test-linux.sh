@@ -56,6 +56,7 @@ check_screen() {
     }
 }
 check_screen size 'the label is "Not compared."'
+check_screen size Coverage
 check_screen size Continue
 check_screen estimate Analyze
 check_screen results 'keeps a candidate'

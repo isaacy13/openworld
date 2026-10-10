@@ -905,6 +905,7 @@ public struct FlowView: View {
     @ViewBuilder private var coveragePicker: some View {
         #if os(Linux)
         VStack(alignment: .leading, spacing: 8) {
+            Text("Coverage").font(model.phone ? .title3 : .headline)
             Button(action: { model.coverage = "complete" }) {
                 Text(coverageChoice("complete", selected: model.coverage))
             }
