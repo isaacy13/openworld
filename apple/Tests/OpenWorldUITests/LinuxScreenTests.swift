@@ -110,7 +110,9 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(model.canAnalyze)
             model.startScan()
             XCTAssertTrue(model.scanning)
+            XCTAssertFalse(model.backEnabled)
             XCTAssertEqual(model.step, .estimate)
+            _ = FlowView(model: model, importControl: self.control).body
             model.goBack()
             XCTAssertEqual(model.step, .estimate)
             return model
@@ -121,6 +123,7 @@ final class OpenWorldUITests: XCTestCase {
         }
         await MainActor.run {
             XCTAssertFalse(model.scanning)
+            XCTAssertTrue(model.backEnabled)
             XCTAssertEqual(model.step, .results)
             XCTAssertEqual(model.report?.summary, Copy.clearance)
         }

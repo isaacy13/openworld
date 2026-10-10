@@ -130,6 +130,9 @@ public final class FlowModel: ObservableObject {
         estimate != nil && coverage == "measured"
     }
 
+    /// Back stays off while a scan is running.
+    public var backEnabled: Bool { !scanning }
+
     public func goBack() {
         guard !scanning else { return }
         leavingURL = nil
@@ -698,6 +701,7 @@ public struct FlowView: View {
     @ViewBuilder
     private var backControl: some View {
         Button(action: { model.goBack() }) { Text("Back") }
+            .disabled(!model.backEnabled)
     }
 
     @ViewBuilder
