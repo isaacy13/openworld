@@ -26,6 +26,11 @@ pub fn class_note(missing: bool, wanted: bool) -> &'static str {
     }
 }
 
+/// The frame a candidate card came from, counting from 1. Index 0 is the first frame.
+pub fn frame_label(index: u64) -> String {
+    format!("Frame {}.", index + 1)
+}
+
 /// How much of the file was analyzed. A refusal has no decoded frames, so it has no line.
 pub fn frames_note(analyzed: u64, decoded: u64) -> Option<String> {
     if decoded == 0 {

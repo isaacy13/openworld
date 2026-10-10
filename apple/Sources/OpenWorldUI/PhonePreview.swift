@@ -96,7 +96,7 @@ public enum PhonePreview {
             for candidate in model.report?.candidates ?? [] {
                 lines.append(candidate.wording)
                 if candidate.crop?.isEmpty == false { lines.append("Crop") }
-                if candidate.frame?.isEmpty == false { lines.append("Frame") }
+                if candidate.frame?.isEmpty == false { lines.append(candidate.frameLabel) }
                 if !candidate.uncertainty.isEmpty { lines.append(candidate.uncertainty) }
                 lines.append(candidate.posterLine)
                 lines.append("Open FBI page")

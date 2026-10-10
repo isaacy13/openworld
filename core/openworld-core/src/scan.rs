@@ -2,8 +2,8 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    class_note, frames_note, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE,
-    NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    class_note, frame_label, frames_note, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE,
+    NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
 use crate::embed::fixture_probe;
@@ -38,6 +38,7 @@ pub struct Candidate {
     pub wording: String,
     pub kind: String,
     pub frame_index: u64,
+    pub frame_label: String,
     pub track_id: u64,
     pub cosine: Option<f32>,
     pub threshold: f32,
@@ -637,6 +638,7 @@ impl<'a> Engine<'a> {
                     wording: POSSIBLE_CANDIDATE.into(),
                     kind: "face".into(),
                     frame_index: index,
+                    frame_label: frame_label(index),
                     track_id,
                     cosine: Some(score),
                     threshold: self.bundle.threshold,
@@ -712,6 +714,7 @@ impl<'a> Engine<'a> {
                     wording: POSSIBLE_CANDIDATE.into(),
                     kind: "face".into(),
                     frame_index: index,
+                    frame_label: frame_label(index),
                     track_id,
                     cosine: Some(score),
                     threshold: self.bundle.threshold,
@@ -793,6 +796,7 @@ impl<'a> Engine<'a> {
                 wording: POSSIBLE_CANDIDATE.into(),
                 kind: "plate".into(),
                 frame_index: index,
+                frame_label: frame_label(index),
                 track_id,
                 cosine: None,
                 threshold: self.bundle.threshold,

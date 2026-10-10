@@ -183,7 +183,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             Text(row.wording, style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 evidencePicture(row.cropPath, "Crop")
-                                evidencePicture(row.framePath, "Frame")
+                                evidencePicture(row.framePath, row.frameLabel)
                             }
                             if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
                             if (row.title.isNotBlank()) {

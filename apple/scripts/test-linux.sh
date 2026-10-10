@@ -59,5 +59,6 @@ check_screen size 'the label is "Not compared."'
 check_screen size Continue
 check_screen estimate Analyze
 check_screen results 'keeps a candidate'
+check_screen results 'Frame 1.'
 check_screen results 'Fixture vehicle C (Wanted)'
 check_screen results 'Nothing is uploaded.'

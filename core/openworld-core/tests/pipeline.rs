@@ -138,6 +138,8 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert_eq!(report.class_note.as_deref(), Some("Missing and wanted."));
     assert_eq!(report.frames_note.as_deref(), Some("1 frame analyzed."));
     assert_eq!(report.detection_note.as_deref(), Some("640 px on the long side."));
+    assert!(!report.candidates.is_empty());
+    assert!(report.candidates.iter().all(|candidate| candidate.frame_label == "Frame 1."));
     assert!(report.disclosure.iter().any(|l| l == "Nothing is uploaded."));
     assert!(report.disclosure.iter().any(|l| l == "Nobody is enrolled."));
     assert!(report.disclosure.iter().any(|l| l.contains("does not train")));
@@ -665,6 +667,7 @@ fn an_animated_png_keeps_a_face_that_is_not_on_the_first_frame() {
     assert_eq!(report.frames_decoded, 3);
     assert!(!report.candidates.is_empty());
     assert!(report.candidates.iter().all(|candidate| candidate.frame_index == 1));
+    assert!(report.candidates.iter().all(|candidate| candidate.frame_label == "Frame 2."));
 }
 
 #[test]
@@ -1303,6 +1306,7 @@ fn a_tiff_with_camera_orientation_is_scanned_as_shown() {
     assert_eq!(later.frames_decoded, 2);
     assert!(later.candidates.iter().any(|item| item.frame_index == 1));
     assert!(later.candidates.iter().all(|item| item.frame_index == 1));
+    assert!(later.candidates.iter().all(|item| item.frame_label == "Frame 2."));
     let measured = scan(pages, Coverage::Measured);
     assert_eq!(measured.status, "complete", "{}", measured.message);
     assert_eq!(measured.summary, POSSIBLE_CANDIDATE);

@@ -42,6 +42,7 @@ class CandidateRow(
     val url: String,
     val cropPath: String?,
     val framePath: String?,
+    val frameLabel: String = "Frame",
 )
 
 class FlowModel {
@@ -443,6 +444,7 @@ class FlowModel {
                             url = page,
                             cropPath = item.present("crop")?.let { File(out, it).absolutePath },
                             framePath = item.present("frame")?.let { File(out, it).absolutePath },
+                            frameLabel = item.present("frame_label") ?: "Frame",
                         )
                     )
                 }

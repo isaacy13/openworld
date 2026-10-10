@@ -144,6 +144,7 @@ fn repeated_frames_of_one_track_keep_the_strongest_card() {
     let report = engine.finish();
     assert_eq!(report.candidates.len(), 1);
     assert_eq!(report.candidates[0].frame_index, 1);
+    assert_eq!(report.candidates[0].frame_label, "Frame 2.");
     assert_eq!(report.candidates[0].track_id, 3);
     assert_eq!(report.candidates[0].poster_id, "fixture-missing-a");
     assert!(report.candidates[0].cosine.unwrap() > bundle.threshold);

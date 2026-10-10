@@ -181,6 +181,7 @@ public struct Candidate: Decodable, Identifiable {
     public var frame: String?
     public var leaving: String
     public var frameIndex: Int
+    public var frameLabel: String
     public var posterId: String
     enum CodingKeys: String, CodingKey {
         case wording, kind, uncertainty, crop, frame, leaving
@@ -189,6 +190,7 @@ public struct Candidate: Decodable, Identifiable {
         case posterClassLabel = "poster_class_label"
         case fbiUrl = "fbi_url"
         case frameIndex = "frame_index"
+        case frameLabel = "frame_label"
         case posterId = "poster_id"
     }
 }

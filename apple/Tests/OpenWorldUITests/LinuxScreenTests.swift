@@ -33,6 +33,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(labels.contains("A vehicle is not a person."))
             XCTAssertGreaterThanOrEqual(model.report?.facesSeenNotCompared ?? 0, 1)
             XCTAssertFalse(model.report?.candidates.isEmpty ?? true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameLabel == "Frame 1." } == true)
             XCTAssertEqual(model.report?.candidates.first?.leaving, Copy.leaving)
             XCTAssertTrue(model.report?.candidates.first?.fbiUrl.hasPrefix("https://www.fbi.gov") == true)
             XCTAssertTrue(model.report?.candidates.contains { $0.posterLine == "Fixture subject A (Missing)" } == true)
@@ -50,6 +51,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertTrue(preview.contains("Nothing is uploaded."))
             XCTAssertTrue(preview.contains(Copy.clearance))
             XCTAssertTrue(preview.contains("Crops from this file."))
+            XCTAssertEqual(preview.filter { $0 == "Frame 1." }.count, model.report?.candidates.count)
             XCTAssertTrue(preview.contains("1 frame analyzed."))
             let framesAt = try XCTUnwrap(preview.firstIndex(of: "1 frame analyzed."))
             let classAt = try XCTUnwrap(preview.firstIndex(of: "Missing and wanted."))
@@ -401,6 +403,7 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(model.report?.summary, Copy.possible)
             XCTAssertFalse(model.report?.candidates.isEmpty == true)
             XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameIndex == 1 } == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameLabel == "Frame 2." } == true)
         }
     }
 
@@ -1102,6 +1105,6 @@ private let estimateJSON = """
 """
 
 private let reportJSON = """
-{"status":"complete","summary":"Possible candidate. Not an identification.","bundle_name":"Fast","perception_note":"Fixture markers were read.","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","No candidate is not a clearance.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":["The file timestamps disagree."],"faces_seen_not_compared":1,"inventory":[{"kind":"face","label":"Possible candidate. Not an identification.","frame_index":0},{"kind":"face","label":"Not compared.","frame_index":0}],"candidates":[{"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Cosine 0.98 is above the locked cutoff 0.55 for Fast. Possible candidate. Not an identification.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"poster_id":"a"}],"comparisons":[]}
+{"status":"complete","summary":"Possible candidate. Not an identification.","bundle_name":"Fast","perception_note":"Fixture markers were read.","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","No candidate is not a clearance.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":["The file timestamps disagree."],"faces_seen_not_compared":1,"inventory":[{"kind":"face","label":"Possible candidate. Not an identification.","frame_index":0},{"kind":"face","label":"Not compared.","frame_index":0}],"candidates":[{"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Cosine 0.98 is above the locked cutoff 0.55 for Fast. Possible candidate. Not an identification.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"a"}],"comparisons":[]}
 """
 #endif

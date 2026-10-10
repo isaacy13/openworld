@@ -432,6 +432,7 @@ class PhoneFlowTest {
         assertTrue(candidates.length() > 0)
         for (i in 0 until candidates.length()) {
             assertEquals(1, candidates.getJSONObject(i).getInt("frame_index"))
+            assertEquals("Frame 2.", candidates.getJSONObject(i).getString("frame_label"))
         }
         val frames = File(gif.parentFile, "ow-gif-frames-" + System.nanoTime())
         val reel = PlatformDecode.writeFrames(gif, frames)
@@ -459,6 +460,7 @@ class PhoneFlowTest {
         model.analyze()
         assertEquals("Possible candidate. Not an identification.", model.summary)
         assertTrue(model.candidateRows.isNotEmpty())
+        assertTrue(model.candidateRows.all { it.frameLabel == "Frame 2." })
         assertTrue(model.context.startsWith("3 frames analyzed."))
     }
 
@@ -1082,7 +1084,8 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("(wanted)", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Crops from this file.").assertExists()
         compose.onAllNodesWithText("Crop").assertCountEquals(model.candidateRows.size)
-        compose.onAllNodesWithText("Frame").assertCountEquals(model.candidateRows.size)
+        compose.onAllNodesWithText("Frame 1.").assertCountEquals(model.candidateRows.size)
+        assertTrue(model.candidateRows.all { it.frameLabel == "Frame 1." })
         compose.onAllNodesWithText("Open FBI page")[0].performClick()
         compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
         compose.onNodeWithText("Choose another file").assertExists()

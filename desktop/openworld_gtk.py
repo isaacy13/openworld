@@ -787,8 +787,9 @@ class OpenWorld(Gtk.Application):
         wording.add_css_class("section")
         box.append(wording)
         images = Gtk.Box(spacing=8)
-        for key, caption in (("crop", "Crop"), ("frame", "Frame")):
+        for key in ("crop", "frame"):
             rel = candidate.get(key)
+            caption = "Crop" if key == "crop" else (candidate.get("frame_label") or "Frame")
             if rel and self.out_dir is not None:
                 path = self.out_dir / rel
                 if path.is_file():
@@ -1383,7 +1384,7 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(f"expected {expected} FBI buttons, saw {fbi_buttons}")
             return False
         card_text = " ".join(self._labels_under(self.detail))
-        if card_text.count("Crop") < expected or card_text.count("Frame") < expected:
+        if card_text.count("Crop") < expected or card_text.count("Frame 1.") < expected:
             self._exercise_fail(f"a candidate card is missing its crop or frame: {card_text}")
             return False
         if "Score " not in card_text or "Cosine" in card_text or "FIX123" not in card_text:

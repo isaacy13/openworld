@@ -724,7 +724,7 @@ public struct FlowView: View {
                             Text(candidate.wording).font(.headline)
                             HStack(alignment: .top, spacing: 8) {
                                 labeledCrop(candidate.crop, "Crop")
-                                labeledCrop(candidate.frame, "Frame")
+                                labeledCrop(candidate.frame, candidate.frameLabel)
                             }
                             Text(candidate.uncertainty)
                             Text(candidate.posterLine)

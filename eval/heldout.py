@@ -579,7 +579,7 @@ def main() -> int:
         if report.get("frames_decoded") != 3:
             fail(f"later gif decoded {report.get('frames_decoded')} frames")
         found = report.get("candidates") or []
-        if not found or any(item.get("frame_index") != 1 for item in found):
+        if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later gif candidates were not on the middle frame: {found}")
         counts["gif_later_candidate"] += 1
 
@@ -596,7 +596,7 @@ def main() -> int:
         if report.get("frames_decoded") != 3:
             fail(f"later apng decoded {report.get('frames_decoded')} frames")
         found = report.get("candidates") or []
-        if not found or any(item.get("frame_index") != 1 for item in found):
+        if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later apng candidates were not on the middle frame: {found}")
         counts["apng_later_candidate"] += 1
 
@@ -707,7 +707,7 @@ def main() -> int:
         if report.get("frames_decoded") != 2:
             fail(f"later tiff decoded {report.get('frames_decoded')} frames")
         found = report.get("candidates") or []
-        if not found or any(item.get("frame_index") != 1 for item in found):
+        if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
             fail(f"later tiff candidates were not on the second page: {found}")
         counts["tiff_later_candidate"] += 1
 
