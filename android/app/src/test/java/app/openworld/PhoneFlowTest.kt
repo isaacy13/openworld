@@ -45,6 +45,8 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Phone screens on a Robolectric device, calling the same openworld program the app starts.
@@ -598,6 +600,39 @@ class PhoneFlowTest {
         assertEquals("No candidate is not a clearance.", report.getString("summary"))
         assertEquals(1, report.getInt("frames_decoded"))
         assertEquals(0, report.getJSONArray("candidates").length())
+    }
+
+    @Test
+    fun closingThePhoneStopsADecodeThatIsStillWritingFrames() {
+        val gif = File.createTempFile("ow-stop", ".gif")
+        ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=16x16:r=5:d=0.6", gif.absolutePath)
+        assertEquals(3, GifFrames.read(gif).frames.size)
+        val frames = File(gif.parentFile, "ow-stop-frames-" + System.nanoTime())
+        assertTrue(frames.mkdirs())
+        val model = FlowModel()
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var thrown: Throwable? = null
+        val thread = Thread {
+            try {
+                PlatformDecode.writeFrames(gif, frames) {
+                    started.countDown()
+                    check(release.await(5, TimeUnit.SECONDS))
+                    model.decodeStopped()
+                }
+            } catch (err: Throwable) {
+                thrown = err
+            }
+        }
+        thread.start()
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        model.abandonScan()
+        release.countDown()
+        thread.join(5000)
+        assertFalse(thread.isAlive)
+        assertTrue(thrown is DecodeStopped)
+        val written = frames.listFiles()?.count { it.name.startsWith("frame_") } ?: 0
+        assertEquals(0, written)
     }
 
     @Test

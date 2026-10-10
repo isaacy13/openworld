@@ -65,13 +65,14 @@ enum PlatformDecoder {
         )
     }
 
-    static func writeFrames(url: URL, directory: URL) throws -> Facts {
+    static func writeFrames(url: URL, directory: URL, stopped: () -> Bool = { false }) throws -> Facts {
         if GifFrames.isGif(url) {
-            let reel = try GifFrames.write(url, directory: directory)
+            let reel = try GifFrames.write(url, directory: directory, stopped: stopped)
             var gif = try adopted(reel, containerUnix: nil)
             gif.directory = directory
             return gif
         }
+        if stopped() { throw DecodeStopped() }
         guard pngSize(url) != nil else {
             throw failure("AVFoundation decodes on macOS and iOS. Refusing.")
         }
@@ -189,16 +190,17 @@ enum PlatformDecoder {
     }
 
     /// Writes one PNG per decoded frame. Evidence for the scan, not a second video file.
-    static func writeFrames(url: URL, directory: URL) throws -> Facts {
+    static func writeFrames(url: URL, directory: URL, stopped: () -> Bool = { false }) throws -> Facts {
         if GifFrames.isGif(url) {
-            let reel = try GifFrames.write(url, directory: directory)
+            let reel = try GifFrames.write(url, directory: directory, stopped: stopped)
             var gif = try adopted(reel, containerUnix: nil)
             gif.directory = directory
             return gif
         }
         if let (source, count) = stillPages(url) {
-            return try writeStillPages(url: url, directory: directory, source: source, count: count)
+            return try writeStillPages(url: url, directory: directory, source: source, count: count, stopped: stopped)
         }
+        if stopped() { throw DecodeStopped() }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var facts = try facts(url: url)
         if !facts.video {
@@ -254,7 +256,12 @@ enum PlatformDecoder {
         }
         let context = CIContext()
         var index = 0
-        while let sample = output.copyNextSampleBuffer() {
+        while reader.status == .reading {
+            if stopped() {
+                reader.cancelReading()
+                throw DecodeStopped()
+            }
+            guard let sample = output.copyNextSampleBuffer() else { break }
             guard let buffer = CMSampleBufferGetImageBuffer(sample) else { continue }
             var image = CIImage(cvPixelBuffer: buffer).transformed(by: track.preferredTransform)
             let origin = image.extent.origin
@@ -358,7 +365,7 @@ enum PlatformDecoder {
     }
 
     /// Each page is stored pixels. That page's orientation tag is applied when the PNG is written.
-    private static func writeStillPages(url: URL, directory: URL, source: CGImageSource, count: Int) throws -> Facts {
+    private static func writeStillPages(url: URL, directory: URL, source: CGImageSource, count: Int, stopped: () -> Bool) throws -> Facts {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let tags = (try? Data(contentsOf: url)).flatMap { JpegOrientation.tiffPageTags($0) }
         let firstTag = pageTag(source: source, index: 0, tags: tags)
@@ -366,6 +373,7 @@ enum PlatformDecoder {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
         for index in 0..<count {
+            if stopped() { throw DecodeStopped() }
             guard let cg = CGImageSourceCreateImageAtIndex(source, index, nil) else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }

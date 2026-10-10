@@ -108,6 +108,46 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertTrue(later.isRunning)
     }
 
+    func testClosingTheWindowStopsADecodeThatIsStillWritingFrames() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-decode-stop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gif = root.appendingPathComponent("clip.gif")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=16x16:r=5:d=0.6", gif.path])
+        XCTAssertEqual(try GifFrames.read(gif).frames.count, 3)
+        let frames = root.appendingPathComponent("frames")
+        try FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
+        var close: (@MainActor () -> Void)?
+        let flag: DecodeStop = MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            close = { model.closeWindow() }
+            return model.stopFlag
+        }
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let done = DispatchSemaphore(value: 0)
+        let thrown = ErrorBox()
+        Thread {
+            defer { done.signal() }
+            do {
+                _ = try PlatformDecoder.writeFrames(url: gif, directory: frames) {
+                    started.signal()
+                    _ = release.wait(timeout: .now() + 5)
+                    return flag.isStopped()
+                }
+            } catch {
+                thrown.set(error)
+            }
+        }.start()
+        XCTAssertEqual(started.wait(timeout: .now() + 5), .success)
+        MainActor.assumeIsolated { close?() }
+        release.signal()
+        XCTAssertEqual(done.wait(timeout: .now() + 5), .success)
+        XCTAssertTrue(thrown.get() is DecodeStopped)
+        let names = try FileManager.default.contentsOfDirectory(at: frames, includingPropertiesForKeys: nil)
+        XCTAssertTrue(names.filter { $0.lastPathComponent.hasPrefix("frame_") }.isEmpty)
+    }
+
     func testAShareOpensTheFileStoredUnderThatName() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-name-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -1787,6 +1827,23 @@ private func rgbTiff(_ pages: [(Int, Int, [UInt8], UInt8)]) -> [UInt8] {
         }
     }
     return out
+}
+
+private final class ErrorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Error?
+
+    func set(_ error: Error) {
+        lock.lock()
+        value = error
+        lock.unlock()
+    }
+
+    func get() -> Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
 }
 
 private func put16(_ out: inout [UInt8], _ offset: Int, _ value: Int) {

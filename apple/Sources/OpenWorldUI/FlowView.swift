@@ -67,6 +67,24 @@ public struct LiveCrop: Identifiable, Equatable {
     public let path: String
 }
 
+/// Set when the window closes, so a decode that is still writing frames stops.
+final class DecodeStop: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+
+    func stop() {
+        lock.lock()
+        stopped = true
+        lock.unlock()
+    }
+
+    func isStopped() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
+}
+
 /// The first crop may wait so a test can read the estimate before the scan finishes.
 private final class ProgressOnce: @unchecked Sendable {
     let seen: DispatchSemaphore?
@@ -137,6 +155,8 @@ public final class FlowModel: ObservableObject {
     var scanRoot: URL?
     /// Set when the window closes, so a scan that finishes afterward does not return to the page.
     private var closed = false
+    /// Readable off the main thread. Closing the window stops a decode that is still writing frames.
+    nonisolated let stopFlag = DecodeStop()
     /// The catalog sentence currently on the bundle page, so a later catalog can clear it.
     private var catalogNotice: String?
     /// The estimate refusal, so a later unreadable file does not rename that headline.
@@ -435,9 +455,10 @@ public final class FlowModel: ObservableObject {
         apply(Self.finishedScan(core: core, file: file, bundleID: bundleID, longSide: longSide, coverage: coverage, phone: phone, missing: includeMissing, wanted: includeWanted, paths: paths))
     }
 
-    /// Closing the window stops a scan that is still running and removes that temporary folder.
+    /// Closing the window stops a scan that is still running, including a decode that is still writing frames, and removes that temporary folder.
     public func closeWindow() {
         closed = true
+        stopFlag.stop()
         RunningProgram.stop()
         if let scanRoot {
             try? FileManager.default.removeItem(at: scanRoot)
@@ -466,6 +487,7 @@ public final class FlowModel: ObservableObject {
         let wanted = includeWanted
         let gate = ProgressOnce(seen: progressSeen, hold: progressHold)
         let result = paths.result
+        let flag = stopFlag
         Task.detached {
             let outcome = Self.finishedScan(
                 core: core,
@@ -477,6 +499,7 @@ public final class FlowModel: ObservableObject {
                 missing: missing,
                 wanted: wanted,
                 paths: paths,
+                stopped: { flag.isStopped() },
                 onProgress: { line in
                     Self.deliverCrop(line: line, directory: result, gate: gate, model: self)
                 }
@@ -593,12 +616,15 @@ public final class FlowModel: ObservableObject {
         missing: Bool,
         wanted: Bool,
         paths: ScanPaths,
+        stopped: @Sendable () -> Bool = { false },
         onProgress: ((String) -> Void)? = nil
     ) -> FinishedScan {
         do {
             // The fixture pack is written by the CLI before a real curve allows FBI photos.
             try CoreClient().runPublic(posters: paths.posters)
-            let reel = try PlatformDecoder.writeFrames(url: file, directory: paths.frames)
+            if stopped() { throw DecodeStopped() }
+            let reel = try PlatformDecoder.writeFrames(url: file, directory: paths.frames, stopped: stopped)
+            if stopped() { throw DecodeStopped() }
             let report = try core.scan(
                 input: file,
                 bundle: bundleID,
@@ -614,6 +640,8 @@ public final class FlowModel: ObservableObject {
                 onProgress: onProgress
             )
             return FinishedScan(report: report, error: nil, keepRoot: true, root: paths.root, result: paths.result)
+        } catch is DecodeStopped {
+            return FinishedScan(report: nil, error: nil, keepRoot: false, root: paths.root, result: paths.result)
         } catch {
             return FinishedScan(report: nil, error: error.localizedDescription, keepRoot: false, root: paths.root, result: paths.result)
         }

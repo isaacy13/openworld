@@ -39,13 +39,14 @@ object GifFrames {
         return describe(reel)
     }
 
-    fun write(file: File, directory: File): PlatformDecode.Facts {
+    fun write(file: File, directory: File, stopped: () -> Boolean = { false }): PlatformDecode.Facts {
         if (!directory.exists() && !directory.mkdirs()) {
             throw IOException("Bad codec or unreadable file. Refusing.")
         }
         val reel = read(file)
         try {
             reel.frames.forEachIndexed { index, rgb ->
+                if (stopped()) throw DecodeStopped()
                 writePng(File(directory, "frame_%06d.png".format(index)), reel.width, reel.height, rgb)
             }
         } catch (err: IOException) {

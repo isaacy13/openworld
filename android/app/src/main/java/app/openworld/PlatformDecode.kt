@@ -12,6 +12,9 @@ import java.io.File
 import java.io.IOException
 import kotlin.math.roundToInt
 
+/** The window closed while frames were still being written. */
+internal class DecodeStopped : IOException()
+
 /**
  * Decodes with MediaCodec. Stills use BitmapFactory. An animated GIF is every frame,
  * because BitmapFactory keeps only the first one. A JPEG, a still WebP, or a PNG is turned
@@ -75,12 +78,13 @@ object PlatformDecode {
     }
 
     /** One PNG per decoded frame, in order. Not a second video file. */
-    fun writeFrames(file: File, directory: File): Facts {
+    fun writeFrames(file: File, directory: File, stopped: () -> Boolean = { false }): Facts {
         if (!directory.mkdirs() && !directory.isDirectory) {
             throw IOException("Bad codec or unreadable file. Refusing.")
         }
-        if (GifFrames.isGif(file)) return GifFrames.write(file, directory)
+        if (GifFrames.isGif(file)) return GifFrames.write(file, directory, stopped)
         val meta = facts(file)
+        if (stopped()) throw DecodeStopped()
         if (!meta.video) {
             // A PNG the user already has is one frame. Copy the bytes so the scan
             // sees the original pixels. The import temp file has no extension.
@@ -117,6 +121,7 @@ object PlatformDecode {
         var written = 0
         try {
             while (true) {
+                if (stopped()) throw DecodeStopped()
                 if (!inputDone) {
                     val inIndex = codec.dequeueInputBuffer(10_000)
                     if (inIndex >= 0) {

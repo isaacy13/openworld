@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
+/// The window closed while frames were still being written.
+struct DecodeStopped: Error {}
+
 /// Every frame of a GIF. ImageIO's first image is not the whole file.
 /// A one-frame GIF stays one still. A later frame is still compared.
 public enum GifFrames {
@@ -36,11 +39,13 @@ public enum GifFrames {
     }
 
     /// One PNG per frame, in order. The returned reel is what the scan should see.
-    public static func write(_ url: URL, directory: URL) throws -> Reel {
+    /// `stopped` is checked before each frame, so closing the window stops a decode that is still writing.
+    public static func write(_ url: URL, directory: URL, stopped: () -> Bool = { false }) throws -> Reel {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let reel = try read(url)
         do {
             for (index, rgb) in reel.frames.enumerated() {
+                if stopped() { throw DecodeStopped() }
                 let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
                 try writePng(rgb, width: reel.width, height: reel.height, to: dest)
             }

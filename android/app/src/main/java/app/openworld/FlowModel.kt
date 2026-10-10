@@ -383,7 +383,7 @@ class FlowModel {
         }, "openworld-scan").start()
     }
 
-    /** Closing the app stops a scan that is still running and removes that temporary folder. */
+    /** Closing the app stops a scan that is still running, including a decode that is still writing frames, and removes that temporary folder. */
     fun abandonScan() {
         abandoned.set(true)
         Core.stopRunning()
@@ -393,6 +393,8 @@ class FlowModel {
         resultDir = null
         root?.deleteRecursively()
     }
+
+    internal fun decodeStopped(): Boolean = abandoned.get()
 
     fun analyze() {
         val file = localCopy ?: return
@@ -456,8 +458,10 @@ class FlowModel {
                     detail = refusalDisclosure(),
                 )
             }
+            if (abandoned.get()) throw DecodeStopped()
             val frames = File(root, "openworld-frames")
-            val reel = PlatformDecode.writeFrames(file, frames)
+            val reel = PlatformDecode.writeFrames(file, frames) { abandoned.get() }
+            if (abandoned.get()) throw DecodeStopped()
             val args = listOf(
                 "--json", "--bundles", Core.bundlesDir(), "scan",
                 "--input", file.absolutePath,
@@ -531,6 +535,9 @@ class FlowModel {
                 strip = pictures,
                 resultDir = if (File(out, "result.json").isFile) out else null,
             )
+        } catch (_: DecodeStopped) {
+            root.deleteRecursively()
+            return ScanOutcome()
         } catch (err: IOException) {
             root.deleteRecursively()
             val message = err.message
