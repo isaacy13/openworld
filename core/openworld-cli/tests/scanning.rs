@@ -290,3 +290,51 @@ fn analyze_json_is_one_document() {
     assert_eq!(refusal["message"], "Choose missing, wanted, or both.");
     assert!(!blocked.join("result.json").exists());
 }
+
+#[test]
+fn analyze_yes_uses_the_preselected_choices() {
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("blank.png");
+    let (code, _text, err) = run(
+        false,
+        &["fixture-still", "--blank", "--out", still.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let posters = dir.path().join("posters");
+    let (code, _text, err) = run(
+        false,
+        &[
+            "posters",
+            "write-fixture",
+            "--out",
+            posters.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{err}");
+    let out = dir.path().join("result");
+    let (code, text, err) = run(
+        false,
+        &[
+            "analyze",
+            "--yes",
+            "--input",
+            still.to_str().unwrap(),
+            "--posters",
+            posters.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    assert!(!text.contains("Bundle [fast]:"));
+    assert!(!text.contains("Detection long side"));
+    assert!(!text.contains("Coverage (complete"));
+    assert!(!err.contains("Bundle [fast]:"));
+    assert!(text.lines().any(|line| line == "Estimate"));
+    let saved = std::fs::read(out.join("result.json")).unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+    assert_eq!(report["bundle_name"], "Fast");
+    assert_eq!(report["detection_note"], "640 px on the long side.");
+    assert_eq!(report["coverage_note"], "Every decoded frame.");
+    assert_eq!(report["class_note"], "Missing and wanted.");
+}

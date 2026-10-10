@@ -120,6 +120,7 @@ enum Cmd {
         /// Leave wanted posters out. The estimate then says "Missing."
         #[arg(long)]
         no_wanted: bool,
+        /// Start the scan. Bundle, size, and coverage stay on the preselected choices when those flags are absent.
         #[arg(long)]
         yes: bool,
     },
@@ -545,6 +546,11 @@ fn analyze(
     let all = load_bundles(bundles).map_err(|e| e.to_string())?;
     let bundle = match bundle {
         Some(id) => id,
+        None if yes => all
+            .iter()
+            .find(|item| item.preselected())
+            .map(|item| item.id.clone())
+            .unwrap_or_else(|| "fast".into()),
         None => {
             if !json_mode {
                 for line in bundle_menu_lines(&all) {
@@ -561,6 +567,7 @@ fn analyze(
     };
     let long_side = match long_side {
         Some(value) => value,
+        None if yes => "640".into(),
         None => {
             if !json_mode {
                 for line in size_menu_lines() {
@@ -577,6 +584,7 @@ fn analyze(
     };
     let coverage = match coverage {
         Some(value) => value,
+        None if yes => "complete".into(),
         None => {
             if !json_mode {
                 println!("Coverage:");
