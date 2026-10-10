@@ -511,10 +511,11 @@ class OpenWorld(Gtk.Application):
             [self.bin, "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)],
             stdout=subprocess.DEVNULL,
         )
-        self.scan_thread = threading.Thread(target=self._scan_worker, daemon=True)
+        out_dir = self.out_dir
+        self.scan_thread = threading.Thread(target=self._scan_worker, args=(out_dir,), daemon=True)
         self.scan_thread.start()
 
-    def _scan_worker(self) -> None:
+    def _scan_worker(self, out_dir: Path) -> None:
         proc = subprocess.Popen(
             [
                 self.bin,
@@ -533,7 +534,7 @@ class OpenWorld(Gtk.Application):
                 "--posters",
                 str(self.posters),
                 "--out",
-                str(self.out_dir),
+                str(out_dir),
                 "--form-factor",
                 "computer",
                 "--provider",
@@ -563,19 +564,24 @@ class OpenWorld(Gtk.Application):
         GLib.idle_add(self._show_report, report)
 
     def _add_crop(self, event: dict) -> bool:
-        if event.get("kind") != "face" or not event.get("crop") or self.out_dir is None:
+        kind = event.get("kind")
+        label = event.get("label") or ""
+        rel = event.get("crop")
+        if kind not in ("face", "plate", "vehicle") or not rel or not label or self.out_dir is None:
             return False
-        path = self.out_dir / event["crop"]
+        path = self.out_dir / rel
         if not path.is_file():
             return False
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         picture = Gtk.Picture.new_for_filename(str(path))
         picture.set_size_request(112, 112)
         picture.set_can_shrink(False)
-        caption = Gtk.Label(label=event.get("label", ""), wrap=True, justify=Gtk.Justification.CENTER)
+        caption = Gtk.Label(label=label, wrap=True, justify=Gtk.Justification.CENTER)
+        caption.set_max_width_chars(18)
         box.append(picture)
         box.append(caption)
         self.strip.append(box)
+        self.strip_heading.set_visible(True)
         return False
 
     def _show_report(self, report: dict) -> bool:
@@ -1070,6 +1076,28 @@ class OpenWorld(Gtk.Application):
                 f"Scanning kept the previous result: {self.summary.get_text()!r} {self.result_note.get_text()!r} {self.reason.get_text()!r}"
             )
             return False
+        saved_out = self.out_dir
+        probe = self.work / "probe-crops"
+        (probe / "crops").mkdir(parents=True)
+        shutil.copy(path, probe / "crops" / "plate.png")
+        self.out_dir = probe
+        self._add_crop({"kind": "plate", "crop": "crops/plate.png", "label": "No poster publishes a plate."})
+        self._add_crop({"kind": "vehicle", "crop": "crops/plate.png", "label": "A vehicle is not a person."})
+        self._add_crop({"kind": "audio", "crop": "crops/plate.png", "label": "skip me"})
+        self._add_crop({"kind": "face", "label": "Not compared."})
+        live = self._strip_labels()
+        self.out_dir = saved_out
+        if (
+            "No poster publishes a plate." not in live
+            or "A vehicle is not a person." not in live
+            or "skip me" in live
+            or "Not compared." in live
+            or not self.strip_heading.get_visible()
+        ):
+            self._exercise_fail(f"a plate or a vehicle stayed off the running scan: {live}")
+            return False
+        self.strip.remove_all()
+        self.strip_heading.set_visible(False)
         GLib.timeout_add(200, self._exercise_wait, 0)
         return False
 
