@@ -1185,9 +1185,34 @@ class PhoneScreenTest {
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
         model.choose(Uri.parse("content://app.openworld/missing.png"), resolver)
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
-        compose.onNodeWithText("The file could not be read. Refusing.").assertExists()
-        compose.onNodeWithText("Choose a photo or video").assertExists()
+        fun texts(): List<String> = compose.onAllNodes(SemanticsMatcher("has text") {
+            it.config.getOrNull(SemanticsProperties.Text) != null
+        }, useUnmergedTree = true).fetchSemanticsNodes().map { node ->
+            node.config[SemanticsProperties.Text].joinToString { it.text }
+        }
+        val first = texts()
+        val refusal = first.indexOf("The file could not be read. Refusing.")
+        val title = first.indexOf("Choose a photo or video")
+        assertTrue("$first", refusal >= 0 && title > refusal)
         compose.onAllNodesWithText("Continue").assertCountEquals(0)
+        val file = still("blank")
+        val uri = Uri.parse("content://app.openworld/${file.name}")
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        model.choose(uri, resolver)
+        compose.waitForIdle()
+        val opened = texts()
+        assertFalse("$opened", opened.contains("The file could not be read. Refusing."))
+        assertTrue(opened.contains("This file stays on this device."))
+        val kept = model.fileName
+        model.choose(Uri.parse("content://app.openworld/also-missing.png"), resolver)
+        compose.waitForIdle()
+        val again = texts()
+        val refusalAgain = again.indexOf("The file could not be read. Refusing.")
+        val back = again.indexOf("Back")
+        val device = again.indexOf("This file stays on this device.")
+        assertTrue("$again", refusalAgain >= 0 && back > refusalAgain && device > back)
+        assertEquals(1, again.count { it == "The file could not be read. Refusing." })
+        assertTrue(again.contains(kept))
     }
 
     @Test

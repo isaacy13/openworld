@@ -1123,6 +1123,22 @@ class OpenWorld(Gtk.Application):
         self.result_note.set_text("")
         self.reason.set_text("")
         self.reason.set_visible(False)
+        self.choose_another()
+        missing_first = str(Path(path).with_name("no-such-photo.png"))
+        self.choose_file(missing_first)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "choose"
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or first is not self.pick_notice
+            or self.input_path is not None
+        ):
+            self._exercise_fail(
+                f"a missing file left the first page: {self.pick_notice.get_text()!r} {self.input_path!r}"
+            )
+            return False
         self.choose_file(path)
         aged = time.time() - 40 * 24 * 3600
         os.utime(path, (aged, aged))
@@ -1152,9 +1168,12 @@ class OpenWorld(Gtk.Application):
         finally:
             unreadable.chmod(0o644)
             unreadable.unlink(missing_ok=True)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
         if (
             self.pick_notice.get_text() != "The file could not be read. Refusing."
             or not self.pick_notice.get_visible()
+            or first is not self.pick_notice
             or self.input_path != path
             or self.stack.get_visible_child_name() != "device"
         ):

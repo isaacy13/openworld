@@ -7,6 +7,15 @@ import OpenWorldContract
 @MainActor
 public enum PhonePreview {
     public static func lines(screen: String, model: FlowModel) -> [String] {
+        var lines = column(screen: screen, model: model)
+        if model.showsTopError, let error = model.error {
+            lines.insert(error, at: 0)
+        }
+        return lines
+    }
+
+    /// The page itself. A refusal the page does not already print is placed above these lines.
+    private static func column(screen: String, model: FlowModel) -> [String] {
         switch screen {
         case "device":
             var lines = ["Back", Copy.onDevice, model.file?.lastPathComponent ?? ""]
@@ -118,13 +127,11 @@ public enum PhonePreview {
             }
             return lines
         default:
-            var lines = [
+            return [
                 "Choose a photo or video",
                 "Import a file you already have. There is no camera.",
                 "Choose File",
             ]
-            if let error = model.error { lines.append(error) }
-            return lines
         }
     }
 
