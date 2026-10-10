@@ -243,23 +243,16 @@ fn run(cli: Cli) -> Result<i32, String> {
     let bundles = bundles_dir(cli.bundles.clone());
     match cli.cmd {
         Cmd::Copy => {
-            emit(cli.json, product_copy());
+            let words = product_copy();
+            emit(cli.json, words.clone());
+            speak(cli.json, copy_lines(&words));
             Ok(0)
         }
         Cmd::Bundles => {
             let all = load_bundles(&bundles).map_err(|e| e.to_string())?;
             let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
             emit(cli.json, json!({ "bundles": rows }));
-            if !cli.json {
-                for row in &rows {
-                    println!(
-                        "{}\n  {}\n  {}",
-                        row["name"].as_str().unwrap_or(""),
-                        row["best_for"].as_str().unwrap_or(""),
-                        row["curve_line"].as_str().unwrap_or("")
-                    );
-                }
-            }
+            speak(cli.json, bundle_lines(&rows));
             Ok(0)
         }
         Cmd::Estimate {
@@ -529,15 +522,13 @@ fn analyze(
     if !json_mode {
         println!("Bundles:");
         for item in &all {
-            let mark = if item.preselected() {
-                " (selected)"
-            } else {
-                ""
-            };
             println!(
-                "  {} — {} — {}{mark}",
-                item.id, item.best_for, item.curve_line
+                "  {} — {}",
+                item.id,
+                marked_name(&item.name, item.preselected())
             );
+            println!("    {}", item.best_for);
+            println!("    {}", item.curve_line);
         }
     }
     let bundle = match bundle {
@@ -960,6 +951,86 @@ fn prompt(text: &str) -> Result<String, String> {
         .read_line(&mut line)
         .map_err(|e| e.to_string())?;
     Ok(line.trim().to_string())
+}
+
+fn marked_name(name: &str, selected: bool) -> String {
+    if selected {
+        format!("{name}. Selected.")
+    } else {
+        name.to_string()
+    }
+}
+
+fn copy_lines(words: &serde_json::Value) -> Vec<String> {
+    const ORDER: &[&str] = &[
+        "on_device",
+        "disclosure",
+        "possible_candidate",
+        "not_compared",
+        "incomplete",
+        "no_clearance",
+        "leaving",
+        "old_file",
+        "timestamps_disagree",
+        "brief_face",
+        "vehicle_not_person",
+        "below_cutoff",
+        "plate_not_on_poster",
+        "plate_unread",
+        "plate_unpublished",
+        "face_unscored",
+        "fixture_markers",
+        "no_class",
+        "cpu_note",
+        "gpu_note",
+        "heat_note",
+        "battery_note",
+        "suggest_computer",
+        "not_measured",
+        "estimate_caveat",
+    ];
+    let mut lines = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for key in ORDER {
+        if let Some(value) = words.get(key) {
+            push_copy(&mut lines, value);
+            seen.insert((*key).to_string());
+        }
+    }
+    if let Some(object) = words.as_object() {
+        for (key, value) in object {
+            if seen.insert(key.clone()) {
+                push_copy(&mut lines, value);
+            }
+        }
+    }
+    lines
+}
+
+fn push_copy(lines: &mut Vec<String>, value: &serde_json::Value) {
+    if let Some(text) = value.as_str() {
+        lines.push(text.to_string());
+    } else if let Some(list) = value.as_array() {
+        for entry in list {
+            if let Some(text) = entry.as_str() {
+                lines.push(text.to_string());
+            }
+        }
+    }
+}
+
+fn bundle_lines(rows: &[serde_json::Value]) -> Vec<String> {
+    let mut lines = Vec::new();
+    for row in rows {
+        let name = row["name"].as_str().unwrap_or("");
+        lines.push(marked_name(
+            name,
+            row["preselected"].as_bool() == Some(true),
+        ));
+        lines.push(format!("  {}", row["best_for"].as_str().unwrap_or("")));
+        lines.push(format!("  {}", row["curve_line"].as_str().unwrap_or("")));
+    }
+    lines
 }
 
 fn speak(json_mode: bool, lines: impl IntoIterator<Item = impl AsRef<str>>) {
@@ -1491,5 +1562,49 @@ mod cli_tests {
             .unwrap(),
             2
         );
+    }
+
+    #[test]
+    fn copy_and_bundles_use_the_words_on_the_screen() {
+        let lines = copy_lines(&product_copy());
+        for phrase in [
+            "Possible candidate. Not an identification.",
+            "Not compared.",
+            "Incomplete.",
+            "No candidate is not a clearance.",
+            "You are leaving OpenWorld.",
+            "A brief face can be missed.",
+            "This file stays on this device.",
+            "Nothing is uploaded.",
+            "Not measured yet.",
+        ] {
+            assert!(lines.iter().any(|line| line == phrase), "{phrase} missing");
+        }
+        let device = lines
+            .iter()
+            .position(|line| line == "This file stays on this device.")
+            .unwrap();
+        let uploaded = lines
+            .iter()
+            .position(|line| line == "Nothing is uploaded.")
+            .unwrap();
+        let possible = lines
+            .iter()
+            .position(|line| line == "Possible candidate. Not an identification.")
+            .unwrap();
+        let caveat = lines
+            .iter()
+            .position(|line| line == "This is a planning estimate, not a thermal measurement.")
+            .unwrap();
+        assert!(device < uploaded && uploaded < possible && possible < caveat);
+        let all = load_bundles(Path::new(&bundles())).unwrap();
+        let rows: Vec<_> = all.iter().map(openworld_core::bundle::row_json).collect();
+        let listed = bundle_lines(&rows);
+        assert!(listed.iter().any(|line| line == "Fast. Selected."));
+        assert!(listed.iter().any(|line| line == "Accurate"));
+        assert!(listed.iter().all(|line| line != "Accurate. Selected."));
+        assert!(listed.iter().any(|line| line.contains("Not measured yet.")));
+        assert_eq!(marked_name("Fast", true), "Fast. Selected.");
+        assert_eq!(marked_name("Accurate", false), "Accurate");
     }
 }
