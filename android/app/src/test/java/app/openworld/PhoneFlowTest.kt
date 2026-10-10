@@ -852,6 +852,14 @@ class PhoneFlowTest {
         assertEquals(Step.Device, model.step)
         assertEquals(kept, model.fileName)
         assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        model.continueFromDevice()
+        assertEquals(Step.Bundle, model.step)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        model.continueFromSize()
+        assertEquals(Step.Estimate, model.step)
+        assertEquals(kept, model.fileName)
+        assertTrue(model.estimateOk)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
     }
 
     @Test

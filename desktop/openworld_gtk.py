@@ -1317,6 +1317,27 @@ class OpenWorld(Gtk.Application):
                 f"an unreadable file changed the pick: {self.pick_notice.get_text()!r} {self.input_path!r}"
             )
             return False
+        self.load_bundles()
+        self._go("size")
+        self.refresh_estimate()
+        self._go("estimate")
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.estimate_title.get_text() != "Estimate"
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or self.input_path != path
+            or not self.primary.get_visible()
+        ):
+            self._exercise_fail(
+                "continuing cleared the unread-file sentence: "
+                f"{self.estimate_title.get_text()!r} {self.pick_notice.get_text()!r}"
+            )
+            return False
         self.choose_file(path)
         if self.pick_notice.get_visible() or self.input_path != path:
             self._exercise_fail("a readable file kept the refusal")

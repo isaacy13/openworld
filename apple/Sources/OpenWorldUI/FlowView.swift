@@ -172,11 +172,14 @@ public final class FlowModel: ObservableObject {
 
     public func loadBundles() {
         let previousCatalog = catalogNotice
+        let keptFile = error == "The file could not be read. Refusing."
         do {
             bundles = try core.bundlesJSON()
             if bundles.isEmpty {
                 catalogNotice = "The scan program is not on this device. Refusing."
-                error = catalogNotice
+                if !keptFile {
+                    error = catalogNotice
+                }
             } else if error == previousCatalog
                 || error == "The scan program is not on this device. Refusing."
                 || error == "The bundle catalog could not be read. Refusing." {
@@ -186,11 +189,15 @@ public final class FlowModel: ObservableObject {
         } catch let failure as CoreFailure {
             bundles = []
             catalogNotice = failure.message
-            error = failure.message
+            if !keptFile {
+                error = failure.message
+            }
         } catch {
             bundles = []
             catalogNotice = "The scan program is not on this device. Refusing."
-            self.error = catalogNotice
+            if !keptFile {
+                self.error = catalogNotice
+            }
         }
         if !bundles.contains(where: { $0.id == bundleID }),
            let selected = bundles.first(where: { $0.preselected }) {
@@ -285,7 +292,9 @@ public final class FlowModel: ObservableObject {
         }
         do {
             estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
-            error = nil
+            if error != "The file could not be read. Refusing." {
+                error = nil
+            }
             estimateNotice = nil
             canAnalyze = includeMissing || includeWanted
         } catch {
@@ -293,7 +302,9 @@ public final class FlowModel: ObservableObject {
             canAnalyze = false
             let message = error.localizedDescription
             estimateNotice = message
-            self.error = message
+            if self.error != "The file could not be read. Refusing." {
+                self.error = message
+            }
         }
         step = .estimate
     }
