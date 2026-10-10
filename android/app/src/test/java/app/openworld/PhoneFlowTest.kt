@@ -916,7 +916,7 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("Missing").assertCountEquals(0)
         compose.onAllNodesWithText("Wanted").assertCountEquals(0)
         compose.onAllNodesWithText("Choose missing, wanted, or both.").assertCountEquals(0)
-        compose.onNodeWithText("Analyze").assertIsNotEnabled()
+        compose.onAllNodesWithText("Analyze").assertCountEquals(0)
     }
 
     @Test

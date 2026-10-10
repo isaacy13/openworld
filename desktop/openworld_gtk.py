@@ -936,7 +936,8 @@ class OpenWorld(Gtk.Application):
             "results": "Choose another file",
         }
         self.primary.set_label(labels.get(name, "Continue"))
-        self.primary.set_visible(name != "choose")
+        refused_estimate = name == "estimate" and not self.estimate_ok
+        self.primary.set_visible(name != "choose" and not refused_estimate)
 
     def _run_json(self, args: list[str]) -> dict:
         proc = subprocess.run([self.bin, *args], check=False, capture_output=True, text=True)
@@ -1069,7 +1070,7 @@ class OpenWorld(Gtk.Application):
         self._go("size")
         self.refresh_estimate()
         self._go("estimate")
-        if self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():
+        if self.primary.get_visible() or self.primary.get_sensitive() or "Refusing." not in self.estimate_body.get_text():
             self._exercise_fail(f"a bad file offered Analyze: {self.estimate_body.get_text()!r}")
             return False
         if (
@@ -1093,7 +1094,7 @@ class OpenWorld(Gtk.Application):
                 time.sleep(0.05)
             self._grab(refusal_shot)
         self.go_back()
-        if self.stack.get_visible_child_name() != "size" or not self.primary.get_sensitive():
+        if self.stack.get_visible_child_name() != "size" or not self.primary.get_visible() or not self.primary.get_sensitive():
             self._exercise_fail("Back left Continue disabled after a refusal")
             return False
         self.choose_file(path)
@@ -1154,6 +1155,7 @@ class OpenWorld(Gtk.Application):
             or not self.class_label.get_visible()
             or self.class_label.get_text() != "Missing and wanted."
             or self._class_args()
+            or not self.primary.get_visible()
         ):
             self._exercise_fail(f"classes did not start on: {self.class_label.get_text()!r} {self._class_args()}")
             return False
@@ -1162,7 +1164,7 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(f"wanted off did not leave missing: {self.class_label.get_text()!r} {self._class_args()}")
             return False
         self.missing_button.set_active(False)
-        if self.primary.get_sensitive() or self.class_label.get_text() != "Choose missing, wanted, or both.":
+        if self.primary.get_sensitive() or not self.primary.get_visible() or self.class_label.get_text() != "Choose missing, wanted, or both.":
             self._exercise_fail(f"both classes off still offered Analyze: {self.class_label.get_text()!r}")
             return False
         self.missing_button.set_active(True)

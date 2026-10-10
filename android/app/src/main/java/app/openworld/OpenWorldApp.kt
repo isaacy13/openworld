@@ -141,9 +141,9 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 )
                                 Text("Wanted", modifier = Modifier.padding(top = 12.dp))
                             }
-                        }
-                        Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
-                            Text(if (model.scanning) "Scanning" else "Analyze")
+                            Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
+                                Text(if (model.scanning) "Scanning" else "Analyze")
+                            }
                         }
                     }
                     Step.Results -> {
