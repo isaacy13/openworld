@@ -844,9 +844,10 @@ public struct FlowView: View {
                 ForEach(model.liveCrops) { crop in
                     VStack(spacing: 4) {
                         liveImage(crop.path)
-                        Text(crop.frameLabel)
-                        Text(crop.label)
+                        Text(crop.frameLabel).multilineTextAlignment(.center)
+                        Text(crop.label).multilineTextAlignment(.center)
                     }
+                    .frame(width: 140)
                 }
             }
             if let estimate = model.estimate {
@@ -963,9 +964,10 @@ public struct FlowView: View {
                         ForEach(items) { item in
                             VStack(spacing: 4) {
                                 cropImage(item.crop)
-                                Text(item.frameLabel)
-                                Text(item.label)
+                                Text(item.frameLabel).multilineTextAlignment(.center)
+                                Text(item.label).multilineTextAlignment(.center)
                             }
+                            .frame(width: 140)
                         }
                     }
                     #else

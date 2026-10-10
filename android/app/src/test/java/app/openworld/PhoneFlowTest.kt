@@ -12,6 +12,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
@@ -1939,6 +1940,44 @@ class PhoneScreenTest {
         assertEquals("Possible candidate. Not an identification.", model.summary)
         assertTrue(result.exists())
         assertTrue(result != model.resultDir)
+    }
+
+    @Test
+    fun aLongCropLabelWrapsUnderItsPicture() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "No candidate is not a clearance."
+        model.detail = "Nothing is uploaded."
+        val caption = "Possible candidate. Not an identification. ".repeat(6).trim()
+        model.strip = listOf(
+            StripCrop(
+                label = caption,
+                path = "/tmp/openworld-missing-crop.png",
+                frameLabel = "Frame 1.",
+            )
+        )
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val label = compose.onNodeWithText(caption).fetchSemanticsNode()
+        val widthDp = with(compose.density) { label.boundsInRoot.width.toDp() }
+        assertTrue("width $widthDp", widthDp in 100.dp..160.dp)
+        compose.onNodeWithText("Frame 1.").assertExists()
+        compose.onNodeWithText("Crops from this file.").assertExists()
+    }
+
+    @Test
+    fun aLongCropLabelWrapsWhileScanning() {
+        val model = FlowModel()
+        model.step = Step.Estimate
+        model.scanning = true
+        val caption = "Possible candidate. Not an identification. ".repeat(6).trim()
+        model.liveCrops = listOf(LiveCrop(caption, "/tmp/openworld-missing-crop.png", "Frame 1."))
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val label = compose.onNodeWithText(caption).fetchSemanticsNode()
+        val widthDp = with(compose.density) { label.boundsInRoot.width.toDp() }
+        assertTrue("width $widthDp", widthDp in 100.dp..160.dp)
+        compose.onNodeWithText("Frame 1.").assertExists()
+        compose.onNodeWithText("Crops from this file.").assertExists()
     }
 
     private fun shownTexts(): List<String> =

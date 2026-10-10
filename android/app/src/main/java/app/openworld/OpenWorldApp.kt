@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
@@ -25,7 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 internal fun posterLine(title: String, classLabel: String): String {
@@ -155,7 +158,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
                             model.liveCrops.forEach { crop ->
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Column(
+                                    modifier = Modifier.width(140.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
                                     val bitmap = BitmapFactory.decodeFile(crop.path)
                                     if (bitmap != null) {
                                         Image(
@@ -164,8 +171,8 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                             modifier = Modifier.size(112.dp),
                                         )
                                     }
-                                    Text(crop.frameLabel)
-                                    Text(crop.label)
+                                    Text(crop.frameLabel, textAlign = TextAlign.Center)
+                                    Text(crop.label, textAlign = TextAlign.Center)
                                 }
                             }
                         }
@@ -238,7 +245,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 model.strip.forEach { crop ->
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Column(
+                                        modifier = Modifier.width(140.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
                                         val bitmap = BitmapFactory.decodeFile(crop.path)
                                         if (bitmap != null) {
                                             Image(
@@ -247,8 +258,16 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                                 modifier = Modifier.size(112.dp),
                                             )
                                         }
-                                        Text(crop.frameLabel, style = MaterialTheme.typography.bodySmall)
-                                        Text(crop.label, style = MaterialTheme.typography.bodySmall)
+                                        Text(
+                                            crop.frameLabel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                        Text(
+                                            crop.label,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            textAlign = TextAlign.Center,
+                                        )
                                     }
                                 }
                             }
