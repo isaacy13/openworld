@@ -2,8 +2,8 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, POSSIBLE_CANDIDATE,
-    VEHICLE_NOT_PERSON,
+    BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER,
+    PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
 use crate::embed::fixture_probe;
@@ -777,6 +777,7 @@ impl<'a> Engine<'a> {
             let norm = normalize_plate(text);
             posters.into_iter().find(|p| p.plate.as_ref().is_some_and(|plate| normalize_plate(plate) == norm))
         });
+        let read = text.is_some();
         if let (Some(poster), Some(text)) = (matched, text) {
             let frame_path = self.write_frame(index, frame);
             self.candidates.push(Candidate {
@@ -797,10 +798,15 @@ impl<'a> Engine<'a> {
                 leaving: crate::copy::LEAVING.into(),
             });
         }
-        let label = if self.candidates.iter().any(|c| c.kind == "plate" && c.frame_index == index) {
+        let matched_this = self.candidates.iter().any(|c| {
+            c.kind == "plate" && c.frame_index == index && c.track_id == track_id
+        });
+        let label = if matched_this {
             POSSIBLE_CANDIDATE
+        } else if read {
+            PLATE_NOT_ON_POSTER
         } else {
-            BELOW_CUTOFF
+            PLATE_UNREAD
         };
         let item = InventoryItem {
             kind: "plate".into(),
@@ -809,7 +815,7 @@ impl<'a> Engine<'a> {
             det_short_px: det_rect.short(),
             orig_short_px: orig.short(),
             label: label.into(),
-            compared: true,
+            compared: read,
             crop: crop_path,
             fiducial_id: None,
         };

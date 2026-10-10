@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use image::{ImageEncoder, RgbImage};
+use image::{ImageEncoder, Rgb, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
-    BRIEF_FACE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    BRIEF_FACE, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNREAD, POSSIBLE_CANDIDATE,
+    VEHICLE_NOT_PERSON,
 };
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::fiducial::{self, render_face_module, render_plate, render_vehicle};
@@ -206,6 +207,36 @@ fn plate_is_not_read_without_a_published_plate_and_a_vehicle_is_not_a_person() {
     assert!(report.inventory.iter().any(|i| i.kind == "vehicle" && i.label == VEHICLE_NOT_PERSON));
     assert!(report.inventory.iter().all(|i| i.kind != "face"));
     let _ = pack;
+}
+
+#[test]
+fn a_plate_that_does_not_match_is_not_below_a_cutoff() {
+    let bundle = fast();
+    let dir = tempfile::tempdir().unwrap();
+    posters::write_fixture_pack(dir.path(), now()).unwrap();
+    let pack = posters::load_pack(dir.path(), now()).unwrap();
+    let mut other = blank(400, 240);
+    fiducial::place(&mut other, &render_plate("OTHER1", 8).unwrap(), 16, 16);
+    let mismatch = scan_images(&[other], &bundle, &pack, &opts(DetectionSize::Full, Coverage::Complete), &mut |_| {});
+    assert!(mismatch.candidates.is_empty());
+    assert_eq!(mismatch.summary, NO_CLEARANCE);
+    assert!(mismatch.plates_ocr_attempted >= 1);
+    let row = mismatch.inventory.iter().find(|item| item.kind == "plate").unwrap();
+    assert_eq!(row.label, PLATE_NOT_ON_POSTER);
+    assert!(row.compared);
+    assert_ne!(row.label, "Below the locked cutoff. Not a candidate.");
+
+    let mut broken = render_plate("FIX123", 8).unwrap();
+    let pixel = broken.get_pixel(20, 20).0;
+    let flipped = if pixel[0] == 0 { 255 } else { 0 };
+    broken.put_pixel(20, 20, Rgb([flipped, flipped, flipped]));
+    let mut unread = blank(400, 240);
+    fiducial::place(&mut unread, &broken, 16, 16);
+    let failed = scan_images(&[unread], &bundle, &pack, &opts(DetectionSize::Full, Coverage::Complete), &mut |_| {});
+    assert!(failed.candidates.is_empty());
+    let row = failed.inventory.iter().find(|item| item.kind == "plate").unwrap();
+    assert_eq!(row.label, PLATE_UNREAD);
+    assert!(!row.compared);
 }
 
 #[test]

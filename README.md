@@ -12,7 +12,7 @@ Nothing is uploaded. There is no account, no enrollment, and no training on your
 
 This is not NCIC, NCMEC, NamUs, INTERPOL, or an Amber or Silver feed. Amber is a phone emergency broadcast.
 
-Plate text is read only when an enabled poster publishes that plate and the crop passes the quality gate. A vehicle is not a person.
+Plate text is read only when an enabled poster publishes that plate and the crop passes the quality gate. A plate whose text is not on a poster says "This plate text is not published on a poster." A plate that cannot be read says "The plate could not be read." A vehicle is not a person.
 
 ## Quickstart
 
