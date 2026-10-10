@@ -685,7 +685,8 @@ class OpenWorld(Gtk.Application):
                 time.sleep(0.05)
             self._grab(shot)
         self.posters = self.work / "posters"
-        self.out_dir = self.work / "result"
+        # A folder that is not a result stays where it is. The next scan uses a new directory.
+        self.out_dir = self.work / f"result-{time.time_ns()}"
         written = self._run_json(
             ["--json", "--bundles", self.bundles, "posters", "write-fixture", "--out", str(self.posters)],
             "The poster pack could not be read. Refusing.",
@@ -2249,6 +2250,26 @@ class OpenWorld(Gtk.Application):
                 f"{self.estimate_delete.get_text()!r} {self.pick_notice.get_text()!r} {self.input_path!r}"
             )
             return False
+        kept_aside = self.work / "result"
+        kept_aside.mkdir()
+        (kept_aside / "notes.txt").write_text("keep")
+        os.chmod(kept_aside, 0o555)
+        self.out_dir = kept_aside
+        self.start_scan()
+        if (
+            self.out_dir == kept_aside
+            or self.summary.get_text() != "Scanning"
+            or self.stack.get_visible_child_name() != "results"
+            or not (kept_aside / "notes.txt").is_file()
+            or self.scan_thread is None
+        ):
+            os.chmod(kept_aside, 0o755)
+            self._exercise_fail(
+                "Analyze replaced a folder that is not a result: "
+                f"{self.summary.get_text()!r} {self.out_dir}"
+            )
+            return False
+        os.chmod(kept_aside, 0o755)
         Path(os.environ.get("OPENWORLD_STATUS", "/tmp/openworld-exercise.json")).write_text(
             json.dumps({"ok": True, "summary": report.get("summary"), "work": str(self.work)})
         )
