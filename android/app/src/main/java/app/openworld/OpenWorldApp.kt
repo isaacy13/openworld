@@ -111,7 +111,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 }
                             }
                         }
-                        Button(onClick = model::continueFromBundle) { Text("Continue") }
+                        Button(onClick = model::continueFromBundle, enabled = model.bundleRows.isNotEmpty()) { Text("Continue") }
                     }
                     Step.Size -> {
                         Text("Detection size", style = MaterialTheme.typography.headlineMedium)

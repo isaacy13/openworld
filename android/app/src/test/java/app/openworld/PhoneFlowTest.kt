@@ -1096,7 +1096,9 @@ class PhoneScreenTest {
         compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
         compose.onNodeWithText("Model bundle").assertExists()
         compose.onNodeWithText("The scan program is not on this device. Refusing.").assertExists()
-        compose.onNodeWithText("Continue").assertExists()
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        model.continueFromBundle()
+        assertEquals(Step.Bundle, model.step)
     }
 
     @Test
@@ -1112,7 +1114,9 @@ class PhoneScreenTest {
         compose.onNodeWithText("Model bundle").assertExists()
         compose.onNodeWithText("The bundle catalog could not be read. Refusing.").assertExists()
         compose.onAllNodesWithText("The scan program is not on this device. Refusing.").assertCountEquals(0)
-        compose.onNodeWithText("Continue").assertExists()
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        model.continueFromBundle()
+        assertEquals(Step.Bundle, model.step)
     }
 
     @Test

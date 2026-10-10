@@ -192,6 +192,8 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(preview.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
             XCTAssertFalse(preview.contains("Fast. Selected."))
             XCTAssertEqual(preview.last, "Continue")
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .bundle)
             _ = FlowView(model: model, importControl: self.control).body
         }
         if let previous {
@@ -281,6 +283,8 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertEqual(preview.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
             XCTAssertFalse(preview.contains("The scan program is not on this device. Refusing."))
             XCTAssertEqual(preview.last, "Continue")
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .bundle)
             _ = FlowView(model: model, importControl: self.control).body
         }
     }

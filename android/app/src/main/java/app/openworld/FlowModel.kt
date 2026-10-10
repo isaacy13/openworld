@@ -167,7 +167,10 @@ class FlowModel {
             if (selected != null && rows != null) bundleId = rows.getJSONObject(selected).getString("id")
         }
     }
-    fun continueFromBundle() { step = Step.Size }
+    fun continueFromBundle() {
+        if (bundleRows.isEmpty()) return
+        step = Step.Size
+    }
 
     /** The bundle, size, and coverage in the same words as the choices above. */
     fun choiceLine(): String {

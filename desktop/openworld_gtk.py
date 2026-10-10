@@ -1027,6 +1027,8 @@ class OpenWorld(Gtk.Application):
             self.load_bundles()
             self._go("bundle")
         elif name == "bundle":
+            if not self.rows:
+                return
             self._go("size")
         elif name == "size":
             self.refresh_estimate()
@@ -1090,6 +1092,8 @@ class OpenWorld(Gtk.Application):
             self.primary.set_sensitive(False)
         elif name == "estimate":
             self.primary.set_sensitive(self.can_analyze)
+        elif name == "bundle":
+            self.primary.set_sensitive(bool(self.rows))
         else:
             self.primary.set_sensitive(True)
         labels = {
@@ -1379,6 +1383,14 @@ class OpenWorld(Gtk.Application):
             ):
                 self._exercise_fail(f"an empty catalog stayed silent: {self.rows!r} {self.bundle_notice.get_text()!r}")
                 return False
+            self._show("bundle")
+            if self.primary.get_sensitive():
+                self._exercise_fail("an empty catalog offered Continue")
+                return False
+            self.on_primary()
+            if self.stack.get_visible_child_name() != "bundle":
+                self._exercise_fail("an empty catalog left the bundle page")
+                return False
             self.bundles = os.path.join(empty, "missing")
             self.load_bundles()
             if (
@@ -1389,6 +1401,14 @@ class OpenWorld(Gtk.Application):
                 self._exercise_fail(
                     f"an unreadable catalog used the missing-program sentence: {self.rows!r} {self.bundle_notice.get_text()!r}"
                 )
+                return False
+            self._show("bundle")
+            if self.primary.get_sensitive():
+                self._exercise_fail("an unreadable catalog offered Continue")
+                return False
+            self.on_primary()
+            if self.stack.get_visible_child_name() != "bundle":
+                self._exercise_fail("an unreadable catalog left the bundle page")
                 return False
             saved_bin = self.bin
             try:
@@ -1449,6 +1469,9 @@ class OpenWorld(Gtk.Application):
             self._exercise_fail(f"a missing bundle stayed selected: {self.bundle_id}")
             return False
         self._go("bundle")
+        if not self.primary.get_sensitive():
+            self._exercise_fail("a catalog with a model left Continue off")
+            return False
         accurate = self._bundle_row("accurate")
         if accurate is None:
             self._exercise_fail("Accurate is not in the catalog")

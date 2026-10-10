@@ -191,6 +191,12 @@ public final class FlowModel: ObservableObject {
         step = .bundle
     }
 
+    /// An empty or unreadable catalog already says why. Continue does not open the size page.
+    public func continueFromBundles() {
+        guard !bundles.isEmpty else { return }
+        step = .size
+    }
+
     /// A refusal the current page does not already print. An empty catalog prints its own line.
     /// A file that cannot be read stays on the page that already has a file, and that sentence is first.
     public var showsTopError: Bool {
@@ -672,7 +678,8 @@ public struct FlowView: View {
             if model.bundles.isEmpty, let error = model.error, error != "The file could not be read. Refusing." {
                 Text(error)
             }
-            prominent("Continue") { model.step = .size }
+            prominent("Continue") { model.continueFromBundles() }
+                .disabled(model.bundles.isEmpty)
         }
         .padding(model.phone ? 0 : 8)
     }
