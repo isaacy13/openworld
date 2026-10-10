@@ -459,19 +459,17 @@ fn run(cli: Cli) -> Result<i32, String> {
                 Ok(2)
             }
         },
-        Cmd::Measure => {
-            let all = load_bundles(&bundles).map_err(|e| e.refusal())?;
-            let fast = all
-                .into_iter()
-                .find(|b| b.id == "fast")
-                .ok_or("Fast bundle is missing.")?;
-            let measurement = measure_fast(&fast);
-            emit(
-                true,
-                serde_json::to_value(&measurement).map_err(|e| e.to_string())?,
-            );
-            Ok(0)
-        }
+        Cmd::Measure => match require_fast(&bundles) {
+            Ok(fast) => {
+                let measurement = measure_fast(&fast);
+                emit(
+                    true,
+                    serde_json::to_value(&measurement).map_err(|e| e.to_string())?,
+                );
+                Ok(0)
+            }
+            Err(report) => finish_report(cli.json, &report),
+        },
         Cmd::Posters { action } => match action {
             PosterCmd::Check { posters } => {
                 match openworld_core::load_pack(&posters, SystemTime::now()) {
@@ -810,14 +808,26 @@ fn fixture_still(
     if scene && blank_canvas {
         return Err("Choose a scene or a blank still.".into());
     }
-    if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
+    if blank_canvas {
+        ensure_parent(out)?;
+        let image = blank(400, 320);
+        image.save(out).map_err(|e| e.to_string())?;
+        emit(
+            json_mode,
+            json!({ "path": out, "blank": true, "width": 400, "height": 320 }),
+        );
+        return Ok(0);
     }
+    if !scene && module == 0 {
+        return Err("Module size must be at least 1.".into());
+    }
+    let fast = match require_fast(bundles) {
+        Ok(bundle) => bundle,
+        Err(report) => return finish_report(json_mode, &report),
+    };
+    ensure_parent(out)?;
     if scene {
-        let threshold = fast_threshold(bundles)?;
-        let layout = demo_scene(threshold);
+        let layout = demo_scene(fast.threshold);
         layout.image.save(out).map_err(|e| e.to_string())?;
         emit(
             json_mode,
@@ -831,19 +841,7 @@ fn fixture_still(
         );
         return Ok(0);
     }
-    if blank_canvas {
-        let image = blank(400, 320);
-        image.save(out).map_err(|e| e.to_string())?;
-        emit(
-            json_mode,
-            json!({ "path": out, "blank": true, "width": 400, "height": 320 }),
-        );
-        return Ok(0);
-    }
-    if module == 0 {
-        return Err("Module size must be at least 1.".into());
-    }
-    let threshold = fast_threshold(bundles)?;
+    let threshold = fast.threshold;
     let marker = render_face_module(id, module);
     let (mw, mh) = marker.dimensions();
     let (px, py) = match (x, y, below_cutoff) {
@@ -897,22 +895,45 @@ fn find_origin(id: u16, w: u32, h: u32, threshold: f32, below: bool) -> Result<(
     }
 }
 
-fn fast_threshold(bundles: &Path) -> Result<f32, String> {
-    load_bundles(bundles).map_err(|e| e.refusal())?
-        .into_iter()
-        .find(|b| b.id == "fast")
-        .map(|b| b.threshold)
-        .ok_or_else(|| "Fast bundle is missing.".into())
+fn ensure_parent(out: &Path) -> Result<(), String> {
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Fast is the bundle measure, demo, and a placed fixture still run.
+fn require_fast(bundles: &Path) -> Result<openworld_core::Bundle, openworld_core::ScanReport> {
+    let all = match load_bundles(bundles) {
+        Ok(all) => all,
+        Err(err) => return Err(openworld_core::scan::refused("catalog", &err.refusal())),
+    };
+    if all.is_empty() {
+        return Err(openworld_core::scan::refused(
+            "missing_program",
+            "The scan program is not on this device. Refusing.",
+        ));
+    }
+    all.into_iter()
+        .find(|bundle| bundle.id == "fast")
+        .ok_or_else(|| {
+            openworld_core::scan::refused(
+                "bundle_not_found",
+                "That bundle is not in the catalog. Refusing.",
+            )
+        })
 }
 
 fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
+    let fast = match require_fast(bundles) {
+        Ok(bundle) => bundle,
+        Err(report) => return finish_report(json_mode, &report),
+    };
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let posters = out.join("posters");
     let pack = write_fixture_pack(&posters, SystemTime::now()).map_err(|e| e.to_string())?;
-    let fast = load_bundles(bundles).map_err(|e| e.refusal())?
-        .into_iter()
-        .find(|b| b.id == "fast")
-        .ok_or("Fast bundle is missing.")?;
     let scene = demo_scene(fast.threshold);
     let input = out.join("input.png");
     scene.image.save(&input).map_err(|e| e.to_string())?;

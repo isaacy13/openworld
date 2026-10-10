@@ -780,3 +780,116 @@ fn a_result_file_stops_before_the_estimate() {
     assert!(!text.contains("Scanning"), "{text}");
     assert_eq!(fs::read(kept.join("keep.txt")).unwrap(), b"stay");
 }
+
+#[test]
+fn measure_demo_and_a_fixture_still_use_the_catalog_sentence() {
+    let dir = tempfile::tempdir().unwrap();
+    let empty = dir.path().join("empty");
+    fs::create_dir(&empty).unwrap();
+    let missing = "The scan program is not on this device. Refusing.";
+
+    let (code, text, err) = catalog_run(false, &empty, &["measure"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(missing), "{text}");
+    assert!(err.is_empty(), "{err}");
+    assert!(!text.contains("Fast bundle is missing."), "{text}");
+
+    let (code, text, err) = catalog_run(true, &empty, &["measure"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "missing_program");
+    assert_eq!(doc["summary"], missing);
+    assert_eq!(doc["message"], missing);
+    assert!(err.is_empty(), "{err}");
+
+    let demo = dir.path().join("demo");
+    let (code, text, err) = catalog_run(
+        false,
+        &empty,
+        &["demo", "--out", demo.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(missing), "{text}");
+    assert!(!text.contains("Scanning"), "{text}");
+    assert!(!demo.exists());
+
+    let scene = dir.path().join("scenes").join("still.png");
+    let (code, text, err) = catalog_run(
+        false,
+        &empty,
+        &["fixture-still", "--scene", "--out", scene.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.lines().next(), Some(missing), "{text}");
+    assert!(!scene.exists());
+    assert!(!scene.parent().unwrap().exists());
+
+    let marker = dir.path().join("markers").join("face.png");
+    let (code, text, err) = catalog_run(
+        true,
+        &empty,
+        &["fixture-still", "--out", marker.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["refusal"], "missing_program");
+    assert_eq!(doc["message"], missing);
+    assert!(!marker.exists());
+
+    let blank = dir.path().join("blank.png");
+    let (code, text, err) = catalog_run(
+        false,
+        &empty,
+        &["fixture-still", "--blank", "--out", blank.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    assert!(blank.is_file());
+
+    let accurate = dir.path().join("accurate-only");
+    let bundle = accurate.join("accurate");
+    fs::create_dir_all(&bundle).unwrap();
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bundles/accurate/manifest.toml"),
+        bundle.join("manifest.toml"),
+    )
+    .unwrap();
+    let absent = "That bundle is not in the catalog. Refusing.";
+    let demo = dir.path().join("accurate-demo");
+    let (code, text, err) = catalog_run(
+        true,
+        &accurate,
+        &["demo", "--out", demo.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["refusal"], "bundle_not_found");
+    assert_eq!(doc["summary"], absent);
+    assert_eq!(doc["message"], absent);
+    assert!(!demo.exists());
+    assert!(!text.contains("Fast bundle is missing."), "{text}");
+
+    let unreadable = dir.path().join("not-a-catalog");
+    fs::write(&unreadable, b"keep").unwrap();
+    let (code, text, err) = catalog_run(true, &unreadable, &["measure"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["refusal"], "catalog");
+    assert_eq!(doc["message"], "The bundle catalog could not be read. Refusing.");
+    assert_eq!(fs::read(&unreadable).unwrap(), b"keep");
+}
+
+fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
+    let mut cmd = Command::new(bin());
+    if json {
+        cmd.arg("--json");
+    }
+    cmd.arg("--bundles").arg(bundles).args(args);
+    let output = cmd.output().expect("openworld");
+    (
+        output.status.code(),
+        String::from_utf8(output.stdout).expect("stdout"),
+        String::from_utf8(output.stderr).expect("stderr"),
+    )
+}
