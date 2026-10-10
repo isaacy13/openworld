@@ -126,6 +126,10 @@ public final class FlowModel: ObservableObject {
     private var scanRoot: URL?
     /// The catalog sentence currently on the bundle page, so a later catalog can clear it.
     private var catalogNotice: String?
+    /// The estimate refusal, so a later unreadable file does not rename that headline.
+    private var estimateNotice: String?
+    /// The result sentence when there is no report, so a later unreadable file does not rename it.
+    private var resultNotice: String?
 
     public init(phone: Bool) {
         self.phone = phone
@@ -151,6 +155,8 @@ public final class FlowModel: ObservableObject {
         file = url
         report = nil
         error = nil
+        estimateNotice = nil
+        resultNotice = nil
         leavingURL = nil
         leaveError = nil
         deleteNotice = nil
@@ -194,8 +200,13 @@ public final class FlowModel: ObservableObject {
     }
 
     /// The result headline. An empty summary falls through to the error, then Incomplete.
+    /// A file that cannot be read does not replace a refusal or Deleted.
     public var resultHeadline: String {
         if let summary = report?.summary, !summary.isEmpty { return summary }
+        if error == "The file could not be read. Refusing.",
+           let notice = resultNotice, !notice.isEmpty {
+            return notice
+        }
         if let error, !error.isEmpty { return error }
         return Copy.incomplete
     }
@@ -235,15 +246,20 @@ public final class FlowModel: ObservableObject {
     }
 
     /// A refusal the current page does not already print. An empty catalog prints its own line.
-    /// A file that cannot be read stays on the page that already has a file, and that sentence is first.
+    /// A file that cannot be read stays first. A refused estimate, a deleted result, and a result
+    /// that is only a refusal keep that headline.
     public var showsTopError: Bool {
         guard let error, !error.isEmpty else { return false }
         if error == "The file could not be read. Refusing." {
             switch step {
             case .estimate:
-                return estimate != nil
+                if estimate != nil { return true }
+                if let notice = estimateNotice, !notice.isEmpty, notice != error { return true }
+                return false
             case .results:
-                return report != nil
+                if report != nil { return true }
+                if let notice = resultNotice, !notice.isEmpty, notice != error { return true }
+                return false
             default:
                 return true
             }
@@ -263,17 +279,21 @@ public final class FlowModel: ObservableObject {
             estimate = nil
             canAnalyze = false
             error = "The file could not be read. Refusing."
+            estimateNotice = error
             step = .estimate
             return
         }
         do {
             estimate = try core.estimate(input: file, bundle: bundleID, longSide: longSide, coverage: coverage, phone: phone)
             error = nil
+            estimateNotice = nil
             canAnalyze = includeMissing || includeWanted
         } catch {
             estimate = nil
             canAnalyze = false
-            self.error = error.localizedDescription
+            let message = error.localizedDescription
+            estimateNotice = message
+            self.error = message
         }
         step = .estimate
     }
@@ -321,9 +341,16 @@ public final class FlowModel: ObservableObject {
     public var estimateWarning: String? { estimate != nil && oldFile ? Copy.oldFile : nil }
 
     /// A scan that can run is titled Estimate. A refusal is the headline, so the page does not say Estimate.
+    /// A file that cannot be read stays above that headline.
     public var estimateHeadline: String {
         if scanning { return "Scanning" }
-        if estimate == nil, let error, !error.isEmpty { return error }
+        if estimate == nil {
+            if error == "The file could not be read. Refusing.",
+               let notice = estimateNotice, !notice.isEmpty {
+                return notice
+            }
+            if let error, !error.isEmpty { return error }
+        }
         return "Estimate"
     }
 
@@ -362,6 +389,8 @@ public final class FlowModel: ObservableObject {
         deleteNotice = nil
         oldFile = false
         error = nil
+        estimateNotice = nil
+        resultNotice = nil
         estimate = nil
         canAnalyze = true
         coverage = "complete"
@@ -472,6 +501,7 @@ public final class FlowModel: ObservableObject {
         canAnalyze = false
         scanning = false
         error = "The output directory could not be created. Refusing."
+        estimateNotice = error
     }
 
     private func makeScanPaths() -> ScanPaths? {
@@ -500,12 +530,14 @@ public final class FlowModel: ObservableObject {
             let marker = outcome.result.appendingPathComponent("result.json")
             resultDirectory = FileManager.default.fileExists(atPath: marker.path) ? outcome.result : nil
             error = nil
+            resultNotice = nil
         } else {
             report = nil
             resultDirectory = nil
             try? FileManager.default.removeItem(at: outcome.root)
             scanRoot = nil
             error = outcome.error
+            resultNotice = outcome.error
         }
         step = .results
     }
@@ -594,6 +626,7 @@ public final class FlowModel: ObservableObject {
         leavingURL = nil
         leaveError = nil
         error = "Deleted."
+        resultNotice = "Deleted."
     }
 
     private func removeResult() -> Bool {

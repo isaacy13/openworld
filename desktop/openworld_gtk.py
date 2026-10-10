@@ -1383,6 +1383,28 @@ class OpenWorld(Gtk.Application):
         ):
             self._exercise_fail("a refused estimate asked for a poster class")
             return False
+        missing_on_refusal = str(Path(path).with_name("no-such-photo-on-refused-estimate.png"))
+        self.choose_file(missing_on_refusal)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.estimate_title.get_text() != "Bad codec or unreadable file. Refusing."
+            or "warn" not in self.estimate_title.get_css_classes()
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or self.input_path != str(junk)
+            or self.primary.get_visible()
+            or self.missing_button.get_visible()
+            or self.wanted_button.get_visible()
+        ):
+            self._exercise_fail(
+                "a refused estimate renamed itself when a file could not be read: "
+                f"{self.estimate_title.get_text()!r} {self.pick_notice.get_text()!r}"
+            )
+            return False
         aged = time.time() - 40 * 24 * 3600
         os.utime(junk, (aged, aged))
         self.choose_file(str(junk))
@@ -1710,6 +1732,27 @@ class OpenWorld(Gtk.Application):
                 f"a poster pack file still started a scan: {self.summary.get_text()!r} {self.result_note.get_text()!r}"
             )
             return False
+        missing_on_pack = str(Path(path).with_name("no-such-photo-on-poster-pack.png"))
+        self.choose_file(missing_on_pack)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "results"
+            or self.summary.get_text() != "The poster pack could not be read. Refusing."
+            or "warn" not in self.summary.get_css_classes()
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or "Nothing is uploaded." not in self.result_note.get_text()
+            or PHRASES["clearance"] in self.result_note.get_text()
+            or self.delete_button.get_visible()
+        ):
+            self._exercise_fail(
+                "a poster pack refusal renamed itself when a file could not be read: "
+                f"{self.summary.get_text()!r} {self.pick_notice.get_text()!r}"
+            )
+            return False
         result_shot = os.environ.get("OPENWORLD_RESULT_SHOT")
         if result_shot:
             subprocess.run(
@@ -1905,6 +1948,27 @@ class OpenWorld(Gtk.Application):
             or self.delete_notice.get_visible()
         ):
             self._exercise_fail("result remained after delete")
+            return False
+        missing_on_deleted = str(Path(scene or "").with_name("no-such-photo-on-deleted.png"))
+        self.choose_file(missing_on_deleted)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "results"
+            or self.summary.get_text() != "Deleted."
+            or "warn" in self.summary.get_css_classes()
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or self.result_note.get_text()
+            or self.delete_button.get_visible()
+            or self.input_path != scene
+        ):
+            self._exercise_fail(
+                "a deleted result renamed itself when a file could not be read: "
+                f"{self.summary.get_text()!r} {self.pick_notice.get_text()!r} {self.result_note.get_text()!r}"
+            )
             return False
         kept = self.work / "kept-result"
         kept.mkdir()

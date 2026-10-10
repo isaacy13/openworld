@@ -1258,6 +1258,20 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("Wanted").assertCountEquals(0)
         compose.onAllNodesWithText("Choose missing, wanted, or both.").assertCountEquals(0)
         compose.onAllNodesWithText("Analyze").assertCountEquals(0)
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        model.choose(Uri.parse("content://app.openworld/missing-on-refused-estimate.png"), resolver)
+        compose.waitForIdle()
+        val shown = shownTexts()
+        val refusal = shown.indexOf("The file could not be read. Refusing.")
+        val headline = shown.indexOf("Bad codec or unreadable file. Refusing.")
+        assertTrue("$shown", refusal >= 0 && headline > refusal)
+        assertEquals(1, shown.count { it == "The file could not be read. Refusing." })
+        assertEquals(1, shown.count { it == "Bad codec or unreadable file. Refusing." })
+        compose.onAllNodesWithText("Estimate").assertCountEquals(0)
+        compose.onAllNodesWithText("Missing").assertCountEquals(0)
+        compose.onAllNodesWithText("Wanted").assertCountEquals(0)
+        compose.onAllNodesWithText("Analyze").assertCountEquals(0)
+        assertEquals("Bad codec or unreadable file. Refusing.", model.estimateText)
     }
 
     @Test
@@ -1610,6 +1624,19 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("The poster pack is missing. Refusing.").assertCountEquals(0)
         compose.onAllNodesWithText("Delete").assertCountEquals(0)
         compose.onNodeWithText("Choose another file").assertExists()
+        model.choose(Uri.parse("content://app.openworld/missing-on-poster-pack.png"), resolver)
+        compose.waitForIdle()
+        assertEquals("The poster pack could not be read. Refusing.", model.summary)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        val kept = shownTexts()
+        val fileAt = kept.indexOf("The file could not be read. Refusing.")
+        val packAt = kept.indexOf("The poster pack could not be read. Refusing.")
+        assertTrue("$kept", fileAt >= 0 && packAt > fileAt)
+        assertEquals(1, kept.count { it == "The file could not be read. Refusing." })
+        assertEquals(1, kept.count { it == "The poster pack could not be read. Refusing." })
+        assertTrue(model.detail.contains("Nothing is uploaded."))
+        assertFalse(model.detail.contains("No candidate is not a clearance."))
+        compose.onAllNodesWithText("Delete").assertCountEquals(0)
         blocker.delete()
     }
 
@@ -1701,6 +1728,20 @@ class PhoneScreenTest {
         compose.onAllNodesWithText("Delete").assertCountEquals(0)
         assertNotNull(result)
         assertFalse(result!!.exists())
+        model.choose(Uri.parse("content://app.openworld/missing-on-deleted.png"), resolver)
+        compose.waitForIdle()
+        assertEquals("Deleted.", model.summary)
+        assertEquals("The file could not be read. Refusing.", model.pickNotice)
+        assertEquals("", model.detail)
+        val kept = shownTexts()
+        val fileAt = kept.indexOf("The file could not be read. Refusing.")
+        val deletedAt = kept.indexOf("Deleted.")
+        assertTrue("$kept", fileAt >= 0 && deletedAt > fileAt)
+        assertEquals(1, kept.count { it == "The file could not be read. Refusing." })
+        assertEquals(1, kept.count { it == "Deleted." })
+        compose.onAllNodesWithText("Nothing is uploaded.").assertCountEquals(0)
+        compose.onAllNodesWithText("No candidate is not a clearance.").assertCountEquals(0)
+        compose.onAllNodesWithText("Delete").assertCountEquals(0)
     }
 
     @Test
@@ -1740,6 +1781,13 @@ class PhoneScreenTest {
         assertTrue(result.exists())
         assertTrue(result != model.resultDir)
     }
+
+    private fun shownTexts(): List<String> =
+        compose.onAllNodes(SemanticsMatcher("has text") {
+            it.config.getOrNull(SemanticsProperties.Text) != null
+        }, useUnmergedTree = true).fetchSemanticsNodes().map { node ->
+            node.config[SemanticsProperties.Text].joinToString { it.text }
+        }
 }
 
 @RunWith(RobolectricTestRunner::class)

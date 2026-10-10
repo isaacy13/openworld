@@ -131,7 +131,7 @@ public enum PhonePreview {
         if let report = model.report {
             return report.disclosure
         }
-        if let error = model.error, error.contains("Refusing.") {
+        if model.resultHeadline.contains("Refusing.") {
             return Copy.disclosure.filter { $0 != Copy.clearance }
         }
         return []
