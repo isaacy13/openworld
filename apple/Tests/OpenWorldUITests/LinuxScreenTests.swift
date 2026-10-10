@@ -954,6 +954,21 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertTrue(disclosure.contains("No candidate is not a clearance."))
         XCTAssertTrue(disclosure.contains("This file is not authenticated."))
         XCTAssertTrue(disclosure.contains("On-device does not mean the file is real."))
+        let score = "Score 0.98. Fast keeps a candidate at 0.55 and above."
+        let preview = PhonePreview.lines(screen: "results", model: model)
+        XCTAssertTrue(preview.contains(score))
+        XCTAssertFalse(preview.contains { $0.contains("Cosine") || $0.contains("locked cutoff") })
+        XCTAssertFalse(preview.contains { $0.contains("keeps a candidate") && $0.contains(Copy.possible) })
+        XCTAssertTrue(preview.contains("1 frame analyzed."))
+        XCTAssertTrue(preview.contains("Missing and wanted."))
+        XCTAssertTrue(preview.contains("640 px on the long side."))
+        XCTAssertTrue(preview.contains("Every decoded frame."))
+        if let scoreAt = preview.firstIndex(of: score),
+           let posterAt = preview.firstIndex(of: "Fixture subject A (Missing)") {
+            XCTAssertLessThan(scoreAt, posterAt)
+        } else {
+            XCTFail("the score line or the poster line was missing")
+        }
     }
 
     private func row() throws -> BundleRow {
@@ -1127,6 +1142,6 @@ private let estimateJSON = """
 """
 
 private let reportJSON = """
-{"status":"complete","summary":"Possible candidate. Not an identification.","bundle_name":"Fast","perception_note":"Fixture markers were read.","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","No candidate is not a clearance.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":["The file timestamps disagree."],"faces_seen_not_compared":1,"inventory":[{"kind":"face","label":"Possible candidate. Not an identification.","frame_index":0,"frame_label":"Frame 1."},{"kind":"face","label":"Not compared.","frame_index":0,"frame_label":"Frame 1."}],"candidates":[{"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Cosine 0.98 is above the locked cutoff 0.55 for Fast. Possible candidate. Not an identification.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"a"}],"comparisons":[]}
+{"status":"complete","summary":"Possible candidate. Not an identification.","bundle_name":"Fast","frames_note":"1 frame analyzed.","class_note":"Missing and wanted.","detection_note":"640 px on the long side.","coverage_note":"Every decoded frame.","perception_note":"Fixture markers were read.","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","No candidate is not a clearance.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":["The file timestamps disagree."],"faces_seen_not_compared":1,"inventory":[{"kind":"face","label":"Possible candidate. Not an identification.","frame_index":0,"frame_label":"Frame 1."},{"kind":"face","label":"Not compared.","frame_index":0,"frame_label":"Frame 1."}],"candidates":[{"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.98. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"a"}],"comparisons":[]}
 """
 #endif

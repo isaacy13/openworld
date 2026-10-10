@@ -352,15 +352,7 @@ fn run(cli: Cli) -> Result<i32, String> {
                 frames,
                 media.facts()?,
             )?;
-            let mut progress_fn = |event: Progress| {
-                if progress {
-                    if let Ok(line) = serde_json::to_string(&event) {
-                        eprintln!("{line}");
-                    }
-                }
-            };
-            let report = scan_path(&req, &mut progress_fn);
-            finish_report(cli.json, &report)
+            scan_and_report(cli.json, progress, &req)
         }
         Cmd::Analyze {
             input,
@@ -682,8 +674,7 @@ fn analyze(
             return Ok(0);
         }
     }
-    let report = scan_path(&req, &mut |_| {});
-    finish_report(json_mode, &report)
+    scan_and_report(json_mode, false, &req)
 }
 
 fn fixture_still(
@@ -814,9 +805,52 @@ fn demo(bundles: &Path, out: &Path, json_mode: bool) -> Result<i32, String> {
         bundles, &input, "fast", "640", "complete", "computer", "cpu", posters, result, true, true,
         None, None, None,
     )?;
-    let report = scan_path(&req, &mut |_| {});
     let _ = pack;
+    scan_and_report(json_mode, false, &req)
+}
+
+/// Say Scanning, then name each crop the way the screen does, then the report.
+fn scan_and_report(json_mode: bool, progress_json: bool, req: &ScanRequest) -> Result<i32, String> {
+    if !json_mode {
+        println!("Scanning");
+    }
+    let mut named = false;
+    let report = scan_path(req, &mut |event: Progress| {
+        if progress_json {
+            if let Ok(line) = serde_json::to_string(&event) {
+                eprintln!("{line}");
+            }
+        }
+        if json_mode {
+            return;
+        }
+        let Some(lines) = live_crop_lines(&event) else {
+            return;
+        };
+        if !named {
+            println!("Crops from this file.");
+            named = true;
+        }
+        for line in lines {
+            println!("{line}");
+        }
+    });
     finish_report(json_mode, &report)
+}
+
+/// The crop a screen shows while Scanning. The path stands in for the picture.
+fn live_crop_lines(event: &Progress) -> Option<Vec<String>> {
+    if !matches!(event.kind.as_str(), "face" | "plate" | "vehicle") || event.label.is_empty() {
+        return None;
+    }
+    let crop = event.crop.as_ref().filter(|path| !path.is_empty())?;
+    let mut lines = Vec::new();
+    if !event.frame_label.is_empty() {
+        lines.push(event.frame_label.clone());
+    }
+    lines.push(event.label.clone());
+    lines.push(crop.clone());
+    Some(lines)
 }
 
 fn finish_report(json_mode: bool, report: &openworld_core::ScanReport) -> Result<i32, String> {
@@ -1673,6 +1707,57 @@ mod cli_tests {
             parse_class_answer("maybe").unwrap_err(),
             "Choose missing, wanted, or both."
         );
+    }
+
+    #[test]
+    fn a_live_crop_uses_the_words_on_the_screen() {
+        let face = Progress {
+            frame_index: 0,
+            frame_label: "Frame 1.".into(),
+            label: "Possible candidate. Not an identification.".into(),
+            kind: "face".into(),
+            crop: Some("crops/face.png".into()),
+        };
+        assert_eq!(
+            live_crop_lines(&face).unwrap(),
+            vec![
+                "Frame 1.".to_string(),
+                "Possible candidate. Not an identification.".to_string(),
+                "crops/face.png".to_string(),
+            ]
+        );
+        let plate = Progress {
+            frame_index: 1,
+            frame_label: "Frame 2.".into(),
+            label: "No poster publishes a plate.".into(),
+            kind: "plate".into(),
+            crop: Some("crops/plate.png".into()),
+        };
+        assert_eq!(live_crop_lines(&plate).unwrap()[0], "Frame 2.");
+        assert!(live_crop_lines(&Progress {
+            frame_index: 0,
+            frame_label: "Frame 1.".into(),
+            label: "Skipped.".into(),
+            kind: "other".into(),
+            crop: Some("crops/x.png".into()),
+        })
+        .is_none());
+        assert!(live_crop_lines(&Progress {
+            frame_index: 0,
+            frame_label: "Frame 1.".into(),
+            label: String::new(),
+            kind: "vehicle".into(),
+            crop: Some("crops/x.png".into()),
+        })
+        .is_none());
+        assert!(live_crop_lines(&Progress {
+            frame_index: 0,
+            frame_label: "Frame 1.".into(),
+            label: "A vehicle is not a person.".into(),
+            kind: "vehicle".into(),
+            crop: None,
+        })
+        .is_none());
     }
 
     #[test]
