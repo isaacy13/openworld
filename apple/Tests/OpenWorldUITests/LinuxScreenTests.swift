@@ -414,6 +414,21 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
     }
 
+    func testAFileChosenDuringAScanStaysPut() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let file = try self.still("blank")
+            model.choose(file)
+            XCTAssertEqual(model.step, .device)
+            model.scanning = true
+            model.choose(try self.still("scene"))
+            XCTAssertEqual(model.file, file)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.error)
+            XCTAssertTrue(model.scanning)
+        }
+    }
+
     func testAnalyzeSaysScanningUntilTheResultIsReady() async throws {
         let file = try self.still("blank")
         let model = await MainActor.run { () -> FlowModel in

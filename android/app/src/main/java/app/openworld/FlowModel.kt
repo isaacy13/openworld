@@ -102,6 +102,7 @@ class FlowModel {
     internal var fixturePackDirectory: File? = null
 
     fun choose(uri: Uri, resolver: ContentResolver) {
+        if (scanning) return
         val copy = File.createTempFile("openworld", null)
         try {
             val input = resolver.openInputStream(uri) ?: throw IOException("unreadable")

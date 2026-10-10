@@ -1913,6 +1913,25 @@ class OpenWorld(Gtk.Application):
         self.summary.set_text(headline)
         self._show_delete(True)
         self._show("results")
+        held = threading.Event()
+        self.scan_thread = threading.Thread(target=held.wait)
+        self.scan_thread.start()
+        kept_path = self.input_path
+        self.choose_file(scene or "")
+        if (
+            self.stack.get_visible_child_name() != "results"
+            or self.input_path != kept_path
+            or not kept.exists()
+            or self.out_dir != kept
+        ):
+            held.set()
+            self.scan_thread.join(timeout=2)
+            self.scan_thread = None
+            self._exercise_fail("a file chosen during a scan replaced the scan")
+            return False
+        held.set()
+        self.scan_thread.join(timeout=2)
+        self.scan_thread = None
         self.choose_file(scene or "")
         if (
             self.stack.get_visible_child_name() != "device"

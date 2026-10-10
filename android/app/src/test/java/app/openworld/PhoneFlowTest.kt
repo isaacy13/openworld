@@ -855,6 +855,25 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aFileChosenDuringAScanStaysPut() {
+        val model = FlowModel()
+        choose(model, still("blank"))
+        val name = model.fileName
+        val copies = openworldTempFiles()
+        model.scanning = true
+        model.step = Step.Estimate
+        val uri = Uri.parse("content://app.openworld/scene-during-scan.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("scene").inputStream())
+        model.choose(uri, resolver)
+        assertTrue(model.scanning)
+        assertEquals(Step.Estimate, model.step)
+        assertEquals(name, model.fileName)
+        assertNull(model.pickNotice)
+        assertEquals(copies, openworldTempFiles())
+    }
+
+    @Test
     fun chooseAnotherRemovesTheImportedCopy() {
         val before = openworldTempFiles()
         val model = FlowModel()
