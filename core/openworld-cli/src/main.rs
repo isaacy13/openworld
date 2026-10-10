@@ -558,15 +558,17 @@ fn run(cli: Cli) -> Result<i32, String> {
                     .unwrap_or(false);
                 match openworld_core::update::update_posters(allowed, &mut RefuseTransport) {
                     Ok(_) => Ok(0),
-                    Err(err) => {
-                        let message = "Real FBI photos stay off. Fast does not have a curve that allows them.";
+                    Err(_) => {
+                        let message = openworld_core::copy::REAL_POSTERS_OFF;
                         emit(
                             cli.json,
-                            json!({ "status": "refused", "message": message, "detail": err.to_string() }),
+                            json!({
+                                "status": "refused",
+                                "summary": message,
+                                "message": message,
+                            }),
                         );
-                        if !cli.json {
-                            eprintln!("{message}");
-                        }
+                        speak(cli.json, [message]);
                         Ok(2)
                     }
                 }

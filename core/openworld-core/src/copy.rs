@@ -89,6 +89,8 @@ pub const BAD_DETECTION_SIZE: &str =
     "Detection size must be 320, 480, 640, or full. Refusing.";
 pub const BAD_COVERAGE: &str = "Coverage must be complete or measured. Refusing.";
 pub const BAD_FORM_FACTOR: &str = "Form factor must be phone or computer. Refusing.";
+pub const REAL_POSTERS_OFF: &str =
+    "Real FBI photos stay off. Fast does not have a curve that allows them.";
 pub const BUNDLE_NOTE: &str =
     "Scores are not comparable across bundles. Results name the bundle you pick.";
 pub const SIZE_HINT: &str = "Smaller frames are a resize of each decoded frame in memory. A face under 64 px on that image is left out. Evidence crops come from the original frame. If that crop is under 112 px on the short side, the label is \"Not compared.\" Full resolution is slower.";

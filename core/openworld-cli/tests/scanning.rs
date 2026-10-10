@@ -982,6 +982,24 @@ fn an_empty_catalog_names_the_missing_program_on_bundles() {
     assert!(err.is_empty(), "{err}");
 }
 
+#[test]
+fn a_poster_update_prints_the_refusal() {
+    let sentence = "Real FBI photos stay off. Fast does not have a curve that allows them.";
+    let (code, text, err) = run(false, &["posters", "update"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    assert_eq!(text.trim(), sentence);
+    assert!(err.is_empty(), "{err}");
+
+    let (code, text, err) = run(true, &["posters", "update"]);
+    assert_eq!(code, Some(2), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(doc["status"], "refused");
+    assert_eq!(doc["summary"], sentence);
+    assert_eq!(doc["message"], sentence);
+    assert!(doc.get("detail").is_none(), "{text}");
+    assert!(err.is_empty(), "{err}");
+}
+
 fn catalog_run(json: bool, bundles: &std::path::Path, args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());
     if json {

@@ -154,8 +154,8 @@ fn posters(bundles: &Path, parsed: &Parsed) -> Result<Value, String> {
                 }
                 Err(_) => Ok(json!({
                     "status": "refused",
-                    "summary": "Real FBI photos stay off. Fast does not have a curve that allows them.",
-                    "message": "Real FBI photos stay off. Fast does not have a curve that allows them.",
+                    "summary": crate::copy::REAL_POSTERS_OFF,
+                    "message": crate::copy::REAL_POSTERS_OFF,
                 })),
             }
         }
@@ -439,10 +439,9 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(update["status"], "refused");
-        assert_eq!(
-            update["message"],
-            "Real FBI photos stay off. Fast does not have a curve that allows them."
-        );
+        assert_eq!(update["summary"], crate::copy::REAL_POSTERS_OFF);
+        assert_eq!(update["message"], crate::copy::REAL_POSTERS_OFF);
+        assert!(update.get("detail").is_none());
     }
 
     #[test]
