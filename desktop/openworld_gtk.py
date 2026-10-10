@@ -287,12 +287,16 @@ class OpenWorld(Gtk.Application):
         self.missing_button.connect("toggled", self._on_class)
         self.wanted_button.connect("toggled", self._on_class)
         self.class_label = Gtk.Label(label="Missing and wanted.", xalign=0, wrap=True)
+        self.estimate_delete = Gtk.Label(xalign=0, wrap=True)
+        self.estimate_delete.add_css_class("warn")
+        self.estimate_delete.set_visible(False)
         box.append(self.estimate_title)
         box.append(self.estimate_warn)
         box.append(self.estimate_body)
         box.append(self.class_label)
         box.append(self.missing_button)
         box.append(self.wanted_button)
+        box.append(self.estimate_delete)
         return box
 
     def _results_page(self) -> Gtk.Widget:
@@ -388,6 +392,8 @@ class OpenWorld(Gtk.Application):
             if self.stack.get_visible_child_name() != "results":
                 self.pick_notice.set_text(self.delete_notice.get_text() or "The result could not be deleted.")
                 self.pick_notice.set_visible(True)
+            self.estimate_delete.set_text("")
+            self.estimate_delete.set_visible(False)
             return
         self.pick_notice.set_visible(False)
         self.input_path = path
@@ -631,6 +637,27 @@ class OpenWorld(Gtk.Application):
     def start_scan(self) -> None:
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
+        # A result that cannot be deleted stays. The estimate keeps that sentence.
+        kept_delete = (
+            self.pick_notice.get_visible()
+            and self.pick_notice.get_text() not in ("", "The file could not be read. Refusing.")
+        )
+        if not self.release_result():
+            notice = self.delete_notice.get_text() or "The result could not be deleted."
+            if (
+                self.pick_notice.get_visible()
+                and self.pick_notice.get_text() == "The file could not be read. Refusing."
+            ):
+                self.estimate_delete.set_text(notice)
+                self.estimate_delete.set_visible(True)
+            elif not (self.pick_notice.get_visible() and self.pick_notice.get_text() == notice):
+                self.pick_notice.set_text(notice)
+                self.pick_notice.set_visible(True)
+            return
+        if kept_delete:
+            self.pick_notice.set_visible(False)
+        self.estimate_delete.set_text("")
+        self.estimate_delete.set_visible(False)
         self._clear_results()
         self.context_note.set_text("")
         self.result_note.set_text("")
@@ -1105,6 +1132,8 @@ class OpenWorld(Gtk.Application):
             self.pick_notice.set_visible(False)
         self.delete_notice.set_text("")
         self.delete_notice.set_visible(False)
+        self.estimate_delete.set_text("")
+        self.estimate_delete.set_visible(False)
 
     def _go(self, name: str) -> None:
         if self.history[-1] != name:
@@ -1939,6 +1968,53 @@ class OpenWorld(Gtk.Application):
             return False
         headline = self.summary.get_text()
         scene = self.input_path
+        self.go_back()
+        os.chmod(result, 0o555)
+        self.start_scan()
+        os.chmod(result, 0o755)
+        root = self.window.get_child()
+        first = root.get_first_child() if root is not None else None
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.summary.get_text() != headline
+            or self.pick_notice.get_text() != "The result could not be deleted."
+            or not self.pick_notice.get_visible()
+            or "warn" not in self.pick_notice.get_css_classes()
+            or first is not self.pick_notice
+            or self.estimate_delete.get_visible()
+            or self._labels_under(self.page_estimate).count("The result could not be deleted.") != 0
+            or self.primary.get_label() != "Analyze"
+            or self.scan_thread is not None
+            or not (result / "result.json").is_file()
+        ):
+            self._exercise_fail(
+                "Analyze left the estimate while the result could not be deleted: "
+                f"{self.stack.get_visible_child_name()!r} {self.summary.get_text()!r} {self.pick_notice.get_text()!r}"
+            )
+            return False
+        self.pick_notice.set_text("The file could not be read. Refusing.")
+        self.pick_notice.set_visible(True)
+        os.chmod(result, 0o555)
+        self.start_scan()
+        os.chmod(result, 0o755)
+        if (
+            self.stack.get_visible_child_name() != "estimate"
+            or self.summary.get_text() != headline
+            or self.pick_notice.get_text() != "The file could not be read. Refusing."
+            or not self.pick_notice.get_visible()
+            or self.estimate_delete.get_text() != "The result could not be deleted."
+            or not self.estimate_delete.get_visible()
+            or "warn" not in self.estimate_delete.get_css_classes()
+            or self._labels_under(self.page_estimate).count("The result could not be deleted.") != 1
+            or self.primary.get_label() != "Analyze"
+            or self.scan_thread is not None
+            or not (result / "result.json").is_file()
+        ):
+            self._exercise_fail(
+                "Analyze replaced the unread-file sentence when the result could not be deleted: "
+                f"{self.pick_notice.get_text()!r} {self.estimate_delete.get_text()!r}"
+            )
+            return False
         while self.stack.get_visible_child_name() != "device" and len(self.history) > 1:
             self.go_back()
         os.chmod(result, 0o555)
