@@ -187,8 +187,9 @@ public enum GifFrames {
                 canvas = saved
             }
             // The control block covers this image only. A later frame with no
-            // control of its own is opaque. The delay still carries forward.
+            // control of its own stays as drawn. The delay still carries forward.
             transparent = nil
+            disposal = 0
         }
         if frames.isEmpty || delays.count != frames.count { throw bad() }
         return Reel(width: width, height: height, delaysCs: delays, frames: frames)

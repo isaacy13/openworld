@@ -1994,6 +1994,21 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(pixel(reel, 1, 4, 4), [0, 255, 0])
     }
 
+    func testAGifRestoreDoesNotCoverTheNextImage() throws {
+        // The first image restores the background after it is shown. The next
+        // images have no control block. That restore covers only the first image,
+        // so the red picture stays up while a later corner is painted.
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-restore-\(UUID().uuidString).gif")
+        try Data(hex: restoreThenPlainGif).write(to: gif)
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.delaysCs, [10, 10, 10])
+        XCTAssertEqual(reel.frames.count, 3)
+        XCTAssertEqual(pixel(reel, 0, 1, 1), [255, 0, 0])
+        XCTAssertEqual(pixel(reel, 1, 1, 1), [255, 0, 0])
+        XCTAssertEqual(pixel(reel, 2, 0, 0), [255, 255, 255])
+        XCTAssertEqual(pixel(reel, 2, 1, 1), [255, 0, 0])
+    }
+
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
         let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
         try Data(interlacedGif).write(to: gif)
@@ -2708,6 +2723,8 @@ private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {
 }
 
 private let transparentThenPlainGif = "47494638396108000800810300ff000000ff000000ffffffff21f90401190001002c000000000800080000081400010410300080c18308132a5cc8b0a1c3840101002c000000000800080000081400010410302080c18308132a5cc8b0a1c3840101003b"
+
+private let restoreThenPlainGif = "47494638396102000200800000ffffffff000021f904080a0000002c00000000020002000008060003080c1010002c00000000020002000008060003080c1010002c000000000100010000080400010404003b"
 
 private func pixel(_ reel: GifFrames.Reel, _ frame: Int, _ x: Int, _ y: Int) -> [UInt8] {
     let rgb = reel.frames[frame]

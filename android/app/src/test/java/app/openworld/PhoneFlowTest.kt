@@ -1511,6 +1511,22 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aGifRestoreDoesNotCoverTheNextImage() {
+        // The first image restores the background after it is shown. The next
+        // images have no control block. That restore covers only the first image,
+        // so the red picture stays up while a later corner is painted.
+        val gif = File.createTempFile("ow-restore", ".gif")
+        gif.writeBytes(RESTORE_THEN_PLAIN_GIF)
+        val reel = GifFrames.read(gif)
+        assertEquals(listOf(10, 10, 10), reel.delaysCs)
+        assertEquals(3, reel.frames.size)
+        assertEquals(listOf(255, 0, 0), pixel(reel, 0, 1, 1))
+        assertEquals(listOf(255, 0, 0), pixel(reel, 1, 1, 1))
+        assertEquals(listOf(255, 255, 255), pixel(reel, 2, 0, 0))
+        assertEquals(listOf(255, 0, 0), pixel(reel, 2, 1, 1))
+    }
+
+    @Test
     fun anInterlacedGifKeepsThePixelsOfThatFrame() {
         val gif = File.createTempFile("ow-inter", ".gif")
         gif.writeBytes(INTERLACED_GIF)
@@ -3973,6 +3989,12 @@ private val TRANSPARENT_THEN_PLAIN_GIF = (
     "47494638396108000800810300ff000000ff000000ffffffff21f90401190001002c" +
         "000000000800080000081400010410300080c18308132a5cc8b0a1c3840101002c" +
         "000000000800080000081400010410302080c18308132a5cc8b0a1c3840101003b"
+    ).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+private val RESTORE_THEN_PLAIN_GIF = (
+    "47494638396102000200800000ffffffff000021f904080a0000002c000000000200020000" +
+        "08060003080c1010002c00000000020002000008060003080c1010002c000000000100010000" +
+        "080400010404003b"
     ).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
 private val INTERLACED_GIF = (
