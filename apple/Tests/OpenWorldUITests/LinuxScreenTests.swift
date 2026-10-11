@@ -1724,6 +1724,19 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertNil(JpegOrientation.tiffPageTags(Data([0x89, 0x50, 0x4E, 0x47])))
     }
 
+    func testALaterGifFrameKeepsAColorThePreviousFrameCalledTransparent() throws {
+        // The first frame calls green transparent. The next frame has no control
+        // block and paints the picture with that green. The control covered only
+        // the first image, so the green picture is on screen.
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-scope-\(UUID().uuidString).gif")
+        try Data(hex: transparentThenPlainGif).write(to: gif)
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.delaysCs, [25, 25])
+        XCTAssertEqual(reel.frames.count, 2)
+        XCTAssertEqual(pixel(reel, 0, 4, 4), [255, 0, 0])
+        XCTAssertEqual(pixel(reel, 1, 4, 4), [0, 255, 0])
+    }
+
     func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
         let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
         try Data(interlacedGif).write(to: gif)
@@ -2409,6 +2422,14 @@ private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {
     let payload: [UInt8] = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00] + tiff
     let length = payload.count + 2
     return [0xFF, 0xD8, 0xFF, 0xE1, UInt8(length >> 8), UInt8(length & 0xFF)] + payload + [0xFF, 0xD9]
+}
+
+private let transparentThenPlainGif = "47494638396108000800810300ff000000ff000000ffffffff21f90401190001002c000000000800080000081400010410300080c18308132a5cc8b0a1c3840101002c000000000800080000081400010410302080c18308132a5cc8b0a1c3840101003b"
+
+private func pixel(_ reel: GifFrames.Reel, _ frame: Int, _ x: Int, _ y: Int) -> [UInt8] {
+    let rgb = reel.frames[frame]
+    let at = (y * reel.width + x) * 3
+    return [rgb[at], rgb[at + 1], rgb[at + 2]]
 }
 
 private let interlacedGif = Data(hex: "47494638376110001000810000ffffff0000000000000000002c000000001000100040082f0003081c281080c18308132a3c4890e0c287101b0e7c28b120c48b182356a4b87161c5001c25661c49b2a449830101003b")

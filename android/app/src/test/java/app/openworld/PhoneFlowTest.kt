@@ -1220,6 +1220,20 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aLaterGifFrameKeepsAColorThePreviousFrameCalledTransparent() {
+        // The first frame calls green transparent. The next frame has no control
+        // block and paints the picture with that green. The control covered only
+        // the first image, so the green picture is on screen.
+        val gif = File.createTempFile("ow-scope", ".gif")
+        gif.writeBytes(TRANSPARENT_THEN_PLAIN_GIF)
+        val reel = GifFrames.read(gif)
+        assertEquals(listOf(25, 25), reel.delaysCs)
+        assertEquals(2, reel.frames.size)
+        assertEquals(listOf(255, 0, 0), pixel(reel, 0, 4, 4))
+        assertEquals(listOf(0, 255, 0), pixel(reel, 1, 4, 4))
+    }
+
+    @Test
     fun anInterlacedGifKeepsThePixelsOfThatFrame() {
         val gif = File.createTempFile("ow-inter", ".gif")
         gif.writeBytes(INTERLACED_GIF)
@@ -3649,6 +3663,18 @@ private fun still(kind: String): File {
     if (code != 0) error(text)
     return out
 }
+
+private fun pixel(reel: GifFrames.Reel, frame: Int, x: Int, y: Int): List<Int> {
+    val rgb = reel.frames[frame]
+    val at = (y * reel.width + x) * 3
+    return listOf(rgb[at].toInt() and 0xFF, rgb[at + 1].toInt() and 0xFF, rgb[at + 2].toInt() and 0xFF)
+}
+
+private val TRANSPARENT_THEN_PLAIN_GIF = (
+    "47494638396108000800810300ff000000ff000000ffffffff21f90401190001002c" +
+        "000000000800080000081400010410300080c18308132a5cc8b0a1c3840101002c" +
+        "000000000800080000081400010410302080c18308132a5cc8b0a1c3840101003b"
+    ).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
 private val INTERLACED_GIF = (
     "47494638376110001000810000ffffff0000000000000000002c00000000100010004008" +
