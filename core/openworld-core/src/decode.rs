@@ -40,6 +40,8 @@ pub struct Probe {
     pub video: bool,
     /// The stored pixels are not square. Width and height are the displayed size.
     pub square_pixels: bool,
+    /// Which video stream a player shows, as `v:N`. Stills leave this at 0.
+    pub shown_stream: usize,
 }
 
 #[derive(Debug)]
@@ -109,6 +111,7 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
         container_created: None,
         video: moving,
         square_pixels: false,
+        shown_stream: 0,
     })
 }
 
@@ -266,6 +269,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
         container_created: None,
         video: false,
         square_pixels: false,
+        shown_stream: 0,
     })
 }
 
@@ -286,6 +290,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         container_created: None,
         video: false,
         square_pixels: false,
+        shown_stream: 0,
     };
     let mut frame = None;
     let stats = decode_video(path, &stored, &mut |_, image| {
@@ -318,6 +323,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
             container_created: None,
             video: false,
             square_pixels: false,
+            shown_stream: 0,
         },
     })
 }
@@ -440,6 +446,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         container_created: None,
         video: false,
         square_pixels: false,
+        shown_stream: 0,
     })
 }
 
@@ -638,12 +645,16 @@ fn read_u32(bytes: &[u8], offset: usize, little: bool) -> Option<u32> {
 }
 
 fn probe_video(path: &Path) -> Result<Probe, MediaError> {
+    // A file can carry a small track before the picture a player shows. `v:0` is
+    // that first track. The player shows a default track, and the largest of those.
+    let shown = shown_video_stream(path)?;
+    let selector = format!("v:{shown}");
     let output = Command::new("ffprobe")
         .args([
             "-v",
             "error",
             "-select_streams",
-            "v:0",
+            &selector,
             "-show_entries",
             "stream=width,height,sample_aspect_ratio,avg_frame_rate,codec_name,nb_frames,duration:stream_tags=DURATION:stream_side_data=rotation",
             "-show_entries",
@@ -713,7 +724,56 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         container_created: created,
         video: true,
         square_pixels,
+        shown_stream: shown,
     })
+}
+
+/// The `v:N` index of the video a player shows.
+///
+/// Tracks marked default win. Among those, the largest picture wins. An earlier
+/// track wins a tie. A file with no default track uses every video track.
+fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,width,height:stream_disposition=default",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .map_err(|_| MediaError::BadCodec)?;
+    if !output.status.success() {
+        return Err(MediaError::BadCodec);
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).map_err(|_| MediaError::BadCodec)?;
+    let streams = value.get("streams").and_then(|s| s.as_array()).ok_or(MediaError::BadCodec)?;
+    let mut videos = Vec::new();
+    for stream in streams {
+        if stream.get("codec_type").and_then(|v| v.as_str()) != Some("video") {
+            continue;
+        }
+        let width = json_u32(stream.get("width")).unwrap_or(0);
+        let height = json_u32(stream.get("height")).unwrap_or(0);
+        let default_track = stream.pointer("/disposition/default").and_then(|v| v.as_i64()) == Some(1);
+        videos.push((u64::from(width) * u64::from(height), default_track));
+    }
+    if videos.is_empty() {
+        return Err(MediaError::BadCodec);
+    }
+    let any_default = videos.iter().any(|(_, default_track)| *default_track);
+    let mut chosen: Option<(usize, u64)> = None;
+    for (index, (area, default_track)) in videos.iter().enumerate() {
+        if any_default && !default_track {
+            continue;
+        }
+        if chosen.map(|(_, best)| *area > best).unwrap_or(true) {
+            chosen = Some((index, *area));
+        }
+    }
+    chosen.map(|(index, _)| index).ok_or(MediaError::BadCodec)
 }
 
 /// How many pictures `picture` seconds at `fps` is. `None` when that count does not
@@ -764,7 +824,10 @@ fn parse_clock(text: &str) -> Option<f64> {
 
 fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
     let mut command = Command::new("ffmpeg");
+    let mapped = format!("0:v:{}", info.shown_stream);
     command.args(["-v", "error", "-i"]).arg(path);
+    // The same track the probe measured. The default map can be a different one.
+    command.args(["-map", &mapped]);
     if info.square_pixels {
         command.args(["-vf", "scale=iw*sar:ih,setsar=1"]);
     }

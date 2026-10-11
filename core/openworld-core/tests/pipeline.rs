@@ -2072,6 +2072,72 @@ fn a_webp_with_camera_orientation_is_scanned_as_shown() {
 }
 
 #[test]
+fn a_larger_video_track_is_scanned_as_shown() {
+    // The first track is a small blank. A player shows the larger track, and that
+    // track is the scene. Reading the larger track as the small track's size
+    // clears a file the player is showing.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let blank = dir.path().join("blank.mp4");
+    let movie = dir.path().join("scene.mp4");
+    let both = dir.path().join("both.mp4");
+    let blank_ok = Command::new("ffmpeg")
+        .args([
+            "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=0.1", "-an", "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+        ])
+        .arg(&blank)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank_ok.success());
+    let scene_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(scene_ok.success());
+    let muxed = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&blank)
+        .arg("-i")
+        .arg(&movie)
+        .args(["-map", "0:v:0", "-map", "1:v:0", "-c", "copy"])
+        .arg(&both)
+        .status()
+        .expect("ffmpeg");
+    assert!(muxed.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: both,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 8);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+#[test]
 fn a_video_with_display_rotation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();
     let scene = demo_scene(fast().threshold);
