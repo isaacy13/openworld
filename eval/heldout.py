@@ -337,6 +337,8 @@ def main() -> int:
         "mkv_held_candidate": 0,
         "avi_held_candidate": 0,
         "theora_candidate": 0,
+        "cropped_candidate": 0,
+        "apng_rate_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -756,6 +758,56 @@ def main() -> int:
             fail(f"theora candidates {report.get('candidates')}")
         counts["theora_candidate"] += 1
 
+        stored = root / "crop-stored.mp4"
+        cropped = root / "cropped.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-frames:v", "4", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            str(stored),
+        ])
+        if proc.returncode != 0 or not stored.is_file():
+            fail(proc.stderr or "crop source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(stored),
+            "-an", "-c", "copy",
+            "-bsf:v", "h264_metadata=crop_left=8:crop_right=8:crop_top=8:crop_bottom=8",
+            str(cropped),
+        ])
+        if proc.returncode != 0 or not cropped.is_file():
+            fail(proc.stderr or "cropped video was not written")
+        report = scan(args.bin, args.bundles, posters, cropped, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"cropped summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("frames_decoded"):
+            fail(f"cropped decoded {report.get('frames_decoded')} frames")
+        if not any(item.get("kind") == "face" for item in report.get("candidates") or []):
+            fail(f"cropped candidates {report.get('candidates')}")
+        counts["cropped_candidate"] += 1
+
+        rated = root / "apng-stored.mp4"
+        unrated = root / "unrated.apng"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-frames:v", "2", "-r", "2", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            str(rated),
+        ])
+        if proc.returncode != 0 or not rated.is_file():
+            fail(proc.stderr or "apng source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(rated),
+            "-plays", "1", "-f", "apng", str(unrated),
+        ])
+        if proc.returncode != 0 or not unrated.is_file():
+            fail(proc.stderr or "unrated apng was not written")
+        report = scan(args.bin, args.bundles, posters, unrated, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"unrated apng summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("frames_decoded"):
+            fail(f"unrated apng decoded {report.get('frames_decoded')} frames")
+        if not any(item.get("kind") == "face" for item in report.get("candidates") or []):
+            fail(f"unrated apng candidates {report.get('candidates')}")
+        counts["apng_rate_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -1087,6 +1139,8 @@ def main() -> int:
         or counts["mkv_held_candidate"] != 1
         or counts["avi_held_candidate"] != 1
         or counts["theora_candidate"] != 1
+        or counts["cropped_candidate"] != 1
+        or counts["apng_rate_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
