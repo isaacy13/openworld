@@ -171,6 +171,46 @@ def main() -> None:
             raise SystemExit(
                 f"the long crop label is under the scrollbar: {long_bounds}, bar {long_bar}, window {width}x{height}"
             )
+        from gi.repository import Gtk
+
+        for _ in range(14):
+            app.detail.append(
+                Gtk.Label(label="Possible candidate. Not an identification. " * 6, wrap=True, xalign=0)
+            )
+        pump(context, 25)
+        vadj = app.results_scroll.get_vadjustment()
+        if vadj.get_upper() <= vadj.get_page_size() + 1:
+            raise SystemExit(
+                f"the result did not grow a vertical scrollbar: {vadj.get_upper()} {vadj.get_page_size()}"
+            )
+        vadj.set_value(max(0.0, vadj.get_upper() - vadj.get_page_size()))
+        pump(context, 20)
+        tall_caption = app.strip.get_last_child().get_last_child()
+        tall_bounds = bounds(app.window, tall_caption)
+        tall_bar = bounds(app.window, app.strip_scroll.get_hscrollbar())
+        tall_covered = (
+            tall_bounds is None
+            or tall_bar is None
+            or tall_caption.get_text() != long
+            or tall_bounds[3] < 20
+            or tall_bounds[1] < 0
+            or tall_bounds[1] + tall_bounds[3] > height
+            or tall_bounds[1] + tall_bounds[3] > tall_bar[1] + 1
+            or tall_bounds[0] < 0
+            or tall_bounds[0] + tall_bounds[2] > width
+        )
+        if tall_covered:
+            raise SystemExit(
+                "a long result put the crop label under the scrollbar: "
+                f"{tall_bounds}, bar {tall_bar}, window {width}x{height}"
+            )
+        child = app.detail.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            app.detail.remove(child)
+            child = nxt
+        vadj.set_value(0)
+        pump(context, 15)
         app.summary.set_text("No candidate is not a clearance.")
         app._fill_strip(
             {

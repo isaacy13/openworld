@@ -922,11 +922,7 @@ class OpenWorld(Gtk.Application):
         picture = Gtk.Picture.new_for_filename(str(path))
         picture.set_size_request(112, 112)
         picture.set_can_shrink(False)
-        caption = Gtk.Label(label=label, wrap=True, justify=Gtk.Justification.CENTER)
-        # width_chars keeps the column at the wrap width. A narrower column
-        # makes the label taller than the row, and the scrollbar covers it.
-        caption.set_width_chars(18)
-        caption.set_max_width_chars(18)
+        caption = self._crop_caption(label)
         box.append(picture)
         frame = event.get("frame_label") or ""
         if frame:
@@ -1046,6 +1042,19 @@ class OpenWorld(Gtk.Application):
             parent.queue_allocate()
         return False
 
+    def _crop_caption(self, text: str) -> Gtk.Label:
+        caption = Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER)
+        caption.set_width_chars(18)
+        caption.set_max_width_chars(18)
+        _minimum, width, _min_baseline, _nat_baseline = caption.measure(Gtk.Orientation.HORIZONTAL, -1)
+        _minimum_height, height, _min_baseline, _nat_baseline = caption.measure(
+            Gtk.Orientation.VERTICAL, width
+        )
+        # A tall result allocates this row's minimum height. That minimum is one
+        # line, so the rest of a wrapped label slides under the scrollbar.
+        caption.set_size_request(width, height)
+        return caption
+
     def _clear_strip(self) -> None:
         child = self.strip.get_first_child()
         while child is not None:
@@ -1071,9 +1080,7 @@ class OpenWorld(Gtk.Application):
             picture.set_size_request(112, 112)
             picture.set_can_shrink(False)
             frame = Gtk.Label(label=item.get("frame_label") or "", xalign=0.5)
-            caption = Gtk.Label(label=item.get("label", ""), wrap=True, justify=Gtk.Justification.CENTER)
-            caption.set_width_chars(18)
-            caption.set_max_width_chars(18)
+            caption = self._crop_caption(item.get("label", ""))
             box.append(picture)
             box.append(frame)
             box.append(caption)
