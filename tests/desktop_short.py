@@ -37,6 +37,15 @@ def pump(context, ticks: int = 12) -> None:
         time.sleep(0.02)
 
 
+def line_px(label) -> float:
+    if label is None or label.get_layout() is None or label.get_layout().get_line_count() < 1:
+        return 0
+    from gi.repository import Pango
+
+    _ink, logical = label.get_layout().get_line_readonly(0).get_extents()
+    return logical.height / Pango.SCALE
+
+
 def bounds(window, widget):
     found = widget.compute_bounds(window)
     if not found:
@@ -181,6 +190,25 @@ def main() -> None:
                 "the bundle curve left a narrow window: "
                 f"window {width}x{app.window.get_height()}, curve {curve_box}, lines {curve_lines}"
             )
+        name = None
+
+        def find_name(widget):
+            nonlocal name
+            if isinstance(widget, Gtk.Label) and widget.get_text() == "Fast. Selected.":
+                name = widget
+            child = widget.get_first_child()
+            while child is not None:
+                find_name(child)
+                child = child.get_next_sibling()
+
+        find_name(app.page_bundle)
+        name_line = line_px(name)
+        curve_line = line_px(curve)
+        if name is None or name_line + 1 < curve_line:
+            raise SystemExit(
+                "the bundle name shrank under the large font: "
+                f"name {name_line}, curve {curve_line}"
+            )
         app._go("device")
         app.window.set_default_size(900, 640)
         pump(context, 12)
@@ -197,6 +225,36 @@ def main() -> None:
             raise SystemExit(
                 "the file page left a short window: "
                 f"window {app.window.get_width()}x{height}, last {None if last is None else last.get_text()!r} {box}"
+            )
+        title = app.page_device.get_first_child()
+        body = None
+        child = app.page_device.get_first_child()
+        while child is not None:
+            if isinstance(child, Gtk.Label) and child.get_text() == "Nothing is uploaded.":
+                body = child
+            child = child.get_next_sibling()
+        title_line = line_px(title)
+        body_line = line_px(body)
+        if title is None or body is None or title_line <= body_line:
+            raise SystemExit(
+                "the page title shrank under the large font: "
+                f"title {title_line}, body {body_line}"
+            )
+        app.window.set_default_size(560, 700)
+        pump(context, 12)
+        width = app.window.get_width()
+        title_box = bounds(app.window, title)
+        title_inside = (
+            title_box is not None
+            and width <= 600
+            and title_box[0] >= -1
+            and title_box[0] + title_box[2] <= width + 1
+            and not title.get_layout().is_ellipsized()
+        )
+        if not title_inside:
+            raise SystemExit(
+                "the page title left a narrow window: "
+                f"window {width}x{app.window.get_height()}, title {title_box}, lines {title.get_layout().get_line_count()}"
             )
     finally:
         app.do_shutdown()

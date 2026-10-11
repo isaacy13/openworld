@@ -221,8 +221,8 @@ class OpenWorld(Gtk.Application):
         css = Gtk.CssProvider()
         css.load_from_data(
             b"""
-            .title { font-size: 22px; font-weight: 700; }
-            .section { font-size: 16px; font-weight: 600; }
+            .title { font-size: 1.5em; font-weight: 700; }
+            .section { font-size: 1.09em; font-weight: 600; }
             .dim { opacity: 0.72; }
             .warn { color: #8a5a00; }
             """
@@ -233,7 +233,8 @@ class OpenWorld(Gtk.Application):
 
     def _choose_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        title = Gtk.Label(label="Choose a photo or video", xalign=0)
+        title = Gtk.Label(label="Choose a photo or video", xalign=0, wrap=True)
+        title.set_hexpand(True)
         title.add_css_class("title")
         hint = Gtk.Label(
             label="Import a file you already have. Drop it here, or use Choose File. There is no camera.",
@@ -252,7 +253,8 @@ class OpenWorld(Gtk.Application):
 
     def _device_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        title = Gtk.Label(label=PHRASES["on_device"], xalign=0)
+        title = Gtk.Label(label=PHRASES["on_device"], xalign=0, wrap=True)
+        title.set_hexpand(True)
         title.add_css_class("title")
         self.file_label = Gtk.Label(xalign=0, wrap=True)
         self.file_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
@@ -304,7 +306,8 @@ class OpenWorld(Gtk.Application):
 
     def _size_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        title = Gtk.Label(label="Detection size", xalign=0)
+        title = Gtk.Label(label="Detection size", xalign=0, wrap=True)
+        title.set_hexpand(True)
         title.add_css_class("title")
         hint = Gtk.Label(
             label=(
@@ -342,7 +345,8 @@ class OpenWorld(Gtk.Application):
             self.size_buttons[value] = button
             box.append(button)
         self._mark_sizes()
-        cover = Gtk.Label(label="Coverage", xalign=0)
+        cover = Gtk.Label(label="Coverage", xalign=0, wrap=True)
+        cover.set_hexpand(True)
         cover.add_css_class("section")
         cover.set_margin_top(12)
         box.append(cover)
@@ -416,7 +420,8 @@ class OpenWorld(Gtk.Application):
         self.result_note = Gtk.Label(xalign=0, wrap=True)
         self.result_note.add_css_class("dim")
         self.result_note.set_visible(False)
-        self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0)
+        self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0, wrap=True)
+        self.strip_heading.set_hexpand(True)
         self.strip_heading.add_css_class("section")
         self.strip_heading.set_visible(False)
         self.strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
