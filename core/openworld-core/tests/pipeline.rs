@@ -1244,6 +1244,123 @@ fn a_held_matroska_picture_is_on_screen_without_a_frame_count() {
 }
 
 #[test]
+fn an_avi_hold_is_the_picture_on_screen() {
+    // The AVI header counts a nominal rate. Eight stored pictures become 66,
+    // so measured coverage keeps the first picture and a full scan is unfinished.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    for index in 0..8 {
+        let path = dir.path().join(format!("f{index:02}.png"));
+        let image = if index == 3 {
+            scene.image.clone()
+        } else {
+            let mut plain = blank(width, height);
+            plain.put_pixel(index, 0, image::Rgb([index.saturating_mul(20) as u8, 1, 1]));
+            plain
+        };
+        image.save(&path).unwrap();
+    }
+    let steady = dir.path().join("steady.mp4");
+    let held = dir.path().join("held.mp4");
+    let movie = dir.path().join("held.avi");
+    let encoded = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-framerate",
+            "25",
+            "-start_number",
+            "0",
+            "-i",
+        ])
+        .arg(dir.path().join("f%02d.png"))
+        .args([
+            "-frames:v",
+            "8",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-g",
+            "1",
+            "-bf",
+            "0",
+        ])
+        .arg(&steady)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let stamped = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&steady)
+        .args([
+            "-c",
+            "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,4),PTS,PTS+12800)':dts='if(lt(N\\,4),DTS,DTS+12800)'",
+        ])
+        .arg(&held)
+        .status()
+        .expect("ffmpeg");
+    assert!(stamped.success());
+    let copied = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&held)
+        .args(["-c", "copy"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(copied.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = |coverage: Coverage, name: &str| ScanRequest {
+        input: movie.clone(),
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack.clone(),
+        out_dir: dir.path().join(name),
+        detection: DetectionSize::Px(640),
+        coverage,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let measured = scan_path(&request(Coverage::Measured, "measured"), &mut |_| {});
+    assert_eq!(measured.status, "complete", "{}", measured.message);
+    assert_eq!(measured.frames_decoded, 8, "{}", measured.message);
+    assert_eq!(measured.summary, POSSIBLE_CANDIDATE, "{}", measured.message);
+    let estimate = openworld_core::scan::estimate_for(&request(Coverage::Measured, "estimate")).expect("estimate");
+    assert_eq!(estimate.frames_analyzed, measured.frames_analyzed);
+    assert!(
+        measured.candidates.iter().any(|candidate| candidate.kind == "face" && candidate.frame_index == 3),
+        "analyzed {} {:?}",
+        measured.frames_analyzed,
+        measured
+            .candidates
+            .iter()
+            .map(|candidate| candidate.frame_index)
+            .collect::<Vec<_>>()
+    );
+    let complete = scan_path(&request(Coverage::Complete, "complete"), &mut |_| {});
+    assert_eq!(complete.status, "complete", "{}", complete.message);
+    assert_eq!(complete.frames_decoded, 8, "{}", complete.message);
+    assert_eq!(complete.summary, POSSIBLE_CANDIDATE, "{}", complete.message);
+    assert!(
+        complete.candidates.iter().any(|candidate| candidate.kind == "face" && candidate.frame_index == 3),
+        "{:?}",
+        complete.candidates.iter().map(|candidate| candidate.frame_index).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     let dir = tempfile::tempdir().unwrap();
     let frames = dir.path().join("frames");

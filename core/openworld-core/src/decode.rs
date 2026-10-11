@@ -1237,13 +1237,22 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     let presented = presented_frames(picture, fps);
     // nb_frames counts every stored sample. An edit list can hide some of them.
     // The stream duration is the length a player shows.
-    // Matroska and WebM often omit nb_frames and keep the nominal rate. Duration
-    // times that rate counts pictures that were never stored, and measured
-    // coverage then skips the picture that stays on screen. The packets are
-    // the pictures.
-    let exact = nb.or_else(|| video_packet_count(path, shown));
-    let frames = match (exact, presented) {
-        (Some(exact), Some(presented)) if nb.is_some() && presented > 0 && presented < exact => presented,
+    // Matroska omits nb_frames. AVI can store a nominal rate instead, so the
+    // header count is larger than the pictures. The packets are the pictures.
+    // A smaller header count is left alone: that is the edit list.
+    let packets = video_packet_count(path, shown);
+    let header_matches_packets = match (nb, packets) {
+        (Some(listed), Some(counted)) => counted == 0 || counted >= listed,
+        (Some(_), None) => true,
+        (None, _) => false,
+    };
+    let stored = match (nb, packets) {
+        (Some(listed), Some(counted)) if counted > 0 && counted < listed => Some(counted),
+        (Some(listed), _) => Some(listed),
+        (None, packets) => packets,
+    };
+    let frames = match (stored, presented) {
+        (Some(exact), Some(presented)) if header_matches_packets && presented > 0 && presented < exact => presented,
         (Some(exact), _) => exact,
         (None, Some(presented)) => presented,
         (None, None) => return Err(MediaError::BadCodec),
@@ -1254,7 +1263,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         fps,
         duration_sec: if picture > 0.0 { picture } else { duration },
         frames,
-        frames_exact: exact.is_some(),
+        frames_exact: stored.is_some(),
         container_created: created,
         video: true,
         square_pixels,
@@ -1311,8 +1320,9 @@ fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
     chosen.map(|(index, _)| index).ok_or(MediaError::BadCodec)
 }
 
-/// Stored pictures when the container does not report `nb_frames`.
+/// Stored pictures in the shown track.
 /// One packet is one picture for the tracks this scan reads. Zero is not a count.
+/// An AVI header can count a nominal rate instead, so this count wins when it is smaller.
 fn video_packet_count(path: &Path, shown: usize) -> Option<u64> {
     let selector = format!("v:{shown}");
     let output = Command::new("ffprobe")

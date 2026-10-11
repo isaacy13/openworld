@@ -12,6 +12,7 @@ orientation tag, a 16-bit TIFF with that tag, a palette TIFF, a bilevel TIFF,
 a YCbCr TIFF, a subsampled YCbCr TIFF, a two-page TIFF whose marker is only on the second page,
 a video whose edit list hides the samples a player does not show,
 a Matroska file that does not store a frame count, with the marker on the picture that stays up,
+an AVI file whose header counts a nominal rate, with the marker on the picture that stays up,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
@@ -332,6 +333,7 @@ def main() -> int:
         "apng_later_candidate": 0,
         "held_later_candidate": 0,
         "mkv_held_candidate": 0,
+        "avi_held_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -694,6 +696,45 @@ def main() -> int:
             fail(f"held matroska candidates were not on the picture that stays up: {found}")
         counts["mkv_held_candidate"] += 1
 
+        avi_steady = root / "steady-avi.mp4"
+        avi_stamped = root / "stamped-avi.mp4"
+        avi_held = root / "held-screen.avi"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "25", "-start_number", "0",
+            "-i", str(root / "m%d.png"), "-frames:v", "4", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0",
+            str(avi_steady),
+        ])
+        if proc.returncode != 0 or not avi_steady.is_file():
+            fail(proc.stderr or "steady avi source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(avi_steady), "-c", "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,2),PTS,PTS+12800)':dts='if(lt(N\\,2),DTS,DTS+12800)'",
+            str(avi_stamped),
+        ])
+        if proc.returncode != 0 or not avi_stamped.is_file():
+            fail(proc.stderr or "stamped avi source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(avi_stamped), "-c", "copy", str(avi_held),
+        ])
+        if proc.returncode != 0 or not avi_held.is_file():
+            fail(proc.stderr or "held avi was not written")
+        report = scan(args.bin, args.bundles, posters, avi_held, out, "measured")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"held avi summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 4:
+            fail(f"held avi decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
+            fail(f"held avi candidates were not on the picture that stays up: {found}")
+        report = scan(args.bin, args.bundles, posters, avi_held, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"held avi full scan {report.get('status')!r} {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 4:
+            fail(f"held avi full scan decoded {report.get('frames_decoded')} frames")
+        counts["avi_held_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -986,6 +1027,7 @@ def main() -> int:
         or counts["apng_later_candidate"] != 1
         or counts["held_later_candidate"] != 1
         or counts["mkv_held_candidate"] != 1
+        or counts["avi_held_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
