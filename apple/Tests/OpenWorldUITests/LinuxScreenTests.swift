@@ -445,6 +445,35 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    func testALongCropWordStaysInsideItsColumn() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let estimate = view.components(separatedBy: "private var estimateColumn").dropFirst().first?
+            .components(separatedBy: "private var results:").first ?? ""
+        XCTAssertTrue(
+            estimate.contains("PhonePreview.wrappingFileName(crop.label)")
+                && estimate.contains("PhonePreview.wrappingFileName(crop.frameLabel)"),
+            "a long crop word draws into the next column"
+        )
+        let results = view.components(separatedBy: "private var resultsColumn").dropFirst().first?
+            .components(separatedBy: "private func labeledCrop").first ?? ""
+        XCTAssertTrue(
+            results.contains("PhonePreview.wrappingFileName(item.label)")
+                && results.contains("PhonePreview.wrappingFileName(item.frameLabel)"),
+            "a long result word draws into the next column"
+        )
+        let labeled = view.components(separatedBy: "private func labeledCrop").dropFirst().first?
+            .components(separatedBy: "private func liveImage").first ?? ""
+        XCTAssertTrue(
+            labeled.contains("PhonePreview.wrappingFileName(caption)"),
+            "a long frame label draws into the crop beside it"
+        )
+    }
+
     func testTheFirstPageScrollsSoChooseFileStaysReachable() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

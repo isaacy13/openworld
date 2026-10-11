@@ -963,9 +963,12 @@ public struct FlowView: View {
                             ForEach(model.liveCrops) { crop in
                                 VStack(spacing: 4) {
                                     liveImage(crop.path)
-                                    Text(crop.frameLabel).multilineTextAlignment(.center)
-                                    Text(crop.label)
+                                    Text(PhonePreview.wrappingFileName(crop.frameLabel))
                                         .multilineTextAlignment(.center)
+                                        .accessibilityLabel(crop.frameLabel)
+                                    Text(PhonePreview.wrappingFileName(crop.label))
+                                        .multilineTextAlignment(.center)
+                                        .accessibilityLabel(crop.label)
                                         .id(crop.id == model.liveCrops.last?.id ? "latestLiveCrop" : "liveCrop\(crop.id)")
                                 }
                                 .frame(width: 140)
@@ -1074,13 +1077,17 @@ public struct FlowView: View {
                             ForEach(items) { item in
                                 VStack(spacing: 4) {
                                     cropImage(item.crop)
-                                    Text(item.frameLabel)
-                                        .font(.caption)
-                                    Text(item.label)
+                                    Text(PhonePreview.wrappingFileName(item.frameLabel))
                                         .font(.caption)
                                         .multilineTextAlignment(.center)
+                                        .accessibilityLabel(item.frameLabel)
+                                    Text(PhonePreview.wrappingFileName(item.label))
+                                        .font(.caption)
+                                        .multilineTextAlignment(.center)
+                                        .accessibilityLabel(item.label)
                                         .frame(width: 140)
                                 }
+                                .frame(width: 140)
                             }
                         }
                     }
@@ -1102,9 +1109,10 @@ public struct FlowView: View {
         if let relative, !relative.isEmpty {
             VStack(spacing: 4) {
                 cropImage(relative, flexible: true)
-                Text(caption)
+                Text(PhonePreview.wrappingFileName(caption))
                     .font(.caption)
                     .multilineTextAlignment(.center)
+                    .accessibilityLabel(caption)
                     .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity)
