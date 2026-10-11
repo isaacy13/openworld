@@ -182,24 +182,37 @@ public final class FlowModel: ObservableObject {
         self.core = CoreClient(programs: programs)
     }
 
-    public func choose(_ url: URL) {
-        guard !closed else { return }
-        #if !os(Linux)
-        _ = url.startAccessingSecurityScopedResource()
-        #endif
-        guard !scanning else { return }
+    /// Files this window has claimed, and claims it has released.
+    /// A file chosen while Scanning is not claimed. Replacing a file releases the previous one.
+    private(set) var scopeClaims = 0
+    private(set) var scopeReleases = 0
+    private var scopedURL: URL?
+
+    public func choose(_ url: URL, alreadyScoped: Bool = false) {
+        guard !closed else {
+            abandonIncomingClaim(url, alreadyScoped: alreadyScoped)
+            return
+        }
+        // A file chosen while Scanning stays out, including one a drop already claimed.
+        guard !scanning else {
+            abandonIncomingClaim(url, alreadyScoped: alreadyScoped)
+            return
+        }
         var directory = ObjCBool(false)
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
         if !exists || directory.boolValue || !FileManager.default.isReadableFile(atPath: url.path) {
+            abandonIncomingClaim(url, alreadyScoped: alreadyScoped)
             error = "The file could not be read. Refusing."
             return
         }
         guard releaseResult() else {
+            abandonIncomingClaim(url, alreadyScoped: alreadyScoped)
             if error == "The file could not be read. Refusing." {
                 error = nil
             }
             return
         }
+        claimFile(url, alreadyScoped: alreadyScoped)
         file = url
         report = nil
         error = nil
@@ -216,6 +229,40 @@ public final class FlowModel: ObservableObject {
             oldFile = false
         }
         step = .device
+    }
+
+    /// Keep this file readable until it is replaced or the window closes.
+    /// A drop has already claimed it. The file picker claims it here.
+    private func claimFile(_ url: URL, alreadyScoped: Bool) {
+        releaseScopedFile()
+        #if os(Linux)
+        let held = true
+        _ = (url, alreadyScoped)
+        #else
+        let held = alreadyScoped || url.startAccessingSecurityScopedResource()
+        #endif
+        if held {
+            scopedURL = url
+            scopeClaims += 1
+        }
+    }
+
+    private func releaseScopedFile() {
+        guard scopedURL != nil else { return }
+        #if !os(Linux)
+        scopedURL?.stopAccessingSecurityScopedResource()
+        #endif
+        scopedURL = nil
+        scopeReleases += 1
+    }
+
+    /// A file this window will not open. A drop that already claimed it is released.
+    private func abandonIncomingClaim(_ url: URL, alreadyScoped: Bool) {
+        guard alreadyScoped else { return }
+        #if !os(Linux)
+        url.stopAccessingSecurityScopedResource()
+        #endif
+        scopeReleases += 1
     }
 
     public func loadBundles() {
@@ -445,6 +492,7 @@ public final class FlowModel: ObservableObject {
         guard !closed else { return }
         guard !scanning else { return }
         guard releaseResult() else { return }
+        releaseScopedFile()
         file = nil
         report = nil
         resultDirectory = nil
@@ -480,6 +528,7 @@ public final class FlowModel: ObservableObject {
         closed = true
         stopFlag.stop()
         programs.stop()
+        releaseScopedFile()
         if let scanRoot {
             try? FileManager.default.removeItem(at: scanRoot)
             self.scanRoot = nil

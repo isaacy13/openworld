@@ -1022,6 +1022,49 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
     }
 
+    func testAReplacedFileReleasesTheOneItWasHolding() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let first = try self.still("blank")
+            let second = try self.still("scene")
+            model.choose(first)
+            XCTAssertEqual(model.scopeClaims, 1)
+            XCTAssertEqual(model.scopeReleases, 0)
+            XCTAssertEqual(model.file, first)
+            model.scanning = true
+            model.choose(second, alreadyScoped: true)
+            XCTAssertEqual(model.file, first)
+            XCTAssertEqual(model.scopeClaims, 1)
+            XCTAssertEqual(model.scopeReleases, 1)
+            XCTAssertNil(model.error)
+            model.choose(second)
+            XCTAssertEqual(model.file, first)
+            XCTAssertEqual(model.scopeClaims, 1)
+            XCTAssertEqual(model.scopeReleases, 1)
+            model.scanning = false
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-while-held.png"))
+            XCTAssertEqual(model.file, first)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.scopeClaims, 1)
+            XCTAssertEqual(model.scopeReleases, 1)
+            model.choose(second)
+            XCTAssertEqual(model.file, second)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.scopeClaims, 2)
+            XCTAssertEqual(model.scopeReleases, 2)
+            model.chooseAnother()
+            XCTAssertNil(model.file)
+            XCTAssertEqual(model.scopeClaims, 2)
+            XCTAssertEqual(model.scopeReleases, 3)
+            model.choose(first)
+            XCTAssertEqual(model.scopeClaims, 3)
+            model.closeWindow()
+            XCTAssertEqual(model.scopeReleases, 4)
+            model.closeWindow()
+            XCTAssertEqual(model.scopeReleases, 4)
+        }
+    }
+
     func testAFileChosenDuringAScanStaysPut() throws {
         try MainActor.assumeIsolated {
             let model = FlowModel(phone: true)

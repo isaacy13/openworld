@@ -117,8 +117,10 @@ struct MacRoot: View {
                 guard let provider = providers.first else { return false }
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
-                    DroppedFile.deliver(url, claim: { _ = $0.startAccessingSecurityScopedResource() }) { url in
-                        model.choose(url)
+                    // The claim has to happen before this callback returns.
+                    let started = url.startAccessingSecurityScopedResource()
+                    DroppedFile.deliver(url, claim: { _ in }) { url in
+                        model.choose(url, alreadyScoped: started)
                     }
                 }
                 return true
