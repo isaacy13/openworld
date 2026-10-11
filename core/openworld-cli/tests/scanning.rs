@@ -1329,6 +1329,79 @@ fn a_result_file_that_cannot_be_written_stays_incomplete() {
     assert!(!json_out.join("result.json").is_file());
 }
 
+#[test]
+fn a_measured_gif_estimate_counts_the_held_frame_without_ffprobe() {
+    // The phone reports an average rate and has no ffprobe. A frame that stays
+    // up for a second is still the picture on screen at the 5 Hz ticks.
+    let dir = tempfile::tempdir().unwrap();
+    let gif = dir.path().join("hold.gif");
+    fs::write(&gif, gif_with_centisecond_delays(&[4, 4, 100, 4, 4])).unwrap();
+    let (code, text, err) = run_without_ffprobe(&[
+        "estimate",
+        "--input",
+        gif.to_str().unwrap(),
+        "--form-factor",
+        "phone",
+        "--coverage",
+        "measured",
+        "--long-side",
+        "640",
+        "--width",
+        "1",
+        "--height",
+        "1",
+        "--fps",
+        "4.310344827586207",
+        "--frame-count",
+        "5",
+        "--duration",
+        "1.16",
+        "--video",
+    ]);
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+    assert_eq!(
+        doc["frames_analyzed"], 2,
+        "average rate would count every frame; on screen is the first frame and the hold\n{text}"
+    );
+}
+
+/// A phone does not ship ffprobe. The child must read the GIF itself.
+fn run_without_ffprobe(args: &[&str]) -> (Option<i32>, String, String) {
+    let mut cmd = Command::new(bin());
+    cmd.env("PATH", "/no-such-ffprobe");
+    cmd.arg("--json").arg("--bundles").arg(bundles()).args(args);
+    let output = cmd.output().expect("openworld");
+    (
+        output.status.code(),
+        String::from_utf8(output.stdout).expect("stdout"),
+        String::from_utf8(output.stderr).expect("stderr"),
+    )
+}
+
+/// Graphic-control delays, in centiseconds. One dummy image per delay.
+fn gif_with_centisecond_delays(delays: &[u16]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"GIF89a");
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&[0x80, 0, 0, 0, 0, 0, 255, 0, 0]);
+    for delay in delays {
+        bytes.extend_from_slice(&[0x21, 0xF9, 0x04, 0x00]);
+        bytes.extend_from_slice(&delay.to_le_bytes());
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        bytes.push(0x2C);
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.push(0x00);
+        bytes.extend_from_slice(&[2, 3, 0x04, 0x05, 0x00, 0]);
+    }
+    bytes.push(0x3B);
+    bytes
+}
+
 fn scan_while_result_is_a_directory(
     json: bool,
     input: &str,

@@ -957,6 +957,8 @@ pub fn read_presentation(dir: &Path) -> Option<Vec<f64>> {
 }
 
 /// Per-frame display times for a GIF. A still or a video has none.
+/// The phone has no ffprobe, so the times come from the graphic-control blocks.
+/// A delay of 0 is a tenth of a second, which is how a player and the phone decoder show it.
 pub fn gif_delays(path: &Path) -> Option<Vec<f64>> {
     let mut file = File::open(path).ok()?;
     let mut header = [0u8; 6];
@@ -964,38 +966,70 @@ pub fn gif_delays(path: &Path) -> Option<Vec<f64>> {
     if &header != b"GIF87a" && &header != b"GIF89a" {
         return None;
     }
-    let output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "frame=pkt_duration_time",
-            "-of",
-            "json",
-        ])
-        .arg(path)
-        .output()
-        .ok()?;
-    if !output.status.success() {
+    let mut bytes = header.to_vec();
+    file.read_to_end(&mut bytes).ok()?;
+    gif_delays_in(&bytes)
+}
+
+fn gif_delays_in(data: &[u8]) -> Option<Vec<f64>> {
+    if data.len() < 13 || (&data[0..6] != b"GIF87a" && &data[0..6] != b"GIF89a") {
         return None;
     }
-    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
-    let frames = value.get("frames")?.as_array()?;
-    let mut delays = Vec::with_capacity(frames.len());
-    for frame in frames {
-        let text = frame.get("pkt_duration_time")?.as_str()?;
-        let delay = text.parse::<f64>().ok()?;
-        if !delay.is_finite() || delay < 0.0 {
+    let packed = *data.get(10)?;
+    let mut index = 13usize;
+    if packed & 0x80 != 0 {
+        let count = 1usize << ((packed & 7) + 1);
+        index = index.checked_add(count.checked_mul(3)?)?;
+    }
+    // The phone decoder starts at a tenth of a second and keeps the last control block.
+    let mut delay_cs = 10u32;
+    let mut delays = Vec::new();
+    while index < data.len() {
+        let block = *data.get(index)?;
+        if block == 0x3B {
+            break;
+        }
+        if block == 0x21 {
+            if data.get(index + 1) == Some(&0xF9) && index + 7 < data.len() {
+                let raw = u16::from_le_bytes([data[index + 4], data[index + 5]]) as u32;
+                delay_cs = if raw == 0 { 10 } else { raw };
+            }
+            index = skip_gif_subblocks(data, index + 2)?;
+            continue;
+        }
+        if block != 0x2C || index + 10 >= data.len() {
             return None;
         }
-        delays.push(delay);
+        let image_packed = data[index + 9];
+        index += 10;
+        if image_packed & 0x80 != 0 {
+            let count = 1usize << ((image_packed & 7) + 1);
+            index = index.checked_add(count.checked_mul(3)?)?;
+        }
+        index = index.checked_add(1)?;
+        index = skip_gif_subblocks(data, index)?;
+        delays.push(delay_cs as f64 / 100.0);
     }
     if delays.len() < 2 {
         return None;
     }
     Some(delays)
+}
+
+fn skip_gif_subblocks(data: &[u8], start: usize) -> Option<usize> {
+    let mut index = start;
+    while index < data.len() {
+        let size = *data.get(index)? as usize;
+        index += 1;
+        if size == 0 {
+            return Some(index);
+        }
+        index = index.checked_add(size)?;
+        if index > data.len() {
+            return None;
+        }
+    }
+    None
 }
 
 pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
@@ -1953,6 +1987,29 @@ mod tests {
         );
         fs::write(dir.path().join("still.png"), []).unwrap();
         assert!(super::container_created(&dir.path().join("still.png")).is_none());
+    }
+
+    #[test]
+    fn a_gif_delay_of_zero_is_a_tenth_of_a_second() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"GIF89a");
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&[0x80, 0, 0, 0, 0, 0, 255, 0, 0]);
+        for delay in [4u16, 0, 4] {
+            bytes.extend_from_slice(&[0x21, 0xF9, 0x04, 0x00]);
+            bytes.extend_from_slice(&delay.to_le_bytes());
+            bytes.extend_from_slice(&[0x00, 0x00]);
+            bytes.push(0x2C);
+            bytes.extend_from_slice(&0u16.to_le_bytes());
+            bytes.extend_from_slice(&0u16.to_le_bytes());
+            bytes.extend_from_slice(&1u16.to_le_bytes());
+            bytes.extend_from_slice(&1u16.to_le_bytes());
+            bytes.push(0x00);
+            bytes.extend_from_slice(&[2, 3, 0x04, 0x05, 0x00, 0]);
+        }
+        bytes.push(0x3B);
+        assert_eq!(super::gif_delays_in(&bytes), Some(vec![0.04, 0.1, 0.04]));
     }
 
     fn movie_clock(created: u32) -> Vec<u8> {
