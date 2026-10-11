@@ -27,7 +27,7 @@ pub fn parse_rfc3339(text: &str) -> Option<SystemTime> {
 /// Seconds since 1970-01-01. A negative value is a real date from before then.
 pub fn system_time_from_unix(secs: i64) -> Option<SystemTime> {
     if secs >= 0 {
-        return Some(SystemTime::UNIX_EPOCH + Duration::from_secs(secs as u64));
+        return SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(secs as u64));
     }
     let magnitude = secs.checked_neg()?;
     SystemTime::UNIX_EPOCH.checked_sub(Duration::from_secs(magnitude as u64))

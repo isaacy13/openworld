@@ -402,6 +402,34 @@ fn a_frame_rate_that_is_not_a_number_refuses() {
 }
 
 #[test]
+fn a_container_clock_that_does_not_fit_does_not_stop_the_scan() {
+    let dir = tempfile::tempdir().unwrap();
+    let posters = pack(dir.path());
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    blank(64, 64).save(frames.join("frame_000000.png")).unwrap();
+    let input = dir.path().join("clip.png");
+    blank(64, 64).save(&input).unwrap();
+    let mut extra = RequestExtra::default();
+    extra.frames = Some(frames);
+    extra.media = Some(MediaFacts {
+        width: 64,
+        height: 64,
+        fps: 0.0,
+        frames: 1,
+        duration_sec: 0.0,
+        video: false,
+        container_unix: Some(u64::MAX),
+    });
+    let report = scan_path(
+        &request(dir.path(), input, "fast", posters, extra),
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert!(report.refusal.is_none());
+}
+
+#[test]
 fn measured_coverage_names_the_brief_face_banner() {
     let dir = tempfile::tempdir().unwrap();
     let posters = pack(dir.path());

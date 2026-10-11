@@ -1455,7 +1455,8 @@ fn mp4_created(file: &mut File) -> Option<SystemTime> {
         return None;
     }
     let unix = created - 2_082_844_800;
-    Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix))
+    // A creation time past what the clock can store is not a date. Adding it would panic.
+    SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(unix))
 }
 
 fn atom_body(file: &mut File, start: u64, end: u64, name: &[u8; 4]) -> Option<(u64, u64)> {
@@ -2339,6 +2340,8 @@ mod tests {
         );
         fs::write(dir.path().join("still.png"), []).unwrap();
         assert!(super::container_created(&dir.path().join("still.png")).is_none());
+        fs::write(&mp4, movie_clock_wide(u64::MAX)).unwrap();
+        assert!(super::container_created(&mp4).is_none());
     }
 
     #[test]
@@ -2400,6 +2403,21 @@ mod tests {
         }
         let mut header = vec![0u8; 100];
         header[4..8].copy_from_slice(&created.to_be_bytes());
+        let mut file = atom(b"ftyp", b"isom");
+        file.extend(atom(b"moov", &atom(b"mvhd", &header)));
+        file
+    }
+
+    fn movie_clock_wide(created: u64) -> Vec<u8> {
+        fn atom(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
+            let mut out = ((8 + body.len()) as u32).to_be_bytes().to_vec();
+            out.extend_from_slice(kind);
+            out.extend_from_slice(body);
+            out
+        }
+        let mut header = vec![0u8; 100];
+        header[0] = 1;
+        header[4..12].copy_from_slice(&created.to_be_bytes());
         let mut file = atom(b"ftyp", b"isom");
         file.extend(atom(b"moov", &atom(b"mvhd", &header)));
         file
