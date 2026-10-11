@@ -85,7 +85,7 @@ object GifFrames {
     private fun decode(data: ByteArray): Reel {
         val width = u16(data, 6)
         val height = u16(data, 8)
-        if (width <= 0 || height <= 0) {
+        if (width <= 0 || height <= 0 || !screenFits(width, height)) {
             throw IOException("Bad codec or unreadable file. Refusing.")
         }
         val packed = u8(data, 10)
@@ -143,6 +143,9 @@ object GifFrames {
             index += 1
             val compressed = readSubBlocks(data, index)
             index = compressed.second
+            // A frame can claim a 16-bit size whose product does not fit. The
+            // canvas check is the screen; this one is the image rectangle.
+            if (!screenFits(frameWidth, frameHeight)) throw bad()
             val indices = lzw(minCode, compressed.first, frameWidth * frameHeight)
             val ordered = if (imagePacked and 0x40 != 0) {
                 deinterlace(indices, frameWidth, frameHeight)
@@ -318,6 +321,16 @@ object GifFrames {
     }
 
     private fun bad(): IOException = IOException("Bad codec or unreadable file. Refusing.")
+
+    /**
+     * A GIF size is 16-bit. The product has to fit in a signed 32-bit count.
+     * A wrapped product is negative, and allocating that canvas crashes Continue.
+     */
+    internal fun screenFits(width: Int, height: Int): Boolean {
+        if (width < 0 || height < 0) return false
+        val count = width.toLong() * height.toLong()
+        return count <= Int.MAX_VALUE.toLong()
+    }
 
     private operator fun ByteArray.plus(extra: Byte): ByteArray {
         val out = ByteArray(size + 1)

@@ -1431,6 +1431,23 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(GifFrames.presentationLine(4, locale: Locale(identifier: "de_DE")), "0.0400")
     }
 
+    func testAGifScreenThatDoesNotFitIsRefused() throws {
+        XCTAssertNil(GifFrames.canvasPixels(width: 32769, height: 65535))
+        XCTAssertEqual(GifFrames.canvasPixels(width: 2, height: 2), 4)
+        var bytes = [UInt8](repeating: 0, count: 14)
+        bytes.replaceSubrange(0..<6, with: Array("GIF89a".utf8))
+        bytes[6] = 0x01
+        bytes[7] = 0x80
+        bytes[8] = 0xFF
+        bytes[9] = 0xFF
+        bytes[13] = 0x3B
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-huge-gif-\(UUID().uuidString).gif")
+        try Data(bytes).write(to: url)
+        XCTAssertThrowsError(try GifFrames.read(url)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("Refusing."))
+        }
+    }
+
     func testAnAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() throws {
         let gif = try laterFrameGif()
         let frames = FileManager.default.temporaryDirectory.appendingPathComponent("ow-gif-\(UUID().uuidString)")

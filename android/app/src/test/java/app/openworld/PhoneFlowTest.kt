@@ -677,6 +677,27 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aGifScreenThatDoesNotFitIsRefused() {
+        // 32769 by 65535 is a legal GIF screen, and the product does not fit in a
+        // signed 32-bit count. Allocating that canvas used to crash Continue.
+        val bytes = ByteArray(14)
+        "GIF89a".encodeToByteArray().copyInto(bytes)
+        bytes[6] = 0x01
+        bytes[7] = 0x80.toByte()
+        bytes[8] = 0xFF.toByte()
+        bytes[9] = 0xFF.toByte()
+        bytes[13] = 0x3B
+        val file = File.createTempFile("ow-huge-gif", ".gif")
+        file.writeBytes(bytes)
+        try {
+            PlatformDecode.facts(file)
+            throw AssertionError("a screen that does not fit should be refused")
+        } catch (err: java.io.IOException) {
+            assertTrue(err.message!!.contains("Refusing."))
+        }
+    }
+
+    @Test
     fun anAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() {
         val gif = laterFrameGif()
         val facts = PlatformDecode.facts(gif)

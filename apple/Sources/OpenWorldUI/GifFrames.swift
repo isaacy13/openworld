@@ -71,6 +71,15 @@ public enum GifFrames {
         return reel
     }
 
+    /// A GIF size is 16-bit. The product has to fit in a signed 32-bit count.
+    /// A wrapped product crashes the canvas allocation instead of refusing the file.
+    static func canvasPixels(width: Int, height: Int) -> Int? {
+        guard width >= 0, height >= 0 else { return nil }
+        let (count, overflow) = width.multipliedReportingOverflow(by: height)
+        guard !overflow, count <= Int(Int32.max) else { return nil }
+        return count
+    }
+
     /// One delay, in seconds, for presentation.txt. The scan parses the line as a number.
     /// A locale that writes `1,0000` is not a delay, so the decimal mark stays a period.
     static func presentationLine(_ centiseconds: Int, locale _: Locale = .current) -> String {
@@ -93,7 +102,9 @@ public enum GifFrames {
     private static func decode(_ data: [UInt8]) throws -> Reel {
         let width = try u16(data, 6)
         let height = try u16(data, 8)
-        if width <= 0 || height <= 0 { throw bad() }
+        if width <= 0 || height <= 0 || canvasPixels(width: width, height: height) == nil {
+            throw bad()
+        }
         let packed = try u8(data, 10)
         let background = try u8(data, 11)
         var index = 13
@@ -104,12 +115,13 @@ public enum GifFrames {
             index += 3 * count
         }
         let backgroundColor = (global != nil && background < global!.count) ? global![background] : 0
+        guard let pixels = canvasPixels(width: width, height: height) else { throw bad() }
         var delay = 10
         var transparent: Int?
         var disposal = 0
         var delays: [Int] = []
         var frames: [[UInt8]] = []
-        var canvas = [Int](repeating: backgroundColor, count: width * height)
+        var canvas = [Int](repeating: backgroundColor, count: pixels)
         while index < data.count {
             let block = try u8(data, index)
             if block == 0x3B { break }
@@ -144,7 +156,11 @@ public enum GifFrames {
             let minCode = try u8(data, index)
             index += 1
             let compressed = try readSubBlocks(data, &index)
-            let indices = try lzw(minCode, compressed, frameWidth * frameHeight)
+            // A frame can claim a 16-bit size whose product does not fit.
+            guard let framePixels = canvasPixels(width: frameWidth, height: frameHeight) else {
+                throw bad()
+            }
+            let indices = try lzw(minCode, compressed, framePixels)
             let ordered = imagePacked & 0x40 != 0 ? try deinterlace(indices, frameWidth, frameHeight) : indices
             let saved = disposal == 3 ? canvas : nil
             for y in 0..<frameHeight {
