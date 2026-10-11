@@ -155,15 +155,10 @@ fn analyzed_frames(input: &EstimateInput) -> u64 {
     let frames = input.frames.max(1);
     match input.coverage {
         Coverage::Complete => frames,
+        // The same frames `take_measured_sample` keeps. A rounded duration is
+        // one frame short at 29.97 fps, and that frame changes a 4K plan.
         Coverage::Measured => {
-            let duration = if input.duration_sec > 0.0 {
-                input.duration_sec
-            } else if input.fps > 0.0 {
-                frames as f64 / input.fps
-            } else {
-                0.0
-            };
-            let n = (duration * 5.0).round() as u64;
+            let n = crate::geom::sample_indices(frames, input.fps, true).len() as u64;
             n.clamp(1, frames)
         }
     }
@@ -285,5 +280,23 @@ mod tests {
         let measured = estimate(&input);
         assert!(measured.frames_analyzed < complete.frames_analyzed);
         assert!(measured.seconds < complete.seconds);
+    }
+
+    #[test]
+    fn measured_plan_counts_the_frames_the_scan_keeps() {
+        // 60 frames at 29.97 fps. Rounding the duration to 5 Hz says 10 frames.
+        // The scan keeps the frame on screen at each tick, which is 11.
+        let mut input = base();
+        input.frames = 60;
+        input.fps = 29.97;
+        input.duration_sec = 2.0;
+        input.coverage = Coverage::Measured;
+        input.detection = DetectionSize::Full;
+        input.original_long_side = 3840;
+        let est = estimate(&input);
+        let kept = crate::geom::sample_indices(60, 29.97, true).len() as u64;
+        assert_eq!(kept, 11);
+        assert_eq!(est.frames_analyzed, kept);
+        assert_eq!(est.human, "About 16 seconds");
     }
 }
