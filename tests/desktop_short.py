@@ -148,6 +148,39 @@ def main() -> None:
                 "the coverage mark left the first line: "
                 f"choice {choice_box}, mark {mark}, lines {choice_lines}"
             )
+        app.load_bundles()
+        app._go("bundle")
+        app.window.set_default_size(640, 700)
+        pump(context, 12)
+        width = app.window.get_width()
+        curve = None
+
+        def find_curve(widget):
+            nonlocal curve
+            if isinstance(widget, Gtk.Label) and "Real FBI photos stay off." in (widget.get_text() or ""):
+                curve = widget
+            child = widget.get_first_child()
+            while child is not None:
+                find_curve(child)
+                child = child.get_next_sibling()
+
+        find_curve(app.page_bundle)
+        curve_box = None if curve is None else bounds(app.window, curve)
+        curve_lines = 0 if curve is None or curve.get_layout() is None else curve.get_layout().get_line_count()
+        curve_wraps = (
+            curve is not None
+            and curve_box is not None
+            and width <= 680
+            and curve_box[0] >= -1
+            and curve_box[0] + curve_box[2] <= width + 1
+            and curve_lines >= 2
+            and not curve.get_layout().is_ellipsized()
+        )
+        if not curve_wraps:
+            raise SystemExit(
+                "the bundle curve left a narrow window: "
+                f"window {width}x{app.window.get_height()}, curve {curve_box}, lines {curve_lines}"
+            )
         app._go("device")
         app.window.set_default_size(900, 640)
         pump(context, 12)

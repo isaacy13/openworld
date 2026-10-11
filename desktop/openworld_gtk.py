@@ -654,12 +654,15 @@ class OpenWorld(Gtk.Application):
             box.set_margin_bottom(8)
             box.set_margin_start(10)
             box.set_margin_end(10)
-            name = Gtk.Label(label=item["name"], xalign=0)
+            name = Gtk.Label(label=item["name"], xalign=0, wrap=True)
+            name.set_hexpand(True)
             name.add_css_class("section")
             row.bundle_name = item["name"]
             row.bundle_name_label = name
-            best = Gtk.Label(label=item["best_for"], xalign=0)
-            curve = Gtk.Label(label=item["curve_line"], xalign=0)
+            best = Gtk.Label(label=item["best_for"], xalign=0, wrap=True)
+            best.set_hexpand(True)
+            curve = Gtk.Label(label=item["curve_line"], xalign=0, wrap=True)
+            curve.set_hexpand(True)
             curve.add_css_class("dim")
             box.append(name)
             box.append(best)
