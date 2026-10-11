@@ -768,6 +768,12 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
     if info.square_pixels {
         command.args(["-vf", "scale=iw*sar:ih,setsar=1"]);
     }
+    // A GIF image stays up until the next one. FFmpeg's default decoder repeats
+    // that image to fill a steady rate, so the first `nb_frames` pictures can
+    // all be the first image. One picture per image is the file.
+    if gif_file(path) {
+        command.args(["-fps_mode", "passthrough"]);
+    }
     let mut child = command
         .args(["-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
         .stdin(Stdio::null())
@@ -955,6 +961,15 @@ pub fn read_presentation(dir: &Path) -> Option<Vec<f64>> {
         return None;
     }
     Some(delays)
+}
+
+fn gif_file(path: &Path) -> bool {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut header = [0u8; 6];
+    file.read_exact(&mut header).is_ok() && (&header == b"GIF87a" || &header == b"GIF89a")
 }
 
 /// Per-frame display times for a GIF. A still or a video has none.

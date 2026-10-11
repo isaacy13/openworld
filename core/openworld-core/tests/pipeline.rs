@@ -628,6 +628,86 @@ fn a_one_frame_gif_is_not_repeated_into_extra_frames() {
 }
 
 #[test]
+fn a_later_gif_image_is_scanned_once() {
+    // FFmpeg's default GIF decoder repeats each image until the next one, at a
+    // steady rate. The container still counts two images. Stopping after that
+    // count kept two copies of the first image, and a face on the second image
+    // was a clearance.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    let mut plain = blank(width, height);
+    plain.put_pixel(0, 0, image::Rgb([1, 1, 1]));
+    plain.save(dir.path().join("f0.png")).unwrap();
+    scene.image.save(dir.path().join("f1.png")).unwrap();
+    let mut script = String::from("ffconcat version 1.0\n");
+    for index in 0..2 {
+        script.push_str(&format!(
+            "file '{}'\nduration 0.04\n",
+            dir.path().join(format!("f{index}.png")).display()
+        ));
+    }
+    script.push_str(&format!("file '{}'\n", dir.path().join("f1.png").display()));
+    let list = dir.path().join("list.txt");
+    fs::write(&list, script).unwrap();
+    let palette = dir.path().join("pal.png");
+    let gif = dir.path().join("later.gif");
+    let palette_ok = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+        ])
+        .arg(&list)
+        .args(["-frames:v", "2", "-vf", "palettegen=stats_mode=full:max_colors=32"])
+        .arg(&palette)
+        .status()
+        .expect("ffmpeg");
+    assert!(palette_ok.success());
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i"])
+        .arg(&list)
+        .arg("-i")
+        .arg(&palette)
+        .args(["-frames:v", "2", "-lavfi", "paletteuse=dither=none", "-loop", "0"])
+        .arg(&gif)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: gif,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 2, "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    assert!(report.candidates.iter().any(|c| c.kind == "face" && c.frame_index == 1));
+}
+
+#[test]
 fn an_animated_png_keeps_a_face_that_is_not_on_the_first_frame() {
     let dir = tempfile::tempdir().unwrap();
     let scene = demo_scene(fast().threshold);
