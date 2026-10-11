@@ -226,22 +226,27 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         }
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
-                            model.liveCrops.forEach { crop ->
-                                Column(
-                                    modifier = Modifier.width(140.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    val bitmap = BitmapFactory.decodeFile(crop.path)
-                                    if (bitmap != null) {
-                                        Image(
-                                            bitmap = bitmap.asImageBitmap(),
-                                            contentDescription = crop.label,
-                                            modifier = Modifier.size(112.dp),
-                                        )
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                model.liveCrops.forEach { crop ->
+                                    Column(
+                                        modifier = Modifier.width(140.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        val bitmap = BitmapFactory.decodeFile(crop.path)
+                                        if (bitmap != null) {
+                                            Image(
+                                                bitmap = bitmap.asImageBitmap(),
+                                                contentDescription = crop.label,
+                                                modifier = Modifier.size(112.dp),
+                                            )
+                                        }
+                                        Text(crop.frameLabel, textAlign = TextAlign.Center)
+                                        Text(crop.label, textAlign = TextAlign.Center)
                                     }
-                                    Text(crop.frameLabel, textAlign = TextAlign.Center)
-                                    Text(crop.label, textAlign = TextAlign.Center)
                                 }
                             }
                         }

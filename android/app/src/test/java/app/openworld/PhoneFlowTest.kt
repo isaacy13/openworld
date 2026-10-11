@@ -1573,6 +1573,42 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aCropThatArrivesLeavesTheEstimateLineWhereItWas() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Estimate
+        val estimateOk = FlowModel::class.java.getDeclaredField("estimateOk\$delegate")
+        estimateOk.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (estimateOk.get(model) as androidx.compose.runtime.MutableState<Boolean>).value = true
+        model.canAnalyze = true
+        model.scanning = true
+        model.oldFile = true
+        model.estimateText = (0 until 40).joinToString("\n") { "Estimate line $it." }
+        val path = picture.absolutePath
+        model.liveCrops = listOf(LiveCrop("Not compared.", path, "Frame 1."))
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("This file is older than about 30 days.").performScrollTo()
+        compose.waitForIdle()
+        val line = compose.onNodeWithText("This file is older than about 30 days.").fetchSemanticsNode().boundsInRoot
+        assertTrue("the estimate line was not on screen: $line", line.height > 0f && line.top < 800f)
+        compose.runOnUiThread {
+            model.liveCrops = model.liveCrops + LiveCrop("A vehicle is not a person.", path, "Frame 2.")
+        }
+        compose.waitForIdle()
+        val stayed = compose.onNodeWithText("This file is older than about 30 days.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "a crop that arrived moved the estimate from $line to $stayed",
+            stayed.height > 0f && kotlin.math.abs(stayed.top - line.top) < 8f,
+        )
+    }
+
+    @Test
     fun aLongFileNameBreaksBetweenCharacters() {
         val model = FlowModel()
         model.step = Step.Device
