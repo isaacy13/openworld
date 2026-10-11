@@ -49,9 +49,17 @@ public enum GifFrames {
                 let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
                 try writePng(rgb, width: reel.width, height: reel.height, to: dest)
             }
+            if reel.video {
+                let lines = reel.delaysCs.map { String(format: "%.4f", Double($0) / 100.0) }.joined(separator: "\n")
+                try (lines + "\n").write(
+                    to: directory.appendingPathComponent("presentation.txt"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+            }
         } catch {
             if let names = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-                for name in names where name.lastPathComponent.hasPrefix("frame_") {
+                for name in names where name.lastPathComponent.hasPrefix("frame_") || name.lastPathComponent == "presentation.txt" {
                     try? FileManager.default.removeItem(at: name)
                 }
             }

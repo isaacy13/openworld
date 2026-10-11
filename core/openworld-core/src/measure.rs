@@ -232,6 +232,7 @@ fn still_opts(detection: DetectionSize) -> ScanOpts {
         frame_count_hint: None,
         warnings: Vec::new(),
         out_dir: None,
+        on_screen: None,
     }
 }
 

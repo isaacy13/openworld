@@ -160,6 +160,9 @@ pub struct ScanOpts {
     pub frame_count_hint: Option<u64>,
     pub warnings: Vec<String>,
     pub out_dir: Option<PathBuf>,
+    /// Frames on screen at a 5 Hz tick when the delays are not an even rate.
+    /// Empty means the even rate already names those frames.
+    pub on_screen: Option<Vec<u64>>,
 }
 
 pub fn media_warnings(mtime: Option<SystemTime>, container: Option<SystemTime>, now: SystemTime) -> Vec<String> {
@@ -257,6 +260,11 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     if let Err(report) = prepare_out(&req.out_dir) {
         return report;
     }
+    let delays = if req.coverage == Coverage::Measured {
+        decode::gif_delays(&req.input)
+    } else {
+        None
+    };
     let opts = ScanOpts {
         detection: req.detection,
         coverage: req.coverage,
@@ -269,6 +277,7 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
         frame_count_hint: if probed.video { Some(probed.frames) } else { Some(1) },
         warnings,
         out_dir: Some(req.out_dir.clone()),
+        on_screen: on_screen_frames(req.coverage, probed.fps, probed.frames, delays),
     };
         let models = match open_models(&bundle, &pack) {
         Ok(models) => models,
@@ -311,6 +320,27 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     report
 }
 
+/// The frames a 5 Hz tick actually shows, when that set is not the even rate.
+fn on_screen_frames(
+    coverage: Coverage,
+    fps: f64,
+    count: u64,
+    delays: Option<Vec<f64>>,
+) -> Option<Vec<u64>> {
+    if coverage != Coverage::Measured {
+        return None;
+    }
+    let delays = delays?;
+    if count == 0 || delays.len() as u64 != count {
+        return None;
+    }
+    let timed = geom::frames_on_screen(&delays);
+    if timed.is_empty() || timed == geom::sample_indices(count, fps, true) {
+        return None;
+    }
+    Some(timed)
+}
+
 fn scan_decoded_dir(
     req: &ScanRequest,
     bundle: &Bundle,
@@ -342,6 +372,11 @@ fn scan_decoded_dir(
     if let Err(report) = prepare_out(&req.out_dir) {
         return report;
     }
+    let delays = if req.coverage == Coverage::Measured {
+        decode::read_presentation(dir).filter(|delays| delays.len() == frames.len())
+    } else {
+        None
+    };
     let opts = ScanOpts {
         detection: req.detection,
         coverage: req.coverage,
@@ -354,6 +389,7 @@ fn scan_decoded_dir(
         frame_count_hint: Some(frames.len() as u64),
         warnings,
         out_dir: Some(req.out_dir.clone()),
+        on_screen: on_screen_frames(req.coverage, fps, frames.len() as u64, delays),
     };
         let models = match open_models(bundle, pack) {
         Ok(models) => models,
@@ -519,6 +555,9 @@ impl<'a> Engine<'a> {
     fn take_sample(&mut self, index: u64) -> bool {
         if self.opts.coverage != Coverage::Measured {
             return true;
+        }
+        if let Some(keep) = &self.opts.on_screen {
+            return keep.binary_search(&index).is_ok();
         }
         geom::take_measured_sample(index, &mut self.next_tick, self.opts.fps)
     }

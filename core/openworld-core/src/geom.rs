@@ -203,6 +203,54 @@ pub fn sample_indices(frame_count: u64, fps: f64, measured: bool) -> Vec<u64> {
     out
 }
 
+/// Frames on screen at each 5 Hz tick, from each frame's display time.
+/// `delays` is seconds. A frame that stays up across a tick is kept once.
+/// A constant delay matches `sample_indices` for that rate.
+pub fn frames_on_screen(delays: &[f64]) -> Vec<u64> {
+    if delays.is_empty() {
+        return Vec::new();
+    }
+    let mut starts = Vec::with_capacity(delays.len());
+    let mut end = 0.0;
+    for delay in delays {
+        if !delay.is_finite() || *delay < 0.0 {
+            return vec![0];
+        }
+        starts.push(end);
+        end += delay;
+    }
+    if !(end > 0.0) || !end.is_finite() {
+        return vec![0];
+    }
+    let mut out = Vec::new();
+    let mut tick = 0u64;
+    loop {
+        let when = tick as f64 / 5.0;
+        // A sum of 1/24 can land a hair past the even end and invent a last tick.
+        if !when.is_finite() || when + 1e-9 >= end {
+            break;
+        }
+        let idx = match starts.binary_search_by(|start| {
+            start.partial_cmp(&when).unwrap_or(std::cmp::Ordering::Less)
+        }) {
+            Ok(found) => found,
+            Err(insert) => insert.saturating_sub(1),
+        };
+        let idx = idx as u64;
+        if out.last().copied() != Some(idx) {
+            out.push(idx);
+        }
+        tick += 1;
+        if tick > 1_000_000 {
+            break;
+        }
+    }
+    if out.is_empty() {
+        out.push(0);
+    }
+    out
+}
+
 /// Whether frame `index` is on screen at the next 5 Hz tick.
 /// `next_tick` starts at 0. A skipped index advances the clock, so one missing
 /// frame does not stall the rest of the video.
@@ -311,6 +359,20 @@ mod tests {
         assert_eq!(kept(10.0, 20), sample_indices(20, 10.0, true));
         assert_eq!(kept(1.0, 8), sample_indices(8, 1.0, true));
         assert_eq!(kept(0.0, 4), sample_indices(4, 0.0, true));
+    }
+
+    #[test]
+    fn a_held_frame_is_on_screen_at_the_sample_tick() {
+        let mut delays = vec![0.04; 20];
+        delays[9] = 2.0;
+        let duration: f64 = delays.iter().sum();
+        let average = delays.len() as f64 / duration;
+        let by_rate = sample_indices(delays.len() as u64, average, true);
+        assert!(!by_rate.contains(&9), "{by_rate:?}");
+        let on_screen = frames_on_screen(&delays);
+        assert!(on_screen.contains(&9), "{on_screen:?}");
+        let film: Vec<f64> = (0..48).map(|_| 1.0 / 24.0).collect();
+        assert_eq!(frames_on_screen(&film), sample_indices(48, 24.0, true));
     }
 
     #[test]

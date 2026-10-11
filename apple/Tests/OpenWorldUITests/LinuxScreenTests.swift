@@ -1424,6 +1424,8 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(reel.frames.count, 3)
         XCTAssertTrue(reel.video)
         XCTAssertEqual(reel.fps, 5, accuracy: 0.05)
+        let delays = try String(contentsOf: frames.appendingPathComponent("presentation.txt"), encoding: .utf8)
+        XCTAssertEqual(delays.split(separator: "\n").map(String.init), ["0.2000", "0.2000", "0.2000"])
         MainActor.assumeIsolated {
             let model = FlowModel(phone: true)
             model.choose(gif)

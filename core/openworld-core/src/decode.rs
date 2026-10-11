@@ -938,6 +938,66 @@ fn json_u32(value: Option<&Value>) -> Option<u32> {
 
 /// Ordered stills already decoded by a platform shell or a test.
 /// Names sort in decode order, so callers pad the index (`frame_000001.png`).
+/// One display time, in seconds, per decoded frame. The phone writes this next to the frames.
+pub const PRESENTATION_FILE: &str = "presentation.txt";
+
+pub fn read_presentation(dir: &Path) -> Option<Vec<f64>> {
+    let text = std::fs::read_to_string(dir.join(PRESENTATION_FILE)).ok()?;
+    let delays = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| line.parse::<f64>())
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if delays.is_empty() || delays.iter().any(|delay| !delay.is_finite() || *delay < 0.0) {
+        return None;
+    }
+    Some(delays)
+}
+
+/// Per-frame display times for a GIF. A still or a video has none.
+pub fn gif_delays(path: &Path) -> Option<Vec<f64>> {
+    let mut file = File::open(path).ok()?;
+    let mut header = [0u8; 6];
+    file.read_exact(&mut header).ok()?;
+    if &header != b"GIF87a" && &header != b"GIF89a" {
+        return None;
+    }
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "frame=pkt_duration_time",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let frames = value.get("frames")?.as_array()?;
+    let mut delays = Vec::with_capacity(frames.len());
+    for frame in frames {
+        let text = frame.get("pkt_duration_time")?.as_str()?;
+        let delay = text.parse::<f64>().ok()?;
+        if !delay.is_finite() || delay < 0.0 {
+            return None;
+        }
+        delays.push(delay);
+    }
+    if delays.len() < 2 {
+        return None;
+    }
+    Some(delays)
+}
+
 pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
     if !dir.is_dir() {
         return Err(MediaError::BadCodec);

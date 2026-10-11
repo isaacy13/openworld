@@ -739,6 +739,35 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun anAnimatedGifWritesEachFrameDelay() {
+        val root = File(File.createTempFile("ow-delay", "").parentFile, "ow-delay-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val still = File(root, "frame.png")
+        ffmpeg("-f", "lavfi", "-i", "color=c=white:s=8x8", "-frames:v", "1", still.absolutePath)
+        val script = buildString {
+            append("ffconcat version 1.0\n")
+            for (delay in listOf(0.04, 1.0, 0.04)) {
+                append("file '${still.absolutePath}'\n")
+                append("duration $delay\n")
+            }
+            append("file '${still.absolutePath}'\n")
+        }
+        val list = File(root, "list.txt")
+        list.writeText(script)
+        val gif = File(root, "hold.gif")
+        ffmpeg(
+            "-f", "concat", "-safe", "0", "-i", list.absolutePath,
+            "-frames:v", "3", "-loop", "0", gif.absolutePath,
+        )
+        val frames = File(root, "frames")
+        val reel = GifFrames.read(gif)
+        assertEquals(3, reel.frames.size)
+        PlatformDecode.writeFrames(gif, frames)
+        val lines = File(frames, "presentation.txt").readText().trim().lines()
+        assertEquals(listOf("0.0400", "1.0000", "0.0400"), lines)
+    }
+
+    @Test
     fun aOneFrameGifStaysOneFrame() {
         val gif = File.createTempFile("ow-one", ".gif")
         ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=64x64", "-frames:v", "1", gif.absolutePath)

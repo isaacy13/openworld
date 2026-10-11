@@ -48,6 +48,7 @@ fn opts(detection: DetectionSize, coverage: Coverage) -> ScanOpts {
         frame_count_hint: None,
         warnings: Vec::new(),
         out_dir: None,
+        on_screen: None,
     }
 }
 
@@ -677,6 +678,185 @@ fn an_animated_png_keeps_a_face_that_is_not_on_the_first_frame() {
     assert!(report.candidates.iter().all(|candidate| candidate.frame_label == "Frame 2."));
     assert!(report.inventory.iter().any(|item| item.frame_label == "Frame 2."));
     assert!(report.inventory.iter().all(|item| item.frame_label == format!("Frame {}.", item.frame_index + 1)));
+}
+
+#[test]
+fn a_held_frame_is_the_picture_at_a_sample_tick() {
+    // Twenty pictures. Nineteen last 0.04 s and one stays up for 2 s.
+    // The average rate skips that held picture. It is the picture on screen
+    // at several 5 Hz ticks, and it is the only picture with a face.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    let mut delays = Vec::new();
+    for index in 0..20 {
+        let image = if index == 9 {
+            scene.image.clone()
+        } else {
+            let mut plain = blank(width, height);
+            plain.put_pixel(index, 0, image::Rgb([0, 0, 0]));
+            plain
+        };
+        image
+            .save(frames.join(format!("frame_{index:06}.png")))
+            .unwrap();
+        delays.push(if index == 9 { 2.0 } else { 0.04 });
+    }
+    let body = delays
+        .iter()
+        .map(|delay| format!("{delay:.4}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(frames.join("presentation.txt"), body + "\n").unwrap();
+    let duration: f64 = delays.iter().sum();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: dir.path().join("hold.gif"),
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Measured,
+            form_factor: FormFactor::Phone,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: Some(frames),
+            media: Some(MediaFacts {
+                width,
+                height,
+                fps: delays.len() as f64 / duration,
+                frames: delays.len() as u64,
+                duration_sec: duration,
+                video: true,
+                container_unix: None,
+            }),
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(
+        report.candidates.iter().any(|candidate| candidate.frame_index == 9),
+        "frames analyzed {} candidates {:?}",
+        report.frames_analyzed,
+        report
+            .candidates
+            .iter()
+            .map(|candidate| candidate.frame_index)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_held_gif_frame_is_the_picture_at_a_sample_tick() {
+    // The container rate skips the frame that stays on screen. The GIF's own
+    // delays are what a player shows.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    let mut script = String::from("ffconcat version 1.0\n");
+    for index in 0..20 {
+        let path = dir.path().join(format!("f{index:02}.png"));
+        let image = if index == 9 {
+            scene.image.clone()
+        } else {
+            let mut plain = blank(width, height);
+            plain.put_pixel(index, 0, image::Rgb([1, 1, 1]));
+            plain
+        };
+        image.save(&path).unwrap();
+        let delay = if index == 9 { 1.0 } else { 0.04 };
+        script.push_str(&format!("file '{}'\nduration {delay}\n", path.display()));
+    }
+    script.push_str(&format!(
+        "file '{}'\n",
+        dir.path().join("f19.png").display()
+    ));
+    let list = dir.path().join("list.txt");
+    fs::write(&list, script).unwrap();
+    let palette = dir.path().join("pal.png");
+    let gif = dir.path().join("hold.gif");
+    let palette_ok = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+        ])
+        .arg(&list)
+        .args([
+            "-frames:v",
+            "20",
+            "-vf",
+            "palettegen=stats_mode=full:max_colors=32",
+        ])
+        .arg(&palette)
+        .status()
+        .expect("ffmpeg");
+    assert!(palette_ok.success());
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i"])
+        .arg(&list)
+        .arg("-i")
+        .arg(&palette)
+        .args([
+            "-frames:v",
+            "20",
+            "-lavfi",
+            "paletteuse=dither=none",
+            "-loop",
+            "0",
+        ])
+        .arg(&gif)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: gif,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Measured,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    assert!(
+        report.candidates.iter().any(|candidate| candidate.frame_index == 9),
+        "analyzed {} {:?}",
+        report.frames_analyzed,
+        report
+            .candidates
+            .iter()
+            .map(|candidate| candidate.frame_index)
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

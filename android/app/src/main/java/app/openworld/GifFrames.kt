@@ -49,6 +49,12 @@ object GifFrames {
                 if (stopped()) throw DecodeStopped()
                 writePng(File(directory, "frame_%06d.png".format(index)), reel.width, reel.height, rgb)
             }
+            if (reel.frames.size > 1) {
+                val lines = reel.delaysCs.joinToString(separator = "\n") { cs ->
+                    String.format(java.util.Locale.US, "%.4f", cs / 100.0)
+                }
+                File(directory, "presentation.txt").writeText(lines + "\n")
+            }
         } catch (err: IOException) {
             directory.listFiles()?.forEach { it.delete() }
             throw err

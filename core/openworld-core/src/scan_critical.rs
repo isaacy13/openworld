@@ -50,6 +50,7 @@ fn opts(out: Option<PathBuf>) -> ScanOpts {
         frame_count_hint: Some(1),
         warnings: Vec::new(),
         out_dir: out,
+        on_screen: None,
     }
 }
 
