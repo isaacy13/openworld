@@ -1055,6 +1055,58 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aMotionPhotoOffsetIsRefusedInsteadOfClearingTheStill() {
+        // The clip length is MotionPhotoOffset. A leftover MicroVideoOffset of 100
+        // does not land on the movie, so the cover was scanned alone.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-offset-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val blank = File(root, "blank.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.absolutePath)
+        val video = File(root, "clip.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val clip = video.readBytes()
+        val still = blank.readBytes()
+        val motion = File(root, "motion.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"1\" GCamera:MicroVideoOffset=\"100\" " +
+                "GCamera:MotionPhotoOffset=\"${clip.size}\"/>" +
+                "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        motion.writeBytes(jpegWithXmp(still, xmp, clip))
+        assertTrue(StillMotion.motionPhoto(motion))
+        val off = File(root, "off.jpg")
+        val offXmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"0\" GCamera:MotionPhotoOffset=\"${clip.size}\"/>" +
+                "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        off.writeBytes(jpegWithXmp(still, offXmp, clip))
+        assertFalse(StillMotion.motionPhoto(off))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/offset.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, motion.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertFalse(model.estimateText.contains("Bad codec"))
+    }
+
+    @Test
     fun aStrippedMotionPhotoIsTheStill() {
         // Editors keep the motion-photo directory after the video is gone.
         val root = File(System.getProperty("java.io.tmpdir"), "ow-stripped-" + System.nanoTime())

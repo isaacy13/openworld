@@ -179,8 +179,10 @@ object StillMotion {
         val text = buf.toString(Charsets.UTF_8)
         if (motionPhotoOff(text)) return MotionXmp.Off
         motionItemLength(text)?.let { return MotionXmp.Video(it) }
+        xmpAttr(text, "MotionPhotoOffset")?.let { return MotionXmp.Video(it) }
         xmpAttr(text, "MicroVideoOffset")?.let { return MotionXmp.Video(it) }
         val named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='") ||
+            text.contains("MotionPhotoOffset=\"") || text.contains("MotionPhotoOffset='") ||
             text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
         return if (named) MotionXmp.Unreadable else MotionXmp.No
     }

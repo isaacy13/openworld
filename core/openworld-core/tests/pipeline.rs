@@ -2307,6 +2307,71 @@ fn a_samsung_motion_photo_keeps_a_face_that_is_not_on_the_still() {
     assert!(report.candidates.iter().any(|c| c.kind == "face"));
 }
 
+#[test]
+fn a_motion_photo_offset_keeps_a_face_that_is_not_on_the_still() {
+    // Mid-era Pixel files store the clip length in MotionPhotoOffset.
+    // A leftover MicroVideoOffset of 100 does not land on the movie.
+    // Using that offset scans the blank cover and clears a face that is only in the clip.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let blank = dir.path().join("blank.jpg");
+    let movie = dir.path().join("scene.mp4");
+    let motion = dir.path().join("motion.jpg");
+    let blank_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1"])
+        .arg(&blank)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank_ok.success());
+    let scene_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(scene_ok.success());
+    let jpg = fs::read(&blank).unwrap();
+    let mp4 = fs::read(&movie).unwrap();
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MicroVideoOffset=\"100\" GCamera:MotionPhotoOffset=\"{}\"/>\n\
+         </rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        mp4.len()
+    );
+    write_jpeg_xmp(&jpg, xmp.as_bytes(), &mp4, &motion);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: motion,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 9);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
 /// Samsung's trailer: the embedded-video marker, the clip, then an SEFH directory and SEFT.
 fn samsung_trailer(video: &[u8]) -> Vec<u8> {
     let marker = b"\x00\x00\x30\x0A";

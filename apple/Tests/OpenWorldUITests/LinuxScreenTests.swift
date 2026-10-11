@@ -1708,6 +1708,55 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAMotionPhotoOffsetIsRefusedInsteadOfClearingTheStill() throws {
+        // The clip length is MotionPhotoOffset. A leftover MicroVideoOffset of 100
+        // does not land on the movie, so the cover was scanned alone.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-offset-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let blank = root.appendingPathComponent("blank.jpg")
+        let video = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.path])
+        try ffmpeg([
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.path,
+        ])
+        let clip = try Data(contentsOf: video)
+        let still = try Data(contentsOf: blank)
+        let motion = root.appendingPathComponent("motion.jpg")
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="1" GCamera:MicroVideoOffset="100" GCamera:MotionPhotoOffset="\(clip.count)"/>\
+        </rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        try jpegWithXmp(still: still, xmp: Data(xmp.utf8), trailer: clip).write(to: motion)
+        XCTAssertTrue(StillMotion.motionPhoto(motion))
+        let off = root.appendingPathComponent("off.jpg")
+        let offXmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="0" GCamera:MotionPhotoOffset="\(clip.count)"/>\
+        </rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        try jpegWithXmp(still: still, xmp: Data(offXmp.utf8), trailer: clip).write(to: off)
+        XCTAssertFalse(StillMotion.motionPhoto(off))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(motion)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
     func testAStrippedMotionPhotoIsTheStill() throws {
         // Editors keep the motion-photo directory after the video is gone.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-stripped-\(UUID().uuidString)")

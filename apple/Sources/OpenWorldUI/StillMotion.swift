@@ -170,8 +170,10 @@ public enum StillMotion {
         guard let text = String(bytes: buf, encoding: .utf8) else { return .no }
         if motionPhotoOff(text) { return .off }
         if let length = motionItemLength(text) { return .video(length) }
+        if let length = xmpAttr(text, "MotionPhotoOffset") { return .video(length) }
         if let length = xmpAttr(text, "MicroVideoOffset") { return .video(length) }
         let named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='")
+            || text.contains("MotionPhotoOffset=\"") || text.contains("MotionPhotoOffset='")
             || text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
         return named ? .unreadable : .no
     }

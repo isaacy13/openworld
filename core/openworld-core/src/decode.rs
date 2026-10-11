@@ -365,9 +365,10 @@ enum MotionXmp {
     Unreadable,
 }
 
-/// `MicroVideoOffset` is the older length. A directory lists the cover first,
-/// with length 0, then the video item. That item's length locates the video,
-/// and a leftover offset is ignored. Only `MotionPhoto` 1 is a motion photo.
+/// `MicroVideoOffset` is the older length. `MotionPhotoOffset` is the same
+/// length on a later Pixel file, and it wins when both are present. A directory
+/// lists the cover first, with length 0, then the video item. That item's length
+/// locates the video, and a leftover offset is ignored. Only `MotionPhoto` 1 is a motion photo.
 fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
         return MotionXmp::No;
@@ -379,11 +380,16 @@ fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if let Some(n) = motion_item_length(&text) {
         return MotionXmp::Video(n);
     }
+    if let Some(n) = xmp_attr_u64(&text, "MotionPhotoOffset") {
+        return MotionXmp::Video(n);
+    }
     if let Some(n) = xmp_attr_u64(&text, "MicroVideoOffset") {
         return MotionXmp::Video(n);
     }
     let named = text.contains("MicroVideoOffset=\"")
         || text.contains("MicroVideoOffset='")
+        || text.contains("MotionPhotoOffset=\"")
+        || text.contains("MotionPhotoOffset='")
         || text.contains("Semantic=\"MotionPhoto\"")
         || text.contains("Semantic='MotionPhoto'");
     if named {
