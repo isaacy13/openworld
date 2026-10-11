@@ -404,13 +404,15 @@ object PlatformDecode {
         val uBuf = uPlane.buffer
         val vBuf = vPlane.buffer
         val argb = IntArray(pixels)
+        val crop = image.cropRect
         for (row in 0 until height) {
             for (col in 0 until width) {
-                val yIndex = row * yPlane.rowStride + col * yPlane.pixelStride
-                val uvRow = row / 2
-                val uvCol = col / 2
-                val uIndex = uvRow * uPlane.rowStride + uvCol * uPlane.pixelStride
-                val vIndex = uvRow * vPlane.rowStride + uvCol * vPlane.pixelStride
+                val yIndex = planeIndex(row, col, yPlane.rowStride, yPlane.pixelStride, crop.top, crop.left)
+                    ?: throw IOException("Bad codec or unreadable file. Refusing.")
+                val uIndex = planeIndex(row / 2, col / 2, uPlane.rowStride, uPlane.pixelStride, crop.top / 2, crop.left / 2)
+                    ?: throw IOException("Bad codec or unreadable file. Refusing.")
+                val vIndex = planeIndex(row / 2, col / 2, vPlane.rowStride, vPlane.pixelStride, crop.top / 2, crop.left / 2)
+                    ?: throw IOException("Bad codec or unreadable file. Refusing.")
                 val yVal = planeSample(yBuf, yIndex)
                 val uVal = planeSample(uBuf, uIndex)
                 val vVal = planeSample(vBuf, vIndex)
@@ -536,9 +538,32 @@ internal fun yuvPixelCount(width: Int, height: Int): Int? {
     return pixels.toInt()
 }
 
-/** A plane buffer's position is the first sample. An absolute read from zero takes the padding before it. */
+/**
+ * Byte offset of one sample inside a plane, from the first sample.
+ * The crop origin is where the picture starts. A 32-bit multiply wraps, and the
+ * wrapped offset can land inside the buffer, so the frame is not the picture.
+ */
+internal fun planeIndex(row: Int, col: Int, rowStride: Int, pixelStride: Int, originRow: Int, originCol: Int): Int? {
+    if (row < 0 || col < 0 || originRow < 0 || originCol < 0 || rowStride <= 0 || pixelStride <= 0) return null
+    val y = row.toLong() + originRow.toLong()
+    val x = col.toLong() + originCol.toLong()
+    val index = y * rowStride.toLong() + x * pixelStride.toLong()
+    if (index < 0L || index > Int.MAX_VALUE.toLong()) return null
+    return index.toInt()
+}
+
+/**
+ * A plane buffer's position is the first sample. An absolute read from zero takes the padding before it.
+ * An index past the buffer is a refusal. [ByteBuffer.get] throws, and that exception is not an
+ * [IOException], so the scan thread never finishes and the screen stays on scanning.
+ */
 internal fun planeSample(buffer: java.nio.ByteBuffer, index: Int): Int {
-    return buffer.get(buffer.position() + index).toInt() and 0xFF
+    if (index < 0) throw IOException("Bad codec or unreadable file. Refusing.")
+    val at = buffer.position().toLong() + index.toLong()
+    if (at < 0L || at >= buffer.limit().toLong()) {
+        throw IOException("Bad codec or unreadable file. Refusing.")
+    }
+    return buffer.get(at.toInt()).toInt() and 0xFF
 }
 
 /**

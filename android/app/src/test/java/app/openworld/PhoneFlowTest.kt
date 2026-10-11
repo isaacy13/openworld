@@ -1376,6 +1376,37 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aVideoPlanePastTheBufferIsRefused() {
+        // The picture starts two columns in. Column 0 is padding. Reading it drops the face.
+        assertEquals(2, planeIndex(0, 0, 8, 1, 0, 2))
+        assertEquals(10, planeIndex(1, 0, 8, 1, 0, 2))
+        assertEquals(5, planeIndex(1, 1, 4, 1, 0, 0))
+        // 3 * 1_431_655_766 wraps to 2. That offset is inside the buffer, so the frame is the wrong pixels.
+        assertNull(planeIndex(3, 0, 1_431_655_766, 1, 0, 0))
+        val short = ByteBuffer.allocate(4)
+        var refused = false
+        try {
+            planeSample(short, 8)
+        } catch (err: java.io.IOException) {
+            refused = err.message?.contains("Refusing") == true
+        }
+        assertTrue(refused)
+        val shifted = ByteBuffer.allocate(8)
+        shifted.position(4)
+        refused = false
+        try {
+            planeSample(shifted, Int.MAX_VALUE)
+        } catch (err: java.io.IOException) {
+            refused = err.message?.contains("Refusing") == true
+        }
+        assertTrue(refused)
+        val plane = ByteBuffer.allocate(4)
+        plane.position(1)
+        plane.put(1, 16)
+        assertEquals(16, planeSample(plane, 0))
+    }
+
+    @Test
     fun aJpegOrientationTagIsReadWithoutAnExtension() {
         val file = File.createTempFile("ow-orient", "")
         file.writeBytes(jpegWithOrientation(6))
