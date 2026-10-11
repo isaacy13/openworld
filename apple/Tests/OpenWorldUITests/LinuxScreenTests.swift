@@ -407,6 +407,23 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    func testADropDuringAScanIsNotAccepted() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorld/OpenWorldApp.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let drop = view.components(separatedBy: ".onDrop").dropFirst().first?
+            .components(separatedBy: ".toolbar").first ?? ""
+        let refused = drop.range(of: "guard !model.scanning else { return false }")
+        let accepted = drop.range(of: "return true")
+        XCTAssertTrue(
+            refused != nil && accepted != nil && refused!.lowerBound < accepted!.lowerBound,
+            "a drop during Scanning is accepted and then ignored: \(drop.prefix(320))"
+        )
+    }
+
     func testACropThatArrivesStaysOnTheEstimate() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

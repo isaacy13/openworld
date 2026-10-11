@@ -539,12 +539,18 @@ class OpenWorld(Gtk.Application):
         self.take_file(chosen)
 
     def _on_drop(self, _target, value, _x, _y) -> bool:
+        # A drop during a scan used to be accepted, and a file with no local path
+        # was copied before the scan ignored it.
+        if self.scan_thread is not None and self.scan_thread.is_alive():
+            return False
         self.take_file(value)
         return True
 
     def take_file(self, chosen) -> None:
         """Open a chooser result. A file with no local path is copied onto this device."""
         if self.closed:
+            return
+        if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         path = None
         display = None

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import threading
 from pathlib import Path
 
 os.environ.pop("OPENWORLD_EXERCISE", None)
@@ -111,6 +112,22 @@ def main() -> None:
         app._on_drop(None, desktop.Gio.File.new_for_path(str(local)), 0, 0)
         if app.file_label.get_text() != "local.png" or app.stack.get_visible_child_name() != "device":
             raise SystemExit(f"a local file stayed off the page: {app.file_label.get_text()!r}")
+        before = set((app.work / "imports").iterdir())
+        held = threading.Event()
+        app.scan_thread = threading.Thread(target=held.wait, daemon=True)
+        app.scan_thread.start()
+        try:
+            accepted = app._on_drop(None, RemoteFile(b"during-scan", "during.png", 0), 0, 0)
+        finally:
+            held.set()
+            app.scan_thread.join(timeout=2)
+            app.scan_thread = None
+        copied = set((app.work / "imports").iterdir()) - before
+        if accepted or copied or app.file_label.get_text() != "local.png" or app.input_path != str(local):
+            raise SystemExit(
+                f"a drop during a scan was kept: accepted {accepted} copies {copied} "
+                f"file {app.file_label.get_text()!r} path {app.input_path!r}"
+            )
         app._stop_scan()
         app.pick_notice.set_visible(False)
         app._on_drop(None, RemoteFile(b"png-bytes", "later.png", 0), 0, 0)

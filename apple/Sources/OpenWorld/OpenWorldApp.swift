@@ -113,6 +113,7 @@ struct MacRoot: View {
                 model.closeWindow()
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                guard !model.scanning else { return false }
                 guard let provider = providers.first else { return false }
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
