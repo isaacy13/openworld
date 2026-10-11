@@ -1099,16 +1099,16 @@ public struct FlowView: View {
         if let image = NSImage(contentsOfFile: path) {
             Image(nsImage: image)
                 .resizable()
-                .scaledToFit()
                 .interpolation(.none)
+                .scaledToFit()
                 .frame(width: 112, height: 112)
         }
         #elseif os(iOS)
         if let image = UIImage(contentsOfFile: path) {
             Image(uiImage: image)
                 .resizable()
-                .scaledToFit()
                 .interpolation(.none)
+                .scaledToFit()
                 .frame(width: 112, height: 112)
         }
         #endif
@@ -1121,8 +1121,8 @@ public struct FlowView: View {
         if let path, let image = NSImage(contentsOfFile: path) {
             let photo = Image(nsImage: image)
                 .resizable()
-                .scaledToFit()
                 .interpolation(.none)
+                .scaledToFit()
             if flexible {
                 photo
                     .aspectRatio(1, contentMode: .fit)
@@ -1135,8 +1135,8 @@ public struct FlowView: View {
         if let path, let image = UIImage(contentsOfFile: path) {
             let photo = Image(uiImage: image)
                 .resizable()
-                .scaledToFit()
                 .interpolation(.none)
+                .scaledToFit()
             if flexible {
                 photo
                     .aspectRatio(1, contentMode: .fit)

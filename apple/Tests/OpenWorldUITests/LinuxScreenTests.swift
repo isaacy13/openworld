@@ -419,8 +419,13 @@ final class OpenWorldUITests: XCTestCase {
         let pieces = view.components(separatedBy: ".resizable()")
         XCTAssertEqual(pieces.count - 1, 4, "the crop and the frame each draw on the phone and the Mac")
         for piece in pieces.dropFirst() {
-            let head = piece.prefix(80)
-            XCTAssertTrue(head.contains(".scaledToFit()"), "a wide frame stretches into the square: \(head)")
+            let head = piece.prefix(90)
+            let sharp = head.range(of: ".interpolation(.none)")
+            let fit = head.range(of: ".scaledToFit()")
+            XCTAssertTrue(
+                sharp != nil && fit != nil && sharp!.lowerBound < fit!.lowerBound,
+                "a wide frame stretches into the square: \(head)"
+            )
         }
     }
 
