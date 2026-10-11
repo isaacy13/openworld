@@ -1255,6 +1255,18 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aFrameRateThatIsNotANumberIsNotARate() {
+        // NaN is not <= 0, so a track that reports it used to be planned as one frame.
+        val missing = MediaFormat()
+        missing.setFloat(MediaFormat.KEY_FRAME_RATE, Float.NaN)
+        assertEquals(0.0, mediaFrameRate(missing), 0.0)
+        val infinite = MediaFormat()
+        infinite.setFloat(MediaFormat.KEY_FRAME_RATE, Float.POSITIVE_INFINITY)
+        assertEquals(0.0, mediaFrameRate(infinite), 0.0)
+        assertEquals(0L, videoFrameCount(2.0, Double.NaN))
+    }
+
+    @Test
     fun aVideoPlaneStartsAtTheBufferPositionAndStudioBlackIsBlack() {
         val plane = ByteBuffer.allocate(8)
         plane.put(0, 9)

@@ -421,15 +421,17 @@ object PlatformDecode {
  * Tracks store a frame rate as an integer or as a float. [MediaFormat.getInteger]
  * throws when the value is a float, and Continue only catches [IOException].
  * [MediaFormat.getFloat] throws when the value is an integer. A missing key stays 0
- * so the caller still refuses a track that did not report a rate.
+ * so the caller still refuses a track that did not report a rate. NaN is not <= 0,
+ * and it is not a rate either.
  */
 internal fun mediaFrameRate(format: MediaFormat): Double {
     if (!format.containsKey(MediaFormat.KEY_FRAME_RATE)) return 0.0
-    return try {
+    val rate = try {
         format.getFloat(MediaFormat.KEY_FRAME_RATE).toDouble()
     } catch (_: ClassCastException) {
         format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()
     }
+    return if (rate.isFinite()) rate else 0.0
 }
 
 /**
@@ -506,7 +508,8 @@ internal fun framesOnScreen(delays: List<Double>): List<Int> {
 }
 
 internal fun videoFrameCount(durationSec: Double, fps: Double): Long {
-    if (!durationSec.isFinite() || durationSec <= 0.0 || !fps.isFinite() || fps <= 0.0) return 1L
+    if (!durationSec.isFinite() || !fps.isFinite()) return 0L
+    if (durationSec <= 0.0 || fps <= 0.0) return 1L
     val pictures = durationSec * fps
     if (!pictures.isFinite() || pictures >= Long.MAX_VALUE.toDouble()) return 0L
     return maxOf(1L, pictures.roundToLong())
