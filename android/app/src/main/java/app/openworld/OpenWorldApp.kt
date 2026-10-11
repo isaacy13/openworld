@@ -219,7 +219,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 RadioButton(selected = model.longSide == value, onClick = null)
                                 Text(
                                     markedChoice(label, model.longSide == value),
-                                    modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                    modifier = Modifier.weight(1f),
                                 )
                             }
                         }
@@ -236,7 +236,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             RadioButton(selected = model.coverage == "complete", onClick = null)
                             Text(
                                 markedChoice("Complete. Every decoded frame.", model.coverage == "complete"),
-                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                modifier = Modifier.weight(1f),
                             )
                         }
                         Row(
@@ -251,7 +251,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             RadioButton(selected = model.coverage == "measured", onClick = null)
                             Text(
                                 markedChoice("Measured. 5 frames a second, plus the tracker.", model.coverage == "measured"),
-                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                modifier = Modifier.weight(1f),
                             )
                         }
                         if (model.coverage == "measured") Text("A brief face can be missed.")
@@ -340,7 +340,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                     onCheckedChange = null,
                                     enabled = !model.scanning,
                                 )
-                                Text("Missing", modifier = Modifier.padding(top = 12.dp))
+                                Text("Missing")
                             }
                             Row(
                                 modifier = Modifier
@@ -360,7 +360,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                     onCheckedChange = null,
                                     enabled = !model.scanning,
                                 )
-                                Text("Wanted", modifier = Modifier.padding(top = 12.dp))
+                                Text("Wanted")
                             }
                             Button(onClick = model::startScan, enabled = model.canAnalyze && !model.scanning) {
                                 Text(if (model.scanning) "Scanning" else "Analyze")

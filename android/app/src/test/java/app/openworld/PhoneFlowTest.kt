@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
@@ -2668,6 +2669,32 @@ class PhoneScreenTest {
         assertTrue("width $widthDp", widthDp in 100.dp..160.dp)
         compose.onNodeWithText("Frame 1.").assertExists()
         compose.onNodeWithText("Crops from this file.").assertExists()
+    }
+
+    @Test
+    fun aChoiceSitsBesideTheMiddleOfItsMark() {
+        val model = FlowModel()
+        model.step = Step.Size
+        model.longSide = "640"
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val label = compose.onNodeWithText(
+            "640 px on the long side. Selected.",
+            useUnmergedTree = true,
+        )
+        label.performScrollTo()
+        val text = label.fetchSemanticsNode().boundsInRoot
+        val row = compose.onAllNodes(
+            SemanticsMatcher("radio") {
+                it.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton
+            },
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().map { it.boundsInRoot }.first { it.bottom == text.bottom && it.top <= text.top }
+        val above = text.top - row.top
+        val below = row.bottom - text.bottom
+        assertTrue(
+            "the choice sat low in its row: text $text row $row above $above below $below",
+            kotlin.math.abs(above - below) <= 2f && text.left >= row.left && text.right <= row.right + 1f,
+        )
     }
 
     @Test
