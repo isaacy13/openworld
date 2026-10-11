@@ -890,12 +890,22 @@ public struct FlowView: View {
     }
 
     private var estimate: some View {
-        ScrollView { estimateColumn }
+        ScrollViewReader { proxy in
+            ScrollView { estimateColumn }
+                .onChange(of: model.deleteNotice, initial: true) { _, notice in
+                    if notice != nil {
+                        proxy.scrollTo("deleteNotice", anchor: .top)
+                    }
+                }
+        }
     }
 
     private var estimateColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
+            if let notice = model.deleteNotice {
+                Text(notice).foregroundStyle(.orange).id("deleteNotice")
+            }
             Text(model.estimateHeadline)
                 .font(model.phone ? .largeTitle : .title)
                 .foregroundStyle(model.estimate == nil && !model.scanning && model.error != nil ? .orange : .primary)
@@ -939,9 +949,6 @@ public struct FlowView: View {
                 prominent(model.scanning ? "Scanning" : "Analyze") { model.startScan() }
                     .disabled(model.scanning || !model.canAnalyze)
             }
-            if let notice = model.deleteNotice {
-                Text(notice).foregroundStyle(.orange)
-            }
             Spacer()
         }
         .padding()
@@ -956,6 +963,11 @@ public struct FlowView: View {
             .onChange(of: model.leaveError, initial: true) { _, notice in
                 if notice != nil {
                     proxy.scrollTo("leaveError", anchor: .top)
+                }
+            }
+            .onChange(of: model.deleteNotice, initial: true) { _, notice in
+                if notice != nil {
+                    proxy.scrollTo("deleteNotice", anchor: .top)
                 }
             }
         }
@@ -974,6 +986,9 @@ public struct FlowView: View {
                 backControl
                 if let notice = model.leaveError {
                     Text(notice).foregroundStyle(.orange).id("leaveError")
+                }
+                if let notice = model.deleteNotice {
+                    Text(notice).foregroundStyle(.orange).id("deleteNotice")
                 }
                 Text(model.resultHeadline)
                     .font(model.phone ? .largeTitle : .title)
@@ -1034,9 +1049,6 @@ public struct FlowView: View {
                 }
                 if model.resultDirectory != nil {
                     prominent("Delete") { model.deleteResult() }
-                }
-                if let notice = model.deleteNotice {
-                    Text(notice).foregroundStyle(.orange)
                 }
                 prominent("Choose another file") { model.chooseAnother() }
             }

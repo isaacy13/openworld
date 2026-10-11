@@ -59,7 +59,9 @@ public enum PhonePreview {
             lines.append("Continue")
             return lines
         case "estimate":
-            var lines = ["Back", model.estimateHeadline]
+            var lines = ["Back"]
+            if let notice = model.deleteNotice { lines.append(notice) }
+            lines.append(model.estimateHeadline)
             if model.scanning, !model.liveCrops.isEmpty {
                 lines.append("Crops from this file.")
                 for crop in model.liveCrops {
@@ -86,13 +88,11 @@ public enum PhonePreview {
             if model.showsAnalyze {
                 lines.append(model.scanning ? "Scanning" : "Analyze")
             }
-            if let notice = model.deleteNotice {
-                lines.append(notice)
-            }
             return lines
         case "results", "leaving":
             var lines = ["Back"]
             if let notice = model.leaveError { lines.append(notice) }
+            if let notice = model.deleteNotice { lines.append(notice) }
             lines.append(model.resultHeadline)
             if let reason = model.resultReason {
                 lines.append(reason)
@@ -118,7 +118,6 @@ public enum PhonePreview {
             if model.resultDirectory != nil {
                 lines.append("Delete")
             }
-            if let notice = model.deleteNotice { lines.append(notice) }
             lines.append("Choose another file")
             if screen == "leaving" {
                 lines.append(Copy.leaving)

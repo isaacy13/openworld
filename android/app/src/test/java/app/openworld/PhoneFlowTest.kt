@@ -1352,6 +1352,57 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aRefusedDeleteSaysSoOnTheOpenScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Results
+        model.summary = "Possible candidate. Not an identification."
+        model.context = listOf(
+            "1 frame analyzed.",
+            "Missing and wanted.",
+            "Bundle: Fast",
+            "640 px on the long side.",
+            "Every decoded frame.",
+            "Fixture markers were read.",
+        ).joinToString("\n")
+        model.detail = (0 until 12).joinToString("\n") { "Disclosure line $it." }
+        val path = picture.absolutePath
+        model.candidateRows = listOf(
+            CandidateRow(
+                "Possible candidate. Not an identification.",
+                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Fixture subject A",
+                "Missing",
+                "https://www.fbi.gov/wanted",
+                path,
+                path,
+                "Frame 1.",
+            ),
+        )
+        model.strip = List(6) { index -> StripCrop("Not compared.", path, "Frame ${index + 1}.") }
+        val result = FlowModel::class.java.getDeclaredField("resultDir")
+        result.isAccessible = true
+        result.set(model, picture.parentFile)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Delete").performScrollTo()
+        compose.waitForIdle()
+        val button = compose.onNodeWithText("Delete").fetchSemanticsNode().boundsInRoot
+        assertTrue("Delete was not on screen: $button", button.height > 0f && button.top < 800f)
+        model.deleteNotice = "The result could not be deleted."
+        compose.waitForIdle()
+        val notice = compose.onNodeWithText("The result could not be deleted.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the refused delete stayed off screen: $notice, Delete was $button",
+            notice.height > 0f && notice.top >= 0f && notice.top < 800f && notice.bottom > 0f,
+        )
+    }
+
+    @Test
     fun draggingOnACropStillScrollsTheResult() {
         val model = FlowModel()
         model.step = Step.Results

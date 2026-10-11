@@ -89,7 +89,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
     MaterialTheme {
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
             val scroll = rememberScrollState()
-            LaunchedEffect(model.step, model.leaveNotice) { scroll.scrollTo(0) }
+            LaunchedEffect(model.step, model.leaveNotice, model.deleteNotice) { scroll.scrollTo(0) }
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -212,6 +212,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Button(onClick = model::continueFromSize) { Text("Continue") }
                     }
                     Step.Estimate -> {
+                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         val refused = !model.scanning && !model.estimateOk && model.estimateText.isNotBlank()
                         if (refused) {
                             Text(model.estimateText, style = MaterialTheme.typography.headlineMedium, color = warningColor)
@@ -286,10 +287,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 Text(if (model.scanning) "Scanning" else "Analyze")
                             }
                         }
-                        model.deleteNotice?.let { Text(it, color = warningColor) }
                     }
                     Step.Results -> {
                         model.leaveNotice?.let { Text(it, color = warningColor) }
+                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         val headline = model.summary.ifBlank {
                             when (model.status) {
                                 "complete" -> if (model.candidateRows.isNotEmpty()) ProductCopy.possible else ProductCopy.clearance
@@ -358,7 +359,6 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (model.resultDir != null) {
                             Button(onClick = model::deleteResult) { Text("Delete") }
                         }
-                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
                 }
