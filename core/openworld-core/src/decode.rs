@@ -166,6 +166,7 @@ fn motion_video(path: &Path) -> MotionVideo {
     if file.read_exact(&mut soi).is_err() || soi != [0xFF, 0xD8] {
         return MotionVideo::None;
     }
+    let mut claimed = false;
     let mut video_len = None;
     loop {
         let marker = match next_jpeg_marker(&mut file) {
@@ -193,15 +194,26 @@ fn motion_video(path: &Path) -> MotionVideo {
             if file.read_exact(&mut buf).is_err() {
                 break;
             }
-            if let Some(n) = motion_length_in_xmp(&buf) {
-                video_len = Some(n);
+            match motion_length_in_xmp(&buf) {
+                MotionXmp::No => {}
+                MotionXmp::Video(n) => {
+                    claimed = true;
+                    if video_len.is_none() {
+                        video_len = Some(n);
+                    }
+                }
+                MotionXmp::Unreadable => claimed = true,
             }
         } else if file.seek(SeekFrom::Current(payload as i64)).is_err() {
             break;
         }
     }
-    let Some(video_len) = video_len else {
+    if !claimed {
         return MotionVideo::None;
+    }
+    // The packet says this is a motion photo. A missing length is not a still.
+    let Some(video_len) = video_len else {
+        return MotionVideo::Broken;
     };
     if video_len == 0 || video_len >= len {
         return MotionVideo::Broken;
@@ -231,18 +243,43 @@ fn next_jpeg_marker(file: &mut File) -> Option<u8> {
     }
 }
 
-fn motion_length_in_xmp(buf: &[u8]) -> Option<u64> {
+enum MotionXmp {
+    No,
+    /// The packet names a motion photo and gives the video's byte length.
+    Video(u64),
+    /// The packet names a motion photo, and the video length is not readable.
+    Unreadable,
+}
+
+/// `MicroVideoOffset` is the older length. A directory lists the cover first,
+/// with length 0, then the video item. The video length is on that item.
+fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
-        return None;
+        return MotionXmp::No;
     }
     let text = String::from_utf8_lossy(buf);
-    if let Some(n) = xmp_attr_u64(&text, "MicroVideoOffset") {
-        return Some(n);
+    let named = text.contains("MicroVideoOffset=\"")
+        || text.contains("MicroVideoOffset='")
+        || text.contains("Semantic=\"MotionPhoto\"")
+        || text.contains("Semantic='MotionPhoto'");
+    if !named {
+        return MotionXmp::No;
     }
-    let idx = text.find("Semantic=\"MotionPhoto\"").or_else(|| text.find("Semantic='MotionPhoto'"))?;
-    let from = idx.saturating_sub(240);
-    let to = (idx + 240).min(text.len());
-    xmp_attr_u64(&text[from..to], "Length")
+    if let Some(n) = xmp_attr_u64(&text, "MicroVideoOffset") {
+        return MotionXmp::Video(n);
+    }
+    let Some(idx) = text.find("Semantic=\"MotionPhoto\"").or_else(|| text.find("Semantic='MotionPhoto'")) else {
+        return MotionXmp::Unreadable;
+    };
+    // The length belongs to this item. The cover item's length, 0, is a different item.
+    let start = text[..idx].rfind('<').unwrap_or(0);
+    let Some(end_rel) = text[idx..].find('>') else {
+        return MotionXmp::Unreadable;
+    };
+    match xmp_attr_u64(&text[start..idx + end_rel], "Length") {
+        Some(n) => MotionXmp::Video(n),
+        None => MotionXmp::Unreadable,
+    }
 }
 
 fn xmp_attr_u64(text: &str, name: &str) -> Option<u64> {

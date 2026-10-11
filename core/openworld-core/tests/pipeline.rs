@@ -2190,6 +2190,60 @@ fn a_motion_photo_keeps_a_face_that_is_not_on_the_still() {
     assert!(report.candidates.iter().any(|c| c.kind == "face"));
 }
 
+#[test]
+fn a_motion_photo_directory_keeps_a_face_that_is_not_on_the_still() {
+    // Current camera files name the video in a directory. The cover item's
+    // length is 0. The video item's length is the clip at the end of the file.
+    // Reading the 0 scans the blank cover and clears a face that is only in the clip.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let blank = dir.path().join("blank.jpg");
+    let movie = dir.path().join("scene.mp4");
+    let motion = dir.path().join("motion.jpg");
+    let blank_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1"])
+        .arg(&blank)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank_ok.success());
+    let scene_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(scene_ok.success());
+    stitch_motion_directory(&blank, &movie, &motion);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: motion,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 8);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
 fn stitch_motion_photo(still: &std::path::Path, video: &std::path::Path, out: &std::path::Path) {
     let jpg = fs::read(still).unwrap();
     let mp4 = fs::read(video).unwrap();
@@ -2201,6 +2255,45 @@ fn stitch_motion_photo(still: &std::path::Path, video: &std::path::Path, out: &s
          <rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
          GCamera:MotionPhoto=\"1\" GCamera:MicroVideo=\"1\" GCamera:MicroVideoOffset=\"{}\"/>\n\
          </rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        mp4.len()
+    );
+    let mut payload = b"http://ns.adobe.com/xap/1.0/\0".to_vec();
+    payload.extend_from_slice(xmp.as_bytes());
+    let seglen = (payload.len() + 2) as u16;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&jpg[..2]);
+    bytes.extend_from_slice(&[0xFF, 0xE1]);
+    bytes.extend_from_slice(&seglen.to_be_bytes());
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&jpg[2..]);
+    bytes.extend_from_slice(&mp4);
+    fs::write(out, bytes).unwrap();
+}
+
+fn stitch_motion_directory(still: &std::path::Path, video: &std::path::Path, out: &std::path::Path) {
+    let jpg = fs::read(still).unwrap();
+    let mp4 = fs::read(video).unwrap();
+    assert_eq!(&jpg[..2], b"\xff\xd8");
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description rdf:about=\"\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\" \
+         GCamera:MotionPhotoPresentationTimestampUs=\"0\">\
+         <Container:Directory><rdf:Seq>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" \
+         Item:Length=\"0\" Item:Padding=\"0\"/>\
+         </rdf:li>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" \
+         Item:Length=\"{}\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
         mp4.len()
     );
     let mut payload = b"http://ns.adobe.com/xap/1.0/\0".to_vec();
