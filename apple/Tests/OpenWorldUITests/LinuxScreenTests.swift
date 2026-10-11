@@ -1616,6 +1616,34 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnHevcImageSequenceIsRefusedInsteadOfScanningTheFirstFrame() throws {
+        // Major brand hevc is an HEVC image sequence. The still decoder keeps the
+        // first frame. heix is a still HEVC image and stays on that path.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-hevc-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let hevc = root.appendingPathComponent("clip.heic")
+        try Data([UInt8](repeating: 0, count: 4) + Array("ftyphevc".utf8)).write(to: hevc)
+        XCTAssertFalse(StillMotion.movieContainer(hevc))
+        let heix = root.appendingPathComponent("still.heic")
+        try Data([UInt8](repeating: 0, count: 4) + Array("ftypheix".utf8)).write(to: heix)
+        let heic = root.appendingPathComponent("photo.heic")
+        try Data([UInt8](repeating: 0, count: 4) + Array("ftypheic".utf8)).write(to: heic)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(hevc)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+        XCTAssertTrue(StillMotion.imageSequence(hevc))
+        XCTAssertFalse(StillMotion.imageSequence(heix))
+        XCTAssertFalse(StillMotion.imageSequence(heic))
+    }
+
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
         let apng = try movingPicture("apng")
         XCTAssertTrue(StillMotion.animatedPng(apng))

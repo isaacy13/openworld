@@ -965,6 +965,29 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun anHevcImageSequenceIsRefusedInsteadOfScanningTheFirstFrame() {
+        // Major brand hevc is an HEVC image sequence. The still decoder keeps the
+        // first frame. heix is a still HEVC image and stays on that path.
+        val hevc = headerFile("ftyphevc")
+        assertTrue(StillMotion.stillContainer(hevc))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/clip.heic")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, hevc.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertFalse(model.estimateText.contains("Bad codec"))
+        assertTrue(StillMotion.imageSequence(hevc))
+        assertFalse(StillMotion.imageSequence(headerFile("ftypheix")))
+        assertFalse(StillMotion.imageSequence(headerFile("ftypheic")))
+    }
+
+    @Test
     fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
         val apng = movingPicture("apng")
         assertTrue(StillMotion.animatedPng(apng))

@@ -14,11 +14,12 @@ object StillMotion {
     /**
      * An AVIF or HEIF image sequence is more than one frame. The still decoder keeps
      * the first frame, so the file is not scanned as a still. The major brand is the
-     * four bytes after `ftyp`. `avis` is an AVIF sequence and `msf1` is a HEIF sequence.
+     * four bytes after `ftyp`. `avis` is an AVIF sequence, `msf1` is a HEIF sequence,
+     * and `hevc` is an HEVC image sequence. `heic` and `heix` stay stills.
      */
     fun imageSequence(file: File): Boolean {
         val brand = majorBrand(file) ?: return false
-        return brand == "avis" || brand == "msf1"
+        return brand == "avis" || brand == "msf1" || brand == "hevc"
     }
 
     /**

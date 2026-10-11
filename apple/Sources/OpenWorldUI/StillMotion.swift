@@ -53,10 +53,11 @@ public enum StillMotion {
     }
 
     /// An AVIF or HEIF image sequence. The still decoder keeps the first frame.
-    /// `avis` is an AVIF sequence and `msf1` is a HEIF sequence.
+    /// `avis` is an AVIF sequence, `msf1` is a HEIF sequence, and `hevc` is an HEVC
+    /// image sequence. `heic` and `heix` stay stills.
     public static func imageSequence(_ url: URL) -> Bool {
         guard let brand = majorBrand(url) else { return false }
-        return brand == "avis" || brand == "msf1"
+        return brand == "avis" || brand == "msf1" || brand == "hevc"
     }
 
     /// A movie container, including a file whose name has no extension.
