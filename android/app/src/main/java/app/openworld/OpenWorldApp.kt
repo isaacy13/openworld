@@ -305,18 +305,37 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                                 modifier = Modifier.size(112.dp),
                                             )
                                         }
-                                        Text(crop.frameLabel, textAlign = TextAlign.Center)
-                                        Text(
-                                            crop.label,
-                                            textAlign = TextAlign.Center,
-                                            modifier = if (latest) {
-                                                Modifier
-                                                    .bringIntoViewRequester(bringLatest)
-                                                    .onSizeChanged { latestHeight.value = it.height }
-                                            } else {
-                                                Modifier
-                                            },
-                                        )
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clearAndSetSemantics { text = AnnotatedString(crop.frameLabel) },
+                                        ) {
+                                            Text(
+                                                wrappingFileName(crop.frameLabel),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clearAndSetSemantics { text = AnnotatedString(crop.label) }
+                                                .then(
+                                                    if (latest) {
+                                                        Modifier
+                                                            .bringIntoViewRequester(bringLatest)
+                                                            .onSizeChanged { latestHeight.value = it.height }
+                                                    } else {
+                                                        Modifier
+                                                    },
+                                                ),
+                                        ) {
+                                            Text(
+                                                wrappingFileName(crop.label),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -417,16 +436,30 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                                 modifier = Modifier.size(112.dp),
                                             )
                                         }
-                                        Text(
-                                            crop.frameLabel,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            textAlign = TextAlign.Center,
-                                        )
-                                        Text(
-                                            crop.label,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            textAlign = TextAlign.Center,
-                                        )
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clearAndSetSemantics { text = AnnotatedString(crop.frameLabel) },
+                                        ) {
+                                            Text(
+                                                wrappingFileName(crop.frameLabel),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clearAndSetSemantics { text = AnnotatedString(crop.label) },
+                                        ) {
+                                            Text(
+                                                wrappingFileName(crop.label),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -516,12 +549,18 @@ private fun evidencePicture(path: String, caption: String, side: Dp) {
                 modifier = Modifier.size(side),
             )
         }
-        Text(
-            caption,
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center,
-        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics { text = AnnotatedString(caption) },
+        ) {
+            Text(
+                wrappingFileName(caption),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

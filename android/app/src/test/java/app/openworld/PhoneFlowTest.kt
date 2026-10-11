@@ -2843,6 +2843,54 @@ class PhoneScreenTest {
         }, useUnmergedTree = true).fetchSemanticsNodes().map { node ->
             node.config[SemanticsProperties.Text].joinToString { it.text }
         }
+
+    @Test
+    fun aLongCropWordStaysInsideItsColumn() {
+        val word = "A".repeat(80)
+        val frame = "B".repeat(40)
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "No candidate is not a clearance."
+        model.strip = listOf(
+            StripCrop(label = word, path = "/tmp/openworld-missing-crop.png", frameLabel = frame),
+        )
+        val picture = evidencePng()
+        model.candidateRows = listOf(
+            CandidateRow(
+                wording = "Possible candidate. Not an identification.",
+                uncertainty = "",
+                title = "",
+                posterClassLabel = "",
+                url = "",
+                cropPath = picture.absolutePath,
+                framePath = picture.absolutePath,
+                frameLabel = word,
+            ),
+        )
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        assertWordBreaksInsideItsColumn(word)
+        assertWordBreaksInsideItsColumn(frame)
+        model.step = Step.Estimate
+        model.scanning = true
+        model.liveCrops = listOf(LiveCrop(word, picture.absolutePath, frame))
+        compose.waitForIdle()
+        assertWordBreaksInsideItsColumn(word)
+        assertWordBreaksInsideItsColumn(frame)
+    }
+
+    private fun assertWordBreaksInsideItsColumn(word: String) {
+        val nodes = compose.onAllNodesWithText(word).fetchSemanticsNodes()
+        assertTrue("the spoken crop word was missing: $word", nodes.isNotEmpty())
+        nodes.forEach { node ->
+            val width = with(compose.density) { node.boundsInRoot.width.toDp() }
+            assertTrue("a crop word left its column: $width", width in 1.dp..160.dp)
+        }
+        val shown = shownTexts().filter { text -> text.replace("\u200B", "") == word && text.contains('\u200B') }
+        assertTrue("the crop word was not broken: $word", shown.isNotEmpty())
+        shown.forEach { text -> assertEquals(word.map { ch -> ch.toString() }, text.split('\u200B')) }
+    }
 }
 
 /** Opens and closes the phone window directly so a singleTask launch can shut down. */
