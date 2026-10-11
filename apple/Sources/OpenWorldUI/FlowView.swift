@@ -23,6 +23,15 @@ public struct Published<Value> {
 }
 #endif
 
+/// The square shared by the crop and the frame. A narrow column shrinks both by the same amount.
+public func evidenceSide(available: Double, count: Int, preferred: Double = 112, gap: Double = 8) -> Double {
+    guard count > 0, available > 0 else { return 0 }
+    if count == 1 { return min(preferred, available) }
+    let room = available - gap * Double(count - 1)
+    guard room > 0 else { return 0 }
+    return min(preferred, room / Double(count))
+}
+
 /// The choice that will run, in the same words on every screen.
 public func markedChoice(_ title: String, selected: Bool) -> String {
     guard selected else { return title }
@@ -1018,7 +1027,9 @@ public struct FlowView: View {
                     ForEach(model.report?.candidates ?? []) { candidate in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(candidate.wording).font(.headline)
-                            HStack(alignment: .top, spacing: 8) {
+                            // Both photos share one square. A narrow column shrinks them
+                            // together, and the caption wraps under its photo.
+                            FittedPair {
                                 labeledCrop(candidate.crop, "Crop")
                                 labeledCrop(candidate.frame, candidate.frameLabel)
                             }
@@ -1072,9 +1083,13 @@ public struct FlowView: View {
     private func labeledCrop(_ relative: String?, _ caption: String) -> some View {
         if let relative, !relative.isEmpty {
             VStack(spacing: 4) {
-                cropImage(relative)
-                Text(caption).font(.caption)
+                cropImage(relative, flexible: true)
+                Text(caption)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -1100,25 +1115,75 @@ public struct FlowView: View {
     }
 
     @ViewBuilder
-    private func cropImage(_ relative: String?) -> some View {
+    private func cropImage(_ relative: String?, flexible: Bool = false) -> some View {
         let path = relative.flatMap { model.resultDirectory?.appendingPathComponent($0).path }
         #if os(macOS)
         if let path, let image = NSImage(contentsOfFile: path) {
-            Image(nsImage: image)
+            let photo = Image(nsImage: image)
                 .resizable()
                 .scaledToFit()
                 .interpolation(.none)
-                .frame(width: 112, height: 112)
+            if flexible {
+                photo
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: 112, maxHeight: 112)
+            } else {
+                photo.frame(width: 112, height: 112)
+            }
         }
         #elseif os(iOS)
         if let path, let image = UIImage(contentsOfFile: path) {
-            Image(uiImage: image)
+            let photo = Image(uiImage: image)
                 .resizable()
                 .scaledToFit()
                 .interpolation(.none)
-                .frame(width: 112, height: 112)
+            if flexible {
+                photo
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: 112, maxHeight: 112)
+            } else {
+                photo.frame(width: 112, height: 112)
+            }
         }
         #endif
+    }
+
+    /// The crop and the frame. Each column is the same square, and a caption stays inside it.
+    private struct FittedPair: Layout {
+        var preferred: CGFloat = 112
+        var gap: CGFloat = 8
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+            let count = subviews.count
+            guard count > 0 else { return .zero }
+            let fallback = preferred * CGFloat(count) + gap * CGFloat(count - 1)
+            let offered = proposal.width ?? fallback
+            let width = offered.isFinite ? offered : fallback
+            let side = CGFloat(evidenceSide(available: Double(width), count: count, preferred: Double(preferred), gap: Double(gap)))
+            var height: CGFloat = 0
+            for subview in subviews {
+                let size = subview.sizeThatFits(ProposedViewSize(width: side, height: nil))
+                height = max(height, size.height)
+            }
+            let used = side * CGFloat(count) + gap * CGFloat(max(0, count - 1))
+            return CGSize(width: used, height: height)
+        }
+
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+            let count = subviews.count
+            guard count > 0 else { return }
+            let side = CGFloat(evidenceSide(available: Double(bounds.width), count: count, preferred: Double(preferred), gap: Double(gap)))
+            var x = bounds.minX
+            for subview in subviews {
+                let size = subview.sizeThatFits(ProposedViewSize(width: side, height: nil))
+                subview.place(
+                    at: CGPoint(x: x, y: bounds.minY),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: side, height: size.height)
+                )
+                x += side + gap
+            }
+        }
     }
 
     @ViewBuilder private var sizePicker: some View {

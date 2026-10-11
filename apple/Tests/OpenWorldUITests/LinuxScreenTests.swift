@@ -386,6 +386,29 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testTheFramePhotoMatchesTheCropInANarrowColumn() throws {
+        let narrow = 200.0
+        let side = evidenceSide(available: narrow, count: 2)
+        XCTAssertEqual(side, 96)
+        XCTAssertLessThanOrEqual(side * 2 + 8, narrow)
+        XCTAssertEqual(evidenceSide(available: 400, count: 2), 112)
+        XCTAssertEqual(evidenceSide(available: 80, count: 1), 80)
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let results = view.components(separatedBy: "private var resultsColumn").dropFirst().first ?? ""
+        let column = results.components(separatedBy: "private func labeledCrop").first ?? ""
+        XCTAssertTrue(column.contains("FittedPair"), "the crop and the frame stay in a fixed pair that a narrow column cannot shrink")
+        let pair = view.components(separatedBy: "struct FittedPair").dropFirst().first ?? ""
+        XCTAssertTrue(pair.contains("evidenceSide("), "the pair does not share one square")
+        let caption = view.components(separatedBy: "private func labeledCrop").dropFirst().first ?? ""
+        let head = caption.prefix(500)
+        XCTAssertTrue(head.contains(".frame(maxWidth: .infinity)"), "the frame caption widens the row: \(head)")
+    }
+
     func testAWideFrameStaysInProportion() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
