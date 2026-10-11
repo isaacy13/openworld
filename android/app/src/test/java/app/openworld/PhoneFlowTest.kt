@@ -1266,6 +1266,41 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun scanningBringsThatWordOntoTheScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Estimate
+        val estimateOk = FlowModel::class.java.getDeclaredField("estimateOk\$delegate")
+        estimateOk.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (estimateOk.get(model) as androidx.compose.runtime.MutableState<Boolean>).value = true
+        model.canAnalyze = true
+        model.estimateText = (0 until 40).joinToString("\n") { "Estimate line $it." }
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Analyze").performScrollTo()
+        compose.waitForIdle()
+        val button = compose.onNodeWithText("Analyze").fetchSemanticsNode().boundsInRoot
+        assertTrue("Analyze was not on screen: $button", button.height > 0f && button.top < 800f)
+        compose.runOnUiThread {
+            model.scanning = true
+            model.liveCrops = List(8) { index ->
+                LiveCrop("Not compared.", picture.absolutePath, "Frame ${index + 1}.")
+            }
+        }
+        compose.waitForIdle()
+        val shown = compose.onAllNodesWithText("Scanning").fetchSemanticsNodes().map { it.boundsInRoot }
+        assertTrue(
+            "Scanning left the screen: $shown",
+            shown.any { it.height > 0f && it.top >= 0f && it.top < 800f && it.bottom > 0f },
+        )
+    }
+
+    @Test
     fun draggingOnAChoiceNameStillScrollsThePage() {
         val model = FlowModel()
         model.step = Step.Bundle

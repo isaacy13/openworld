@@ -897,7 +897,14 @@ public struct FlowView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
             }
-            ScrollView { estimateColumn }
+            ScrollViewReader { proxy in
+                ScrollView { estimateColumn }
+                    .onChange(of: model.scanning, initial: false) { _, scanning in
+                        if scanning {
+                            proxy.scrollTo("estimateHeadline", anchor: .top)
+                        }
+                    }
+            }
         }
     }
 
@@ -905,6 +912,7 @@ public struct FlowView: View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
             Text(model.estimateHeadline)
+                .id("estimateHeadline")
                 .font(model.phone ? .largeTitle : .title)
                 .foregroundStyle(model.estimate == nil && !model.scanning && model.error != nil ? .orange : .primary)
             if model.scanning, !model.liveCrops.isEmpty {

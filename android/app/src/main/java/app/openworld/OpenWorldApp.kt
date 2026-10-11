@@ -89,7 +89,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
     MaterialTheme {
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
             val scroll = rememberScrollState()
-            LaunchedEffect(model.step, model.leaveNotice, model.deleteNotice) { scroll.scrollTo(0) }
+            LaunchedEffect(model.step, model.leaveNotice, model.deleteNotice, model.scanning) { scroll.scrollTo(0) }
             Column(
                 modifier = Modifier
                     .padding(padding)
