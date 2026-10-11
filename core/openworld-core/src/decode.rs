@@ -1179,7 +1179,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-select_streams",
             &selector,
             "-show_entries",
-            "stream=width,height,sample_aspect_ratio,avg_frame_rate,codec_name,nb_frames,duration:stream_tags=DURATION:stream_side_data=rotation",
+            "stream=width,height,sample_aspect_ratio,avg_frame_rate,r_frame_rate,codec_name,nb_frames,duration:stream_tags=DURATION:stream_side_data=rotation",
             "-show_entries",
             "format=duration:format_tags=creation_time",
             "-show_frames",
@@ -1200,11 +1200,9 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     let stream = value.get("streams").and_then(|s| s.get(0)).ok_or(MediaError::BadCodec)?;
     let width = json_u32(stream.get("width")).ok_or(MediaError::BadCodec)?;
     let height = json_u32(stream.get("height")).ok_or(MediaError::BadCodec)?;
-    let fps = stream
-        .get("avg_frame_rate")
-        .and_then(|v| v.as_str())
-        .and_then(parse_ratio)
-        .unwrap_or(0.0);
+    // The average is the rate a player uses. Theora and IVF leave it at 0/0
+    // and put the real rate on r_frame_rate. A timebase is not that rate.
+    let fps = stream_frame_rate(stream);
     let nb = json_u32(stream.get("nb_frames")).map(u64::from);
     let duration = value
         .get("format")
@@ -1546,6 +1544,18 @@ fn displayed_size(width: u32, height: u32, sar_num: u32, sar_den: u32, turned: b
 fn square_width(width: u32, num: u32, den: u32) -> u32 {
     let wide = (u64::from(width) * u64::from(num) + u64::from(den) / 2) / u64::from(den);
     u32::try_from(wide).unwrap_or(width).max(1)
+}
+
+/// Pictures per second from the average, or from `r_frame_rate` when the
+/// average is missing. `parse_ratio` rejects 0 and a timebase of 1000 or more.
+fn stream_frame_rate(stream: &Value) -> f64 {
+    frame_rate_field(stream.get("avg_frame_rate"))
+        .or_else(|| frame_rate_field(stream.get("r_frame_rate")))
+        .unwrap_or(0.0)
+}
+
+fn frame_rate_field(value: Option<&Value>) -> Option<f64> {
+    value.and_then(|rate| rate.as_str()).and_then(parse_ratio)
 }
 
 fn parse_ratio(text: &str) -> Option<f64> {

@@ -1361,6 +1361,70 @@ fn an_avi_hold_is_the_picture_on_screen() {
 }
 
 #[test]
+fn a_theora_file_with_no_average_rate_is_scanned() {
+    // Ogg Theora leaves avg_frame_rate at 0/0 and puts the real rate on
+    // r_frame_rate. The file plays. A missing average used to refuse it.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let still = dir.path().join("scene.png");
+    scene.image.save(&still).unwrap();
+    let movie = dir.path().join("scene.ogg");
+    let encoded = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-loop",
+            "1",
+            "-i",
+        ])
+        .arg(&still)
+        .args([
+            "-frames:v",
+            "4",
+            "-r",
+            "10",
+            "-an",
+            "-c:v",
+            "libtheora",
+            "-q:v",
+            "6",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = ScanRequest {
+        input: movie,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack,
+        out_dir: dir.path().join("out"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Complete,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let report = scan_path(&request, &mut |_| {});
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert!(report.frames_decoded > 0, "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    assert!(
+        report.candidates.iter().any(|candidate| candidate.kind == "face"),
+        "{:?}",
+        report.candidates.iter().map(|candidate| candidate.frame_index).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     let dir = tempfile::tempdir().unwrap();
     let frames = dir.path().join("frames");

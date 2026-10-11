@@ -13,6 +13,7 @@ a YCbCr TIFF, a subsampled YCbCr TIFF, a two-page TIFF whose marker is only on t
 a video whose edit list hides the samples a player does not show,
 a Matroska file that does not store a frame count, with the marker on the picture that stays up,
 an AVI file whose header counts a nominal rate, with the marker on the picture that stays up,
+an Ogg Theora file of the fixture scene whose average rate is empty,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
@@ -334,6 +335,7 @@ def main() -> int:
         "held_later_candidate": 0,
         "mkv_held_candidate": 0,
         "avi_held_candidate": 0,
+        "theora_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -735,6 +737,23 @@ def main() -> int:
             fail(f"held avi full scan decoded {report.get('frames_decoded')} frames")
         counts["avi_held_candidate"] += 1
 
+        theora = root / "scene.ogg"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(scene),
+            "-frames:v", "4", "-r", "10", "-an", "-c:v", "libtheora", "-q:v", "6",
+            str(theora),
+        ])
+        if proc.returncode != 0 or not theora.is_file():
+            fail(proc.stderr or "theora was not written")
+        report = scan(args.bin, args.bundles, posters, theora, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"theora summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("frames_decoded"):
+            fail(f"theora decoded {report.get('frames_decoded')} frames")
+        if not any(item.get("kind") == "face" for item in report.get("candidates") or []):
+            fail(f"theora candidates {report.get('candidates')}")
+        counts["theora_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -1028,6 +1047,7 @@ def main() -> int:
         or counts["held_later_candidate"] != 1
         or counts["mkv_held_candidate"] != 1
         or counts["avi_held_candidate"] != 1
+        or counts["theora_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
