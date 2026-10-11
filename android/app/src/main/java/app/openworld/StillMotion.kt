@@ -12,16 +12,30 @@ object StillMotion {
     fun animatedPng(file: File): Boolean = file.inputStream().use { animatedPng(it) }
 
     /**
+     * An AVIF or HEIF image sequence is more than one frame. The still decoder keeps
+     * the first frame, so the file is not scanned as a still. The major brand is the
+     * four bytes after `ftyp`. `avis` is an AVIF sequence and `msf1` is a HEIF sequence.
+     */
+    fun imageSequence(file: File): Boolean {
+        val brand = majorBrand(file) ?: return false
+        return brand == "avis" || brand == "msf1"
+    }
+
+    /**
      * HEIF and AVIF stay stills. A movie container, including an extensionless video, does not.
      * The major brand is the four bytes after `ftyp`.
      */
     fun stillContainer(file: File): Boolean {
+        val brand = majorBrand(file) ?: return false
+        return brand in stillBrands
+    }
+
+    private fun majorBrand(file: File): String? {
         val header = ByteArray(12)
         val read = file.inputStream().use { it.read(header) }
-        if (read < 12) return false
-        if (!header.copyOfRange(4, 8).contentEquals("ftyp".encodeToByteArray())) return false
-        val brand = String(header, 8, 4, Charsets.US_ASCII)
-        return brand in stillBrands
+        if (read < 12) return null
+        if (!header.copyOfRange(4, 8).contentEquals("ftyp".encodeToByteArray())) return null
+        return String(header, 8, 4, Charsets.US_ASCII)
     }
 
     private val stillBrands = setOf("heic", "heix", "hevc", "heif", "mif1", "msf1", "avif", "avis")

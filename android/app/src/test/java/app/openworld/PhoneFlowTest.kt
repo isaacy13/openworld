@@ -928,6 +928,40 @@ class PhoneFlowTest {
         assertTrue(StillMotion.stillContainer(headerFile("ftypavis")))
         assertTrue(StillMotion.stillContainer(headerFile("ftypmsf1")))
         assertFalse(StillMotion.stillContainer(headerFile("ftypisom")))
+        assertFalse(StillMotion.imageSequence(headerFile("ftypheic")))
+        assertFalse(StillMotion.imageSequence(headerFile("ftypavif")))
+        assertTrue(StillMotion.imageSequence(headerFile("ftypavis")))
+        assertTrue(StillMotion.imageSequence(headerFile("ftypmsf1")))
+    }
+
+    @Test
+    fun anImageSequenceIsRefusedInsteadOfScanningTheFirstFrame() {
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-avis-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val first = File(root, "a.png")
+        val second = File(root, "b.png")
+        ffmpeg("-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1", first.absolutePath)
+        ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=32x32", "-frames:v", "1", second.absolutePath)
+        val avis = File(root, "clip.avif")
+        ffmpeg(
+            "-framerate", "5", "-i", first.absolutePath,
+            "-framerate", "5", "-i", second.absolutePath,
+            "-filter_complex", "[0][1]concat=n=2:v=1:a=0",
+            "-frames:v", "2", "-c:v", "libaom-av1", "-still-picture", "0",
+            avis.absolutePath,
+        )
+        assertTrue(StillMotion.imageSequence(avis))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/clip.avif")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, avis.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
     }
 
     @Test

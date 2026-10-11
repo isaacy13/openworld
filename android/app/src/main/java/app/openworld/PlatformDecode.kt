@@ -55,6 +55,10 @@ object PlatformDecode {
             0, 1 -> throw IOException("Bad codec or unreadable file. Refusing.")
             else -> throw IOException("The file was not fully decoded. Refusing.")
         }
+        // BitmapFactory keeps the first frame of an image sequence. That is not the file.
+        if (StillMotion.imageSequence(file)) {
+            throw IOException("The file was not fully decoded. Refusing.")
+        }
         pngSize(file)?.let { (width, height) ->
             if (StillMotion.animatedPng(file)) {
                 throw IOException("The file was not fully decoded. Refusing.")

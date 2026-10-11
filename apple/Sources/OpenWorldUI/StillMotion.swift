@@ -52,6 +52,13 @@ public enum StillMotion {
         return [UInt8](signature) == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
     }
 
+    /// An AVIF or HEIF image sequence. The still decoder keeps the first frame.
+    /// `avis` is an AVIF sequence and `msf1` is a HEIF sequence.
+    public static func imageSequence(_ url: URL) -> Bool {
+        guard let brand = majorBrand(url) else { return false }
+        return brand == "avis" || brand == "msf1"
+    }
+
     /// A movie container, including a file whose name has no extension.
     /// HEIF and AVIF stay stills. A JPEG, a PNG, and a still WebP stay stills.
     public static func movieContainer(_ url: URL) -> Bool {
@@ -69,5 +76,14 @@ public enum StillMotion {
         let brand = String(bytes: bytes[8..<12], encoding: .ascii) ?? ""
         let still: Set<String> = ["heic", "heix", "hevc", "heif", "mif1", "msf1", "avif", "avis"]
         return !still.contains(brand)
+    }
+
+    private static func majorBrand(_ url: URL) -> String? {
+        guard let input = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? input.close() }
+        guard let head = try? input.read(upToCount: 12), head.count == 12 else { return nil }
+        let bytes = [UInt8](head)
+        if Array(bytes[4..<8]) != Array("ftyp".utf8) { return nil }
+        return String(bytes: bytes[8..<12], encoding: .ascii)
     }
 }

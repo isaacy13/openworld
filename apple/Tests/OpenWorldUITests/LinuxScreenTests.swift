@@ -1563,6 +1563,10 @@ final class OpenWorldUITests: XCTestCase {
             try Data(bytes).write(to: still)
             XCTAssertFalse(StillMotion.movieContainer(still), brand)
         }
+        XCTAssertFalse(StillMotion.imageSequence(heic))
+        XCTAssertTrue(StillMotion.imageSequence(root.appendingPathComponent("avis")))
+        XCTAssertTrue(StillMotion.imageSequence(root.appendingPathComponent("msf1")))
+        XCTAssertFalse(StillMotion.imageSequence(root.appendingPathComponent("avif")))
         let png = try still("blank")
         XCTAssertFalse(StillMotion.movieContainer(png))
         let jpeg = root.appendingPathComponent("photo")
@@ -1581,6 +1585,35 @@ final class OpenWorldUITests: XCTestCase {
         try FileManager.default.copyItem(at: png, to: pngNamedJpeg)
         XCTAssertTrue(StillMotion.png(pngNamedJpeg))
         XCTAssertTrue(StillMotion.png(png))
+    }
+
+    func testAnImageSequenceIsRefusedInsteadOfScanningTheFirstFrame() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-avis-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let first = root.appendingPathComponent("a.png")
+        let second = root.appendingPathComponent("b.png")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1", first.path])
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=32x32", "-frames:v", "1", second.path])
+        let avis = root.appendingPathComponent("clip.avif")
+        try ffmpeg([
+            "-framerate", "5", "-i", first.path,
+            "-framerate", "5", "-i", second.path,
+            "-filter_complex", "[0][1]concat=n=2:v=1:a=0",
+            "-frames:v", "2", "-c:v", "libaom-av1", "-still-picture", "0",
+            avis.path,
+        ])
+        XCTAssertTrue(StillMotion.imageSequence(avis))
+        XCTAssertFalse(StillMotion.imageSequence(try still("blank")))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(avis)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
     }
 
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
