@@ -1,0 +1,2102 @@
+// SPDX-License-Identifier: Apache-2.0
+#if os(Linux)
+import Foundation
+import Glibc
+import OpenWorldContract
+@testable import OpenWorldUI
+import XCTest
+
+/// Linux CI runs the phone model against the same fixture stills as the other
+/// shells. The iPhone and Mac app is not part of this package on Linux.
+final class OpenWorldUITests: XCTestCase {
+    func testChooseFileKeepsEveryFileAvailable() {
+        XCTAssertEqual(
+            ChooseFile.typeIdentifiers,
+            ["public.image", "public.movie", "public.data"]
+        )
+    }
+
+    func testASharedFileKeepsEveryFileAvailable() throws {
+        XCTAssertEqual(ChooseFile.shareTypeIdentifiers, ChooseFile.typeIdentifiers)
+        var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        var plist: URL?
+        for _ in 0..<8 {
+            for candidate in [
+                url.appendingPathComponent("ShareExtension/Info.plist"),
+                url.appendingPathComponent("apple/ShareExtension/Info.plist"),
+            ] {
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    plist = candidate
+                }
+            }
+            if plist != nil { break }
+            if url.path == "/" { break }
+            url.deleteLastPathComponent()
+        }
+        let file = try XCTUnwrap(plist)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(text.contains("<key>NSExtensionActivationSupportsFileWithMaxCount</key>"))
+    }
+
+    func testPhoneScreensBuild() throws {
+        try MainActor.assumeIsolated {
+            try self.drawScreens()
+        }
+    }
+
+    func testASharedNameKeepsCharactersThatSplitAQuery() throws {
+        let name = "a&b=c+d?#.png"
+        let url = try XCTUnwrap(SharedImport.url(fileName: name))
+        XCTAssertEqual(SharedImport.fileName(from: url), name)
+        XCTAssertEqual(SharedImport.fileName(from: URL(string: "https://example.com/?name=a&b.png")!), nil)
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "a b.png"))), "a b.png")
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "100%.png"))), "100%.png")
+        XCTAssertEqual(SharedImport.fileName(from: try XCTUnwrap(SharedImport.url(fileName: "plain.png"))), "plain.png")
+    }
+
+    func testAFailedShareLeavesTheFileAlreadyStored() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("group")
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let name = "a&b.png"
+        let stored = container.appendingPathComponent(name)
+        try Data("kept".utf8).write(to: stored)
+
+        let source = root.appendingPathComponent(name)
+        XCTAssertNil(SharedImport.store(source: source, container: container))
+        XCTAssertEqual(try Data(contentsOf: stored), Data("kept".utf8))
+
+        try Data("new".utf8).write(to: source)
+        let aged = Date().addingTimeInterval(-40 * 24 * 3600)
+        try FileManager.default.setAttributes([.modificationDate: aged], ofItemAtPath: source.path)
+        let opened = try XCTUnwrap(SharedImport.store(source: source, container: container))
+        XCTAssertEqual(SharedImport.fileName(from: opened), name)
+        XCTAssertEqual(try Data(contentsOf: stored), Data("new".utf8))
+        let modified = try XCTUnwrap(
+            stored.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        )
+        XCTAssertGreaterThan(Date().timeIntervalSince(modified), 30 * 24 * 3600)
+
+        let blocked = root.appendingPathComponent("not-a-folder")
+        try Data("nope".utf8).write(to: blocked)
+        XCTAssertNil(SharedImport.store(source: source, container: blocked))
+        XCTAssertEqual(try Data(contentsOf: stored), Data("new".utf8))
+
+        let folderName = "dir.png"
+        let folder = container.appendingPathComponent(folderName)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let marker = folder.appendingPathComponent("keep")
+        try Data("dir".utf8).write(to: marker)
+        let incomingDir = root.appendingPathComponent(folderName)
+        try Data("file".utf8).write(to: incomingDir)
+        XCTAssertNil(SharedImport.store(source: incomingDir, container: container))
+        XCTAssertEqual(try Data(contentsOf: marker), Data("dir".utf8))
+    }
+
+    func testADroppedFileIsClaimedBeforeItOpens() async {
+        let url = URL(fileURLWithPath: "/tmp/photo.png")
+        var order: [String] = []
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            DroppedFile.deliver(url, claim: { got in
+                XCTAssertEqual(got, url)
+                order.append("claim")
+            }, open: { got in
+                XCTAssertEqual(got, url)
+                order.append("open")
+                done.resume()
+            })
+        }
+        XCTAssertEqual(order, ["claim", "open"])
+    }
+
+    func testACropThatArrivesAsTheWindowClosesStaysOffThePage() {
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.appendLiveCrop(
+                label: "Possible candidate. Not an identification.",
+                frameLabel: "Frame 1.",
+                path: "/tmp/open.png"
+            )
+            XCTAssertEqual(model.liveCrops.map(\.path), ["/tmp/open.png"])
+            model.closeWindow()
+            model.appendLiveCrop(
+                label: "Possible candidate. Not an identification.",
+                frameLabel: "Frame 2.",
+                path: "/tmp/late.png"
+            )
+            XCTAssertEqual(model.liveCrops.map(\.path), ["/tmp/open.png"])
+        }
+    }
+
+    func testAFileChosenAsTheWindowClosesStaysOffThePage() throws {
+        let first = try still("blank")
+        let second = try still("blank")
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.choose(first)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, first.path)
+            model.closeWindow()
+            model.choose(second)
+            XCTAssertEqual(model.file?.path, first.path)
+            XCTAssertEqual(model.step, .device)
+        }
+    }
+
+    func testAScanStartedAsTheWindowClosesStaysOffThePage() throws {
+        let file = try still("blank")
+        let model = MainActor.assumeIsolated { () -> FlowModel in
+            let model = FlowModel(phone: false)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertTrue(model.canAnalyze)
+            XCTAssertFalse(model.scanning)
+            model.closeWindow()
+            XCTAssertNil(model.scanRoot)
+            model.startScan()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.scanRoot)
+            return model
+        }
+        let scanning = MainActor.assumeIsolated { model.scanning }
+        XCTAssertFalse(scanning)
+        let deadline = Date().addingTimeInterval(2)
+        while MainActor.assumeIsolated({ model.scanning }) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
+    func testBackContinueAndChooseAnotherFileAsTheWindowClosesStayOnThePage() throws {
+        let file = try still("blank")
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.choose(file)
+            model.loadBundles()
+            XCTAssertFalse(model.bundles.isEmpty)
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .size)
+            model.closeWindow()
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.deleteResult()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertNil(model.error)
+            model.requestLeave("https://www.fbi.gov/")
+            XCTAssertNil(model.leavingURL)
+            XCTAssertNil(model.leaveError)
+        }
+    }
+
+    func testClosingOneWindowLeavesTheOtherWindowsScanRunning() throws {
+        let first = try still("blank")
+        let second = try still("blank")
+        let kept: Process = try MainActor.assumeIsolated {
+            let open = FlowModel(phone: false)
+            let closing = FlowModel(phone: false)
+            let kept = try open.programs.launch("/bin/sleep", arguments: ["30"])
+            let stopped = try closing.programs.launch("/bin/sleep", arguments: ["30"])
+            open.choose(first)
+            closing.closeWindow()
+            let deadline = Date().addingTimeInterval(2)
+            while stopped.isRunning && Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+            XCTAssertFalse(stopped.isRunning)
+            XCTAssertTrue(kept.isRunning)
+            open.choose(second)
+            XCTAssertEqual(open.file?.path, second.path)
+            XCTAssertEqual(open.step, .device)
+            return kept
+        }
+        defer {
+            if kept.isRunning {
+                kept.terminate()
+            }
+            kept.waitUntilExit()
+        }
+        XCTAssertTrue(kept.isRunning)
+    }
+
+    func testAWindowUpdateWithoutAWindowDoesNotForgetTheOpenWindow() {
+        let openObject = NSObject()
+        let otherObject = NSObject()
+        let open = ObjectIdentifier(openObject)
+        let other = ObjectIdentifier(otherObject)
+        XCTAssertNil(HostWindowTrack.remember(current: nil, seen: nil))
+        let seen = HostWindowTrack.remember(current: nil, seen: open)
+        XCTAssertEqual(seen, open)
+        XCTAssertEqual(HostWindowTrack.remember(current: seen, seen: nil), open)
+        XCTAssertEqual(HostWindowTrack.remember(current: seen, seen: other), other)
+        let remembered = HostWindowTrack.remember(current: seen, seen: nil)
+        XCTAssertTrue(ScreenClose.stops(sameWindow: remembered == open, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: remembered == other, panel: false))
+    }
+
+    func testClosingAWindowStopsOnlyThatWindow() {
+        XCTAssertTrue(ScreenClose.stops(sameWindow: true, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: false, panel: false))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: true, panel: true))
+        XCTAssertFalse(ScreenClose.stops(sameWindow: false, panel: true))
+    }
+
+    func testClosingTheWindowStopsAScanThatIsStillRunning() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-close-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let process: Process = try MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.scanRoot = root
+            let process = try model.programs.launch("/bin/sleep", arguments: ["30"])
+            XCTAssertTrue(process.isRunning)
+            model.closeWindow()
+            return process
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        XCTAssertFalse(process.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+        let later: Process = try MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            return try model.programs.launch("/bin/sleep", arguments: ["30"])
+        }
+        defer {
+            if later.isRunning {
+                later.terminate()
+            }
+            later.waitUntilExit()
+        }
+        XCTAssertTrue(later.isRunning)
+    }
+
+    func testClosingTheWindowStopsADecodeThatIsStillWritingFrames() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-decode-stop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gif = root.appendingPathComponent("clip.gif")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=16x16:r=5:d=0.6", gif.path])
+        XCTAssertEqual(try GifFrames.read(gif).frames.count, 3)
+        let frames = root.appendingPathComponent("frames")
+        try FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
+        var close: (@MainActor () -> Void)?
+        let flag: DecodeStop = MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            close = { model.closeWindow() }
+            return model.stopFlag
+        }
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let done = DispatchSemaphore(value: 0)
+        let thrown = ErrorBox()
+        Thread {
+            defer { done.signal() }
+            do {
+                _ = try PlatformDecoder.writeFrames(url: gif, directory: frames) {
+                    started.signal()
+                    _ = release.wait(timeout: .now() + 5)
+                    return flag.isStopped()
+                }
+            } catch {
+                thrown.set(error)
+            }
+        }.start()
+        XCTAssertEqual(started.wait(timeout: .now() + 5), .success)
+        MainActor.assumeIsolated { close?() }
+        release.signal()
+        XCTAssertEqual(done.wait(timeout: .now() + 5), .success)
+        XCTAssertTrue(thrown.get() is DecodeStopped)
+        let names = try FileManager.default.contentsOfDirectory(at: frames, includingPropertiesForKeys: nil)
+        XCTAssertTrue(names.filter { $0.lastPathComponent.hasPrefix("frame_") }.isEmpty)
+    }
+
+    func testAShareOpensTheFileStoredUnderThatName() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("openworld-share-name-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("group")
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let outside = root.appendingPathComponent("secret")
+        try Data("secret".utf8).write(to: outside)
+        let kept = container.appendingPathComponent("photo.png")
+        try Data("kept".utf8).write(to: kept)
+
+        let opened = try XCTUnwrap(SharedImport.storedFile(in: container, name: "photo.png"))
+        XCTAssertEqual(opened.standardizedFileURL.path, kept.standardizedFileURL.path)
+        let spaced = try XCTUnwrap(SharedImport.storedFile(in: container, name: "a b.png"))
+        XCTAssertEqual(spaced.lastPathComponent, "a b.png")
+        let ampersand = try XCTUnwrap(SharedImport.storedFile(in: container, name: "a&b.png"))
+        XCTAssertEqual(ampersand.lastPathComponent, "a&b.png")
+        XCTAssertEqual(ampersand.deletingLastPathComponent().standardizedFileURL.path, container.standardizedFileURL.path)
+
+        for name in ["../secret", "..", ".", "foo/bar.png", "foo/../../secret", "a\0b.png", "", "a\\b.png"] {
+            XCTAssertNil(SharedImport.storedFile(in: container, name: name), name)
+        }
+        let crafted = URL(string: "openworld://import?name=..%2Fsecret")!
+        let decoded = try XCTUnwrap(SharedImport.fileName(from: crafted))
+        XCTAssertEqual(decoded, "../secret")
+        XCTAssertNil(SharedImport.storedFile(in: container, name: decoded))
+        XCTAssertEqual(try Data(contentsOf: outside), Data("secret".utf8))
+        XCTAssertEqual(try Data(contentsOf: kept), Data("kept".utf8))
+    }
+
+    func testALongFileNameBreaksBetweenCharacters() {
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let name = String(repeating: "A", count: 80) + ".png"
+            model.file = URL(fileURLWithPath: "/tmp/\(name)")
+            let shown = PhonePreview.wrappingFileName(name)
+            XCTAssertEqual(shown.split(separator: "\u{200B}").map(String.init), name.map(String.init))
+            XCTAssertEqual(PhonePreview.wrappingFileName(model.file?.lastPathComponent ?? ""), shown)
+            let lines = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertTrue(lines.contains(name))
+            XCTAssertFalse(lines.contains { $0.contains("\u{200B}") })
+        }
+    }
+
+    func testSceneScanReachesTheResultsScreen() throws {
+        try MainActor.assumeIsolated {
+            if ProcessInfo.processInfo.environment["OPENWORLD_LIB"] != nil {
+                XCTAssertTrue(LinkedCore.isLinked)
+            }
+            let model = try self.scan("scene")
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.status, "complete")
+            XCTAssertEqual(model.report?.summary, Copy.possible)
+            XCTAssertEqual(model.report?.framesNote, "1 frame analyzed.")
+            XCTAssertEqual(model.report?.detectionNote, "640 px on the long side.")
+            XCTAssertEqual(model.report?.coverageNote, "Every decoded frame.")
+            let labels = model.report?.inventory.map(\.label) ?? []
+            XCTAssertTrue(labels.contains(Copy.possible))
+            XCTAssertTrue(labels.contains(Copy.notCompared))
+            XCTAssertTrue(labels.contains("A vehicle is not a person."))
+            XCTAssertGreaterThanOrEqual(model.report?.facesSeenNotCompared ?? 0, 1)
+            XCTAssertFalse(model.report?.candidates.isEmpty ?? true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameLabel == "Frame 1." } == true)
+            XCTAssertEqual(model.report?.candidates.first?.leaving, Copy.leaving)
+            XCTAssertTrue(model.report?.candidates.first?.fbiUrl.hasPrefix("https://www.fbi.gov") == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.posterLine == "Fixture subject A (Missing)" } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.posterLine == "Fixture vehicle C (Wanted)" } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "face" && $0.uncertainty.contains("Score ") && $0.uncertainty.contains("keeps a candidate at") && !$0.uncertainty.contains(Copy.possible) } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "plate" && $0.uncertainty.contains("FIX123") && !$0.uncertainty.contains(Copy.possible) } == true)
+            let preview = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(preview.first, "Back")
+            XCTAssertEqual(preview.last, "Choose another file")
+            let secondCard = try XCTUnwrap(preview.firstIndex(of: "Fixture vehicle C (Wanted)"))
+            let choose = try XCTUnwrap(preview.firstIndex(of: "Choose another file"))
+            XCTAssertLessThan(secondCard, choose)
+            XCTAssertEqual(preview.filter { $0 == "Open FBI page" }.count, model.report?.candidates.count)
+            XCTAssertTrue(preview.contains { $0.contains("keeps a candidate at") && !$0.contains(Copy.possible) })
+            XCTAssertTrue(preview.contains("Nothing is uploaded."))
+            XCTAssertTrue(preview.contains(Copy.clearance))
+            XCTAssertTrue(preview.contains("Crops from this file."))
+            let frameCaptions = (model.report?.candidates.count ?? 0) + (model.report?.inventory.count ?? 0)
+            XCTAssertEqual(preview.filter { $0 == "Frame 1." }.count, frameCaptions)
+            XCTAssertTrue(model.report?.inventory.allSatisfy { $0.frameLabel == "Frame 1." } == true)
+            XCTAssertTrue(preview.contains("1 frame analyzed."))
+            let framesAt = try XCTUnwrap(preview.firstIndex(of: "1 frame analyzed."))
+            let classAt = try XCTUnwrap(preview.firstIndex(of: "Missing and wanted."))
+            XCTAssertLessThan(framesAt, classAt)
+            let bundleAt = try XCTUnwrap(preview.firstIndex(of: "Bundle: Fast"))
+            let sizeAt = try XCTUnwrap(preview.firstIndex(of: "640 px on the long side."))
+            let coverageAt = try XCTUnwrap(preview.firstIndex(of: "Every decoded frame."))
+            XCTAssertLessThan(bundleAt, sizeAt)
+            XCTAssertLessThan(sizeAt, coverageAt)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" || $0.posterClassLabel == "Wanted" } == true)
+            var untitled = try XCTUnwrap(model.report?.candidates.first { $0.posterClassLabel == "Missing" })
+            untitled.posterTitle = ""
+            XCTAssertEqual(untitled.posterLine, "Missing")
+            untitled.posterTitle = "Fixture subject A"
+            untitled.posterClassLabel = ""
+            XCTAssertEqual(untitled.posterLine, "Fixture subject A")
+            untitled.posterTitle = ""
+            XCTAssertEqual(untitled.posterLine, "")
+            let saved = model.report
+            if var report = model.report, var card = report.candidates.first {
+                card.posterTitle = ""
+                card.posterClassLabel = "Missing"
+                report.candidates = [card]
+                model.report = report
+                let unnamed = PhonePreview.lines(screen: "results", model: model)
+                XCTAssertTrue(unnamed.contains("Missing"))
+                XCTAssertFalse(unnamed.contains(" (Missing)"))
+            }
+            model.report = saved
+            let disclosure = model.report?.disclosure ?? []
+            XCTAssertTrue(disclosure.contains("Nothing is uploaded."))
+            XCTAssertTrue(disclosure.contains("Nobody is enrolled."))
+            XCTAssertTrue(disclosure.contains("OpenWorld does not train on this file."))
+            XCTAssertTrue(disclosure.contains("OpenWorld does not contact an agency."))
+            XCTAssertTrue(disclosure.contains("A candidate is not an identification."))
+            XCTAssertTrue(disclosure.contains(Copy.clearance))
+            XCTAssertTrue(disclosure.contains("This file is not authenticated."))
+            XCTAssertTrue(disclosure.contains("On-device does not mean the file is real."))
+            XCTAssertTrue(model.report?.perceptionNote?.contains("Fixture markers were read.") == true)
+            model.requestLeave("https://www.fbi.gov.evil.com/wanted")
+            XCTAssertNil(model.leavingURL)
+            XCTAssertTrue(model.leaveError?.contains("FBI page") == true)
+            if let page = model.report?.candidates.first?.fbiUrl {
+                model.requestLeave(page)
+            }
+            XCTAssertEqual(model.leavingURL?.host, "www.fbi.gov")
+            XCTAssertNil(model.leaveError)
+            model.leavingURL = nil
+            XCTAssertNil(model.leavingURL)
+        }
+    }
+
+    func testThePhonePreviewKeepsTheSizeRulesAndAnalyze() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "measured"
+            let sizeLines = PhonePreview.lines(screen: "size", model: model)
+            XCTAssertTrue(sizeLines.contains(Copy.sizeHint))
+            let coverAt = try XCTUnwrap(sizeLines.firstIndex(of: "Coverage"))
+            let completeAt = try XCTUnwrap(sizeLines.firstIndex(of: "Complete. Every decoded frame."))
+            let measuredAt = try XCTUnwrap(sizeLines.firstIndex(of: "Measured. 5 frames a second, plus the tracker. Selected."))
+            XCTAssertLessThan(coverAt, completeAt)
+            XCTAssertLessThan(completeAt, measuredAt)
+            XCTAssertEqual(sizeLines.last, "Continue")
+            let size = PhonePreview.wrapped(screen: "size", model: model)
+            let sizeText = size.joined(separator: "\n")
+            XCTAssertTrue(sizeText.contains("face under 64 px on that image is"))
+            XCTAssertTrue(sizeText.contains("the label is \"Not compared.\""))
+            XCTAssertTrue(size.contains("640 px on the long side. Selected."))
+            XCTAssertTrue(size.contains(Copy.brief))
+            XCTAssertEqual(size.last, "Continue")
+            model.loadEstimate()
+            let estimate = PhonePreview.wrapped(screen: "estimate", model: model)
+            XCTAssertTrue(estimate.contains("Missing. Selected."))
+            XCTAssertTrue(estimate.contains("Wanted. Selected."))
+            XCTAssertTrue(estimate.contains("Missing and wanted."))
+            XCTAssertTrue(estimate.contains(Copy.brief))
+            let plain = PhonePreview.lines(screen: "estimate", model: model)
+            let choiceAt = try XCTUnwrap(plain.firstIndex(of: "Fast. 640 px on the long side. 5 frames a second, plus the tracker."))
+            let briefAt = try XCTUnwrap(plain.firstIndex(of: Copy.brief))
+            let classAt = try XCTUnwrap(plain.firstIndex(of: "Missing and wanted."))
+            XCTAssertLessThan(choiceAt, briefAt)
+            XCTAssertLessThan(briefAt, classAt)
+            XCTAssertEqual(estimate.last, "Analyze")
+            let file = try XCTUnwrap(model.file)
+            let old = Date().addingTimeInterval(-40 * 24 * 3600)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: file.path)
+            model.choose(file)
+            model.loadBundles()
+            model.coverage = "measured"
+            model.loadEstimate()
+            let warned = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertTrue(warned.contains(Copy.oldFile))
+            XCTAssertEqual(warned.last, "Analyze")
+            model.includeMissing = false
+            model.includeWanted = false
+            model.applyClassGate()
+            let blocked = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertTrue(blocked.contains("Choose missing, wanted, or both."))
+            XCTAssertEqual(blocked.last, "Analyze")
+        }
+    }
+
+    func testAnEmptyCatalogNamesTheMissingProgram() throws {
+        let empty = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openworld-empty-bundles-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        let previous = getenv("OPENWORLD_BUNDLES").map { String(cString: $0) }
+        defer {
+            if let previous {
+                setenv("OPENWORLD_BUNDLES", previous, 1)
+            } else {
+                unsetenv("OPENWORLD_BUNDLES")
+            }
+            try? FileManager.default.removeItem(at: empty)
+        }
+        setenv("OPENWORLD_BUNDLES", empty.path, 1)
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The scan program is not on this device. Refusing.")
+            XCTAssertFalse(model.showsTopError)
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(preview.dropFirst().first, "The scan program is not on this device. Refusing.")
+            XCTAssertFalse(preview.contains("Model bundle"))
+            XCTAssertFalse(preview.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertEqual(preview.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
+            XCTAssertFalse(preview.contains("Fast. Selected."))
+            XCTAssertEqual(preview.last, "Continue")
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .bundle)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-bundles.png"))
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.bundleHeadline, "The scan program is not on this device. Refusing.")
+            let refusedFile = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(refusedFile.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(refusedFile.dropFirst(2).first, "The scan program is not on this device. Refusing.")
+            XCTAssertFalse(refusedFile.contains("Model bundle"))
+            XCTAssertFalse(refusedFile.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertEqual(refusedFile.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(refusedFile.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
+            let before = FlowModel(phone: true)
+            before.choose(try self.still("blank"))
+            before.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-before-catalog.png"))
+            XCTAssertEqual(before.error, "The file could not be read. Refusing.")
+            before.loadBundles()
+            XCTAssertTrue(before.bundles.isEmpty)
+            XCTAssertEqual(before.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(before.bundleHeadline, "The scan program is not on this device. Refusing.")
+            let kept = PhonePreview.lines(screen: "bundle", model: before)
+            XCTAssertEqual(kept.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(kept.dropFirst(2).first, "The scan program is not on this device. Refusing.")
+            XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(kept.filter { $0 == "The scan program is not on this device. Refusing." }.count, 1)
+            XCTAssertFalse(kept.contains("Model bundle"))
+        }
+        if let previous {
+            setenv("OPENWORLD_BUNDLES", previous, 1)
+        } else {
+            unsetenv("OPENWORLD_BUNDLES")
+        }
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.error = "The scan program is not on this device. Refusing."
+            model.loadBundles()
+            XCTAssertFalse(model.bundles.isEmpty)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.bundles.first?.id, "fast")
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertTrue(preview.contains("Model bundle"))
+            XCTAssertTrue(preview.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertFalse(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertTrue(preview.contains("Fast. Selected."))
+        }
+    }
+
+    func testAnUnreadableProgramAnswerUsesTheCommandRefusal() throws {
+        defer { ProgramAnswer.stdoutForTest = nil }
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            ProgramAnswer.stdoutForTest = { _ in Data() }
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.error, "The bundle catalog could not be read. Refusing.")
+            ProgramAnswer.stdoutForTest = { _ in Data("not json".utf8) }
+            model.loadBundles()
+            let bundle = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(bundle.dropFirst().first, "The bundle catalog could not be read. Refusing.")
+            XCTAssertFalse(bundle.contains("Model bundle"))
+            XCTAssertFalse(bundle.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertEqual(bundle.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(bundle.contains("The scan program is not on this device. Refusing."))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-catalog.png"))
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.bundleHeadline, "The bundle catalog could not be read. Refusing.")
+            let keptCatalog = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(keptCatalog.first, "The file could not be read. Refusing.")
+            XCTAssertFalse(keptCatalog.contains("Model bundle"))
+            XCTAssertEqual(keptCatalog.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(keptCatalog.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+
+            model.choose(try self.still("blank"))
+            model.loadEstimate()
+            XCTAssertNil(model.estimate)
+            XCTAssertEqual(model.error, "The scan could not be read. Refusing.")
+            XCTAssertFalse(model.showsAnalyze)
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.dropFirst().first, "The scan could not be read. Refusing.")
+            XCTAssertEqual(estimate.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(estimate.contains("Estimate"))
+            XCTAssertFalse(estimate.contains("Analyze"))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-refused-estimate.png"))
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.estimateHeadline, "The scan could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertFalse(model.showsAnalyze)
+            let keptEstimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(keptEstimate.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(keptEstimate.dropFirst(2).first, "The scan could not be read. Refusing.")
+            XCTAssertEqual(keptEstimate.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(keptEstimate.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(keptEstimate.contains("Estimate"))
+            XCTAssertFalse(keptEstimate.contains("Analyze"))
+            XCTAssertFalse(keptEstimate.contains("Missing"))
+            XCTAssertFalse(keptEstimate.contains("Wanted"))
+
+            model.canAnalyze = true
+            ProgramAnswer.stdoutForTest = { args in
+                if args.contains("posters") {
+                    return Data(#"{"id":"fixture-v0"}"#.utf8)
+                }
+                return Data("not json".utf8)
+            }
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertEqual(model.error, "The scan could not be read. Refusing.")
+            let results = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(results.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(results.contains("Nothing is uploaded."))
+            XCTAssertFalse(results.contains("No candidate is not a clearance."))
+            XCTAssertFalse(results.contains("Delete"))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-unreadable-result.png"))
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.resultHeadline, "The scan could not be read. Refusing.")
+            XCTAssertTrue(model.resultRefused)
+            XCTAssertTrue(model.showsTopError)
+            let keptResult = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(keptResult.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(keptResult.dropFirst(2).first, "The scan could not be read. Refusing.")
+            XCTAssertEqual(keptResult.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(keptResult.filter { $0 == "The scan could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(keptResult.contains("Nothing is uploaded."))
+            XCTAssertFalse(keptResult.contains("No candidate is not a clearance."))
+            XCTAssertFalse(keptResult.contains("Delete"))
+        }
+    }
+
+    func testAnUnreadableCatalogNamesTheCatalog() throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openworld-missing-bundles-\(UUID().uuidString)", isDirectory: true)
+        let previous = getenv("OPENWORLD_BUNDLES").map { String(cString: $0) }
+        defer {
+            if let previous {
+                setenv("OPENWORLD_BUNDLES", previous, 1)
+            } else {
+                unsetenv("OPENWORLD_BUNDLES")
+            }
+        }
+        setenv("OPENWORLD_BUNDLES", missing.path, 1)
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.isEmpty)
+            XCTAssertEqual(model.step, .bundle)
+            XCTAssertEqual(model.error, "The bundle catalog could not be read. Refusing.")
+            XCTAssertFalse(model.showsTopError)
+            let preview = PhonePreview.lines(screen: "bundle", model: model)
+            XCTAssertEqual(preview.dropFirst().first, "The bundle catalog could not be read. Refusing.")
+            XCTAssertFalse(preview.contains("Model bundle"))
+            XCTAssertFalse(preview.contains("Scores are not comparable across bundles. Results name the bundle you pick."))
+            XCTAssertEqual(preview.filter { $0 == "The bundle catalog could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(preview.contains("The scan program is not on this device. Refusing."))
+            XCTAssertEqual(preview.last, "Continue")
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .bundle)
+        }
+    }
+
+    func testTheChosenBundleIsMarked() throws {
+        XCTAssertTrue(Copy.sizeHint.contains("A face under 64 px on that image is left out."))
+        XCTAssertTrue(Copy.sizeHint.contains("the label is \"Not compared.\""))
+        XCTAssertFalse(Copy.sizeHint.contains("about 112"))
+        XCTAssertEqual(markedChoice("Fast", selected: true), "Fast. Selected.")
+        XCTAssertEqual(markedChoice("Accurate", selected: false), "Accurate")
+        XCTAssertEqual(markedChoice("Complete. Every decoded frame.", selected: true), "Complete. Every decoded frame. Selected.")
+        XCTAssertEqual(detectionChoice("640", selected: "640"), "640 px on the long side. Selected.")
+        XCTAssertEqual(detectionChoice("full", selected: "640"), "Full resolution")
+        XCTAssertEqual(detectionChoice("full", selected: "full"), "Full resolution. Selected.")
+        XCTAssertEqual(coverageChoice("complete", selected: "complete"), "Complete. Every decoded frame. Selected.")
+        XCTAssertEqual(coverageChoice("measured", selected: "complete"), "Measured. 5 frames a second, plus the tracker.")
+        XCTAssertEqual(coverageChoice("measured", selected: "measured"), "Measured. 5 frames a second, plus the tracker. Selected.")
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertEqual(model.bundles.first?.id, "fast")
+            XCTAssertEqual(markedChoice("Fast", selected: model.bundleID == "fast"), "Fast. Selected.")
+            model.bundleID = "accurate"
+            XCTAssertEqual(markedChoice("Accurate", selected: model.bundleID == "accurate"), "Accurate. Selected.")
+            XCTAssertEqual(markedChoice("Fast", selected: model.bundleID == "fast"), "Fast")
+        }
+    }
+
+    func testReturningFromTheFilePageKeepsTheChosenBundle() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+            model.bundleID = "accurate"
+            model.goBack()
+            XCTAssertEqual(model.step, .device)
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "accurate")
+            XCTAssertEqual(model.step, .bundle)
+            model.bundleID = "not-in-the-catalog"
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+            model.bundleID = "accurate"
+            model.chooseAnother()
+            XCTAssertEqual(model.bundleID, "fast")
+            XCTAssertEqual(model.step, .choose)
+            model.loadBundles()
+            XCTAssertEqual(model.bundleID, "fast")
+        }
+    }
+
+    func testACandidateWithoutAPageKeepsTheCard() throws {
+        try MainActor.assumeIsolated {
+            var report = try JSONDecoder().decode(ScanReport.self, from: Data(reportJSON.utf8))
+            report.candidates[0].fbiUrl = ""
+            let model = FlowModel(phone: true)
+            model.report = report
+            model.step = .results
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertTrue(lines.contains("Possible candidate. Not an identification."))
+            XCTAssertTrue(lines.contains("Fixture subject A (Missing)"))
+            XCTAssertFalse(lines.contains("Open FBI page"))
+        }
+    }
+
+    func testARefusedScanWithoutAResultHidesDelete() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.bundleID = "not-in-the-catalog"
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, "That bundle is not in the catalog. Refusing.")
+            XCTAssertTrue(model.resultRefused)
+            XCTAssertNil(model.resultDirectory)
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.filter { $0 == "That bundle is not in the catalog. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("Delete"))
+            XCTAssertFalse(lines.contains("No candidate is not a clearance."))
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.report)
+        }
+    }
+
+    func testAPosterPackFileRefusesBeforeTheScan() throws {
+        let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("keep".utf8).write(to: blocker)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(try self.still("blank"))
+            model.fixturePackDirectory = blocker
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertEqual(model.error, "The poster pack could not be read. Refusing.")
+            XCTAssertTrue(model.resultRefused)
+            XCTAssertEqual(model.resultHeadline, "The poster pack could not be read. Refusing.")
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.dropFirst().first, "The poster pack could not be read. Refusing.")
+            XCTAssertEqual(lines.filter { $0 == "The poster pack could not be read. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("The poster pack is missing. Refusing."))
+            XCTAssertTrue(lines.contains("Nothing is uploaded."))
+            XCTAssertTrue(lines.contains("On-device does not mean the file is real."))
+            XCTAssertFalse(lines.contains("No candidate is not a clearance."))
+            XCTAssertFalse(lines.contains("Delete"))
+            XCTAssertTrue(lines.contains("Choose another file"))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-poster-pack.png"))
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.report)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.resultHeadline, "The poster pack could not be read. Refusing.")
+            XCTAssertTrue(model.resultRefused)
+            XCTAssertTrue(model.showsTopError)
+            let kept = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(kept.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(kept.dropFirst(2).first, "The poster pack could not be read. Refusing.")
+            XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(kept.filter { $0 == "The poster pack could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(kept.contains("Nothing is uploaded."))
+            XCTAssertFalse(kept.contains("No candidate is not a clearance."))
+            XCTAssertFalse(kept.contains("Delete"))
+        }
+        XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
+    }
+
+    func testAFileChosenDuringAScanStaysPut() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let file = try self.still("blank")
+            model.choose(file)
+            XCTAssertEqual(model.step, .device)
+            model.scanning = true
+            model.choose(try self.still("scene"))
+            XCTAssertEqual(model.file, file)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.error)
+            XCTAssertTrue(model.scanning)
+        }
+    }
+
+    func testAnalyzeSaysScanningUntilTheResultIsReady() async throws {
+        let file = try self.still("blank")
+        let model = await MainActor.run { () -> FlowModel in
+            let model = FlowModel(phone: true)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.startScan()
+            XCTAssertTrue(model.scanning)
+            XCTAssertFalse(model.backEnabled)
+            XCTAssertEqual(model.step, .estimate)
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            return model
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while await MainActor.run(body: { model.scanning }) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        await MainActor.run {
+            XCTAssertFalse(model.scanning)
+            XCTAssertTrue(model.backEnabled)
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+        }
+    }
+
+    func testACropAppearsOnTheEstimateWhileScanning() async throws {
+        let file = try self.still("scene")
+        let seen = DispatchSemaphore(value: 0)
+        let hold = DispatchSemaphore(value: 0)
+        let model = await MainActor.run { () -> FlowModel in
+            let model = FlowModel(phone: true)
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.progressSeen = seen
+            model.progressHold = hold
+            model.startScan()
+            XCTAssertTrue(model.scanning)
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertFalse(model.backEnabled)
+            return model
+        }
+        let appeared = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            DispatchQueue.global().async {
+                continuation.resume(returning: seen.wait(timeout: .now() + 30) == .success)
+            }
+        }
+        XCTAssertTrue(appeared)
+        await MainActor.run {
+            XCTAssertFalse(model.liveCrops.isEmpty)
+            XCTAssertTrue(model.scanning)
+            XCTAssertEqual(model.step, .estimate)
+            let label = model.liveCrops[0].label
+            let known = [
+                Copy.possible,
+                Copy.notCompared,
+                "A vehicle is not a person.",
+                "This plate text is not published on a poster.",
+                "The plate could not be read.",
+                "No poster publishes a plate.",
+                "Below the locked cutoff. Not a candidate.",
+                "This face could not be scored.",
+            ]
+            XCTAssertTrue(known.contains(label), label)
+            XCTAssertTrue(model.liveCrops.allSatisfy { $0.frameLabel == "Frame 1." })
+            let lines = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(lines.first, "Back")
+            XCTAssertTrue(lines.contains("Scanning"))
+            XCTAssertTrue(lines.contains("Crops from this file."))
+            XCTAssertTrue(lines.contains(label))
+            XCTAssertTrue(lines.contains("Frame 1."))
+            let frameAt = lines.firstIndex(of: "Frame 1.")
+            let labelAt = lines.firstIndex(of: label)
+            XCTAssertNotNil(frameAt)
+            XCTAssertNotNil(labelAt)
+            if let frameAt, let labelAt {
+                XCTAssertLessThan(frameAt, labelAt)
+            }
+            let crops = lines.firstIndex(of: "Crops from this file.")
+            let title = lines.firstIndex(of: "Scanning")
+            XCTAssertEqual(title, 1)
+            XCTAssertEqual(crops, 2)
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            hold.signal()
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while await MainActor.run(body: { model.scanning }) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        await MainActor.run {
+            XCTAssertFalse(model.scanning)
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, Copy.possible)
+        }
+    }
+
+    func testAnUnreadableFileStaysOffTheNextPage() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo.png"))
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.file)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            let choose = PhonePreview.lines(screen: "choose", model: model)
+            XCTAssertEqual(choose.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(choose.dropFirst().first, "Choose a photo or video")
+            XCTAssertTrue(choose.contains(Copy.phoneImport))
+            XCTAssertEqual(choose.last, "Choose File")
+            let mac = PhonePreview.lines(screen: "choose", model: FlowModel(phone: false))
+            XCTAssertTrue(mac.contains(Copy.computerImport))
+            XCTAssertFalse(mac.contains(Copy.phoneImport))
+            XCTAssertEqual(choose.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            let file = try self.still("blank")
+            model.choose(file)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.error)
+            XCTAssertFalse(model.showsTopError)
+            let opened = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(opened.first, "Back")
+            XCTAssertFalse(opened.contains("The file could not be read. Refusing."))
+            let folder = file.deletingLastPathComponent().appendingPathComponent("not-a-file-dir", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            model.choose(folder)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            let kept = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(kept.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(kept.dropFirst().first, "Back")
+            XCTAssertTrue(kept.contains(file.lastPathComponent))
+            XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            model.choose(file)
+            model.loadBundles()
+            model.step = .size
+            model.choose(folder)
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            let size = PhonePreview.lines(screen: "size", model: model)
+            XCTAssertEqual(size.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(size.dropFirst().first, "Back")
+            XCTAssertEqual(size.dropFirst(2).first, "Detection size")
+            XCTAssertEqual(size.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertEqual(model.estimateHeadline, "Estimate")
+            let continued = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(continued.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(continued.dropFirst(2).first, "Estimate")
+            XCTAssertEqual(continued.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(continued.contains("Analyze"))
+        }
+    }
+
+    func testAnUnreadableFileKeepsThePageThatAlreadyHasAFile() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let file = try self.still("blank")
+            model.choose(file)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.step, .estimate)
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-estimate.png"))
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(estimate.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(estimate.dropFirst().first, "Back")
+            XCTAssertEqual(estimate.dropFirst(2).first, "Estimate")
+            XCTAssertEqual(estimate.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(estimate.contains("Analyze"))
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertNil(model.error)
+            XCTAssertFalse(model.showsTopError)
+            let finished = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(finished.first, "Back")
+            XCTAssertFalse(finished.contains("The file could not be read. Refusing."))
+            let result = try XCTUnwrap(model.resultDirectory)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-result.png"))
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            let lines = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(lines.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(lines.dropFirst().first, "Back")
+            XCTAssertEqual(lines.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertTrue(lines.contains("Delete"))
+            let next = try self.still("blank")
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, next.path)
+            XCTAssertNil(model.error)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertFalse(model.showsTopError)
+            let device = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(device.first, "Back")
+            XCTAssertFalse(device.contains("The file could not be read. Refusing."))
+            XCTAssertFalse(device.contains("Delete"))
+        }
+    }
+
+    func testWantedOffLeavesThatClassOutAndBothOffKeepsAnalyzeOff() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene", wanted: false)
+            XCTAssertEqual(model.classArguments(), ["--no-wanted"])
+            XCTAssertEqual(model.classLine, "Missing.")
+            XCTAssertEqual(markedChoice("Missing", selected: model.includeMissing), "Missing. Selected.")
+            XCTAssertEqual(markedChoice("Wanted", selected: model.includeWanted), "Wanted")
+            XCTAssertNotEqual(markedChoice("Wanted", selected: false), "Wanted.")
+            XCTAssertTrue(model.showsAnalyze)
+            XCTAssertEqual(model.report?.classNote, "Missing.")
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClass == "missing" } == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterClassLabel == "Missing" } == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.posterLine == "\($0.posterTitle) (Missing)" } == true)
+            XCTAssertTrue(model.report?.candidates.contains { $0.kind == "face" } == true)
+            XCTAssertFalse(model.report?.candidates.contains { $0.kind == "plate" } == true)
+            model.includeMissing = false
+            model.applyClassGate()
+            XCTAssertEqual(model.classLine, "Choose missing, wanted, or both.")
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.showsAnalyze)
+            XCTAssertEqual(markedChoice("Missing", selected: false), "Missing")
+            XCTAssertEqual(markedChoice("Wanted", selected: false), "Wanted")
+        }
+    }
+
+    func testBlankMeasuredOldFileIsAClearanceWithTheWarning() throws {
+        try MainActor.assumeIsolated {
+            let file = try self.still("blank")
+            let old = Date().addingTimeInterval(-40 * 24 * 3600)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: file.path)
+            let model = FlowModel(phone: true)
+            model.choose(file)
+            XCTAssertTrue(model.oldFile)
+            model.loadBundles()
+            XCTAssertTrue(model.bundles.contains { $0.id == "fast" && $0.preselected })
+            XCTAssertTrue(model.bundles.contains { $0.id == "accurate" && $0.curveLine.contains("Not measured yet.") })
+            model.longSide = "640"
+            model.coverage = "measured"
+            model.step = .size
+            model.loadEstimate()
+            XCTAssertEqual(model.estimateWarning, Copy.oldFile)
+            XCTAssertTrue(model.showBriefOnEstimate)
+            XCTAssertEqual(model.choiceLine, "Fast. 640 px on the long side. 5 frames a second, plus the tracker.")
+            XCTAssertEqual(model.estimate?.deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
+            XCTAssertTrue(model.estimate?.heatNote?.contains("This phone may get hot.") == true)
+            model.analyze()
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertEqual(model.report?.coverageBanner, Copy.brief)
+            XCTAssertTrue(model.report?.warnings.contains(Copy.oldFile) == true)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+            XCTAssertTrue(model.report?.inventory.isEmpty == true)
+        }
+    }
+
+    func testGenuineFaceBelowTheCutoffIsNotACandidate() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("below")
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+            XCTAssertTrue(model.report?.inventory.map(\.label).contains("Below the locked cutoff. Not a candidate.") == true)
+        }
+    }
+
+    func testImpostorFaceIsNotACandidate() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("impostor")
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+            XCTAssertFalse(model.report?.inventory.map(\.label).contains(Copy.possible) == true)
+        }
+    }
+
+    func testFaceUnder64PixelsIsLeftOut() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("tiny")
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertEqual(model.report?.facesSeenNotCompared, 0)
+            XCTAssertTrue(model.report?.inventory.isEmpty == true)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+        }
+    }
+
+    func testFaceAt64PixelsIsSeenAndNotCompared() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("uncompared")
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertEqual(model.report?.inventory.map(\.label), [Copy.notCompared])
+            XCTAssertGreaterThanOrEqual(model.report?.facesSeenNotCompared ?? 0, 1)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+        }
+    }
+
+    func testAnAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() throws {
+        let gif = try laterFrameGif()
+        let frames = FileManager.default.temporaryDirectory.appendingPathComponent("ow-gif-\(UUID().uuidString)")
+        let reel = try GifFrames.write(gif, directory: frames)
+        XCTAssertEqual(reel.frames.count, 3)
+        XCTAssertTrue(reel.video)
+        XCTAssertEqual(reel.fps, 5, accuracy: 0.05)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "complete"
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            XCTAssertNil(model.error)
+            model.analyze()
+            XCTAssertEqual(model.report?.summary, Copy.possible)
+            XCTAssertFalse(model.report?.candidates.isEmpty == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameIndex == 1 } == true)
+            XCTAssertTrue(model.report?.candidates.allSatisfy { $0.frameLabel == "Frame 2." } == true)
+            XCTAssertTrue(model.report?.inventory.allSatisfy { $0.frameLabel == "Frame \($0.frameIndex + 1)." } == true)
+            XCTAssertTrue(model.report?.inventory.contains { $0.frameLabel == "Frame 2." } == true)
+        }
+    }
+
+    func testAOneFrameGifStaysOneFrame() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-one-\(UUID().uuidString).gif")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=64x64", "-frames:v", "1", gif.path])
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.frames.count, 1)
+        XCTAssertFalse(reel.video)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.loadBundles()
+            model.longSide = "640"
+            model.coverage = "complete"
+            model.loadEstimate()
+            XCTAssertTrue(model.canAnalyze)
+            model.analyze()
+            XCTAssertEqual(model.report?.summary, Copy.clearance)
+            XCTAssertTrue(model.report?.candidates.isEmpty == true)
+        }
+    }
+
+    func testABrokenGifIsRefused() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-bad-\(UUID().uuidString).gif")
+        var bytes = Array("GIF89a".utf8)
+        bytes.append(contentsOf: [UInt8](repeating: 0, count: 24))
+        try Data(bytes).write(to: gif)
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(gif)
+            model.coverage = "measured"
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertFalse(model.showsAnalyze)
+            XCTAssertFalse(model.showBriefOnEstimate)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("Choose missing, wanted, or both.") == true)
+        }
+    }
+
+    func testAVideoWithoutAnExtensionIsAMovieContainer() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-bare-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let named = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", named.path])
+        let bare = root.appendingPathComponent("clip")
+        try FileManager.default.copyItem(at: named, to: bare)
+        XCTAssertTrue(StillMotion.movieContainer(bare))
+        XCTAssertTrue(StillMotion.movieContainer(named))
+        let webm = root.appendingPathComponent("clip.webm")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2", "-an", "-c:v", "libvpx", webm.path])
+        let bareWebm = root.appendingPathComponent("webm")
+        try FileManager.default.copyItem(at: webm, to: bareWebm)
+        XCTAssertTrue(StillMotion.movieContainer(bareWebm))
+        let avi = root.appendingPathComponent("avi")
+        let aviBytes = Array("RIFF".utf8) + [UInt8](repeating: 0, count: 4) + Array("AVI ".utf8)
+        try Data(aviBytes).write(to: avi)
+        XCTAssertTrue(StillMotion.movieContainer(avi))
+        let heic = root.appendingPathComponent("still")
+        let heicBytes = [UInt8](repeating: 0, count: 4) + Array("ftypheic".utf8)
+        try Data(heicBytes).write(to: heic)
+        XCTAssertFalse(StillMotion.movieContainer(heic))
+        for brand in ["avif", "avis", "msf1"] {
+            let still = root.appendingPathComponent(brand)
+            let bytes = [UInt8](repeating: 0, count: 4) + Array("ftyp\(brand)".utf8)
+            try Data(bytes).write(to: still)
+            XCTAssertFalse(StillMotion.movieContainer(still), brand)
+        }
+        let png = try still("blank")
+        XCTAssertFalse(StillMotion.movieContainer(png))
+        let jpeg = root.appendingPathComponent("photo")
+        try Data([0xFF, 0xD8, 0xFF, 0xD9] + [UInt8](repeating: 0, count: 8)).write(to: jpeg)
+        XCTAssertFalse(StillMotion.movieContainer(jpeg))
+    }
+
+    func testAJpegNamedPngIsNotAPngHeader() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-pnghdr-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let jpeg = root.appendingPathComponent("photo.png")
+        try Data([0xFF, 0xD8, 0xFF, 0xD9] + [UInt8](repeating: 0, count: 8)).write(to: jpeg)
+        XCTAssertFalse(StillMotion.png(jpeg))
+        let png = try still("blank")
+        let pngNamedJpeg = root.appendingPathComponent("scene.jpg")
+        try FileManager.default.copyItem(at: png, to: pngNamedJpeg)
+        XCTAssertTrue(StillMotion.png(pngNamedJpeg))
+        XCTAssertTrue(StillMotion.png(png))
+    }
+
+    func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
+        let apng = try movingPicture("apng")
+        XCTAssertTrue(StillMotion.animatedPng(apng))
+        XCTAssertFalse(StillMotion.animatedPng(try still("blank")))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(apng)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
+    }
+
+    func testAnAnimatedWebpIsRefusedInsteadOfClearingTheFirstFrame() throws {
+        let webp = try movingPicture("webp")
+        let stillWebp = FileManager.default.temporaryDirectory.appendingPathComponent("ow-still-\(UUID().uuidString).webp")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=blue:s=16x16", "-frames:v", "1", "-c:v", "libwebp", stillWebp.path])
+        XCTAssertTrue(StillMotion.animatedWebp(webp))
+        XCTAssertFalse(StillMotion.animatedWebp(stillWebp))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(webp)
+            model.loadEstimate()
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+        }
+    }
+
+    func testOrientationSixTurnsTheStoredPixelsUpright() {
+        let rgb: [UInt8] = [
+            1, 0, 0, 2, 0, 0, 3, 0, 0,
+            4, 0, 0, 5, 0, 0, 6, 0, 0,
+        ]
+        let shown = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 6)
+        XCTAssertEqual(shown.width, 2)
+        XCTAssertEqual(shown.height, 3)
+        XCTAssertEqual(shown.rgb, [
+            4, 0, 0, 1, 0, 0,
+            5, 0, 0, 2, 0, 0,
+            6, 0, 0, 3, 0, 0,
+        ])
+        let same = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 1)
+        XCTAssertEqual(same.rgb, rgb)
+        XCTAssertEqual(same.width, 3)
+        let mirrored = JpegOrientation.apply(rgb: rgb, width: 3, height: 2, tag: 2)
+        XCTAssertEqual(mirrored.rgb, [
+            3, 0, 0, 2, 0, 0, 1, 0, 0,
+            6, 0, 0, 5, 0, 0, 4, 0, 0,
+        ])
+    }
+
+    func testATurnedVideoWithNonSquarePixelsUsesTheShownSize() {
+        let upright = VideoDisplay.shownSize(codedWidth: 480, codedHeight: 320, sarNum: 1, sarDen: 2, quarterTurn: true)
+        XCTAssertEqual(upright.0, 640)
+        XCTAssertEqual(upright.1, 480)
+        let squeezed = VideoDisplay.shownSize(codedWidth: 320, codedHeight: 480, sarNum: 2, sarDen: 1, quarterTurn: true)
+        XCTAssertEqual(squeezed.0, 240)
+        XCTAssertEqual(squeezed.1, 320)
+        let wide = VideoDisplay.shownSize(codedWidth: 320, codedHeight: 480, sarNum: 2, sarDen: 1, quarterTurn: false)
+        XCTAssertEqual(wide.0, 640)
+        XCTAssertEqual(wide.1, 480)
+        let turned = VideoDisplay.shownSize(codedWidth: 480, codedHeight: 640, sarNum: 1, sarDen: 1, quarterTurn: true)
+        XCTAssertEqual(turned.0, 640)
+        XCTAssertEqual(turned.1, 480)
+        XCTAssertEqual(VideoDisplay.squareWidth(320, num: 2, den: 1), 640)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0.8, rate: 10), 8)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 30, rate: 10), 300)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0, rate: 10), 1)
+    }
+
+    func testAJpegOrientationTagIsReadFromTheFile() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-orient-\(UUID().uuidString)")
+        try Data(jpegWithOrientation(6)).write(to: url)
+        XCTAssertEqual(JpegOrientation.tag(url), 6)
+        let size = JpegOrientation.displaySize(width: 480, height: 640, tag: 6)
+        XCTAssertEqual(size.0, 640)
+        XCTAssertEqual(size.1, 480)
+        XCTAssertEqual(JpegOrientation.tag(Data([0x89, 0x50, 0x4E, 0x47])), 1)
+        XCTAssertEqual(JpegOrientation.tag(Data(pngWithOrientation(6))), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(pngWithOrientation(1))), 1)
+        let webp = FileManager.default.temporaryDirectory.appendingPathComponent("ow-webp-\(UUID().uuidString)")
+        try Data(webpWithOrientation(6, prefix: false)).write(to: webp)
+        XCTAssertEqual(JpegOrientation.tag(webp), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(6, prefix: true))), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(webpWithOrientation(1, prefix: false))), 1)
+        let pages = rgbTiff([(1, 1, [1, 2, 3], 6), (1, 1, [4, 5, 6], 8)])
+        XCTAssertEqual(JpegOrientation.tiffPageTags(Data(pages)), [6, 8])
+        XCTAssertEqual(JpegOrientation.tag(Data(pages)), 6)
+        let tiff = FileManager.default.temporaryDirectory.appendingPathComponent("ow-tif-\(UUID().uuidString)")
+        try Data(pages).write(to: tiff)
+        XCTAssertEqual(JpegOrientation.tag(tiff), 6)
+        XCTAssertEqual(JpegOrientation.tag(Data(rgbTiff([(1, 1, [9, 9, 9], 1)]))), 1)
+        let big = Data([
+            0x4D, 0x4D, 0x00, 0x2A,
+            0x00, 0x00, 0x00, 0x08,
+            0x00, 0x01,
+            0x01, 0x12,
+            0x00, 0x03,
+            0x00, 0x00, 0x00, 0x01,
+            0x00, 0x06,
+            0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ])
+        XCTAssertEqual(JpegOrientation.tiffPageTags(big), [6])
+        XCTAssertNil(JpegOrientation.tiffPageTags(Data([0x89, 0x50, 0x4E, 0x47])))
+    }
+
+    func testAnInterlacedGifKeepsThePixelsOfThatFrame() throws {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent("ow-inter-\(UUID().uuidString).gif")
+        try Data(interlacedGif).write(to: gif)
+        let reel = try GifFrames.read(gif)
+        XCTAssertEqual(reel.width, 16)
+        XCTAssertEqual(reel.height, 16)
+        XCTAssertEqual(reel.frames.count, 1)
+        let rgb = reel.frames[0]
+        for y in 0..<16 {
+            for x in 0..<16 {
+                let pixel = (y * 16 + x) * 3
+                let expected: UInt8 = (x < 8 && y < 8) ? 0 : 255
+                XCTAssertEqual(rgb[pixel], expected)
+                XCTAssertEqual(rgb[pixel + 1], expected)
+                XCTAssertEqual(rgb[pixel + 2], expected)
+            }
+        }
+    }
+
+    func testANonPngRefusesBeforeAnalyze() throws {
+        try MainActor.assumeIsolated {
+            let junk = FileManager.default.temporaryDirectory.appendingPathComponent("ow-junk-\(UUID().uuidString).txt")
+            try Data("this is not a photo".utf8).write(to: junk)
+            let model = FlowModel(phone: true)
+            model.choose(junk)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("AVFoundation decodes on macOS and iOS. Refusing.") == true)
+            let refusal = model.estimateHeadline
+            model.goBack()
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-refused-continue.png"))
+            model.loadEstimate()
+            XCTAssertNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.estimateHeadline, refusal)
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertFalse(model.showsAnalyze)
+            let kept = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(kept.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(kept.dropFirst(2).first, refusal)
+            XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(kept.filter { $0 == refusal }.count, 1)
+            XCTAssertFalse(kept.contains("Estimate"))
+            XCTAssertFalse(kept.contains("Analyze"))
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.file)
+            XCTAssertNil(model.error)
+            XCTAssertTrue(model.canAnalyze)
+        }
+    }
+
+    func testChooseAnotherClearsACandidate() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
+            model.leaveError = "OpenWorld only opens an FBI page."
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.leavingURL)
+            XCTAssertNil(model.leaveError)
+            let result = model.resultDirectory
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .choose)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.file)
+            XCTAssertEqual(model.coverage, "complete")
+            XCTAssertEqual(model.longSide, "640")
+            if let result {
+                XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            }
+        }
+    }
+
+    func testDeleteRemovesTheResultAndLeavesAForeignDirectory() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            let frames = result.deletingLastPathComponent().appendingPathComponent("frames")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: frames.path))
+            model.deleteResult()
+            XCTAssertEqual(model.error, "Deleted.")
+            XCTAssertEqual(model.resultHeadline, "Deleted.")
+            XCTAssertFalse(model.resultRefused)
+            XCTAssertNil(model.report)
+            XCTAssertNil(model.resultDirectory)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: frames.path))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-deleted.png"))
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.resultHeadline, "Deleted.")
+            XCTAssertFalse(model.resultRefused)
+            XCTAssertTrue(model.showsTopError)
+            let deleted = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(deleted.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(deleted.dropFirst(2).first, "Deleted.")
+            XCTAssertEqual(deleted.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(deleted.filter { $0 == "Deleted." }.count, 1)
+            XCTAssertFalse(deleted.contains("Nothing is uploaded."))
+            XCTAssertFalse(deleted.contains("No candidate is not a clearance."))
+            XCTAssertFalse(deleted.contains("Delete"))
+
+            let foreign = FileManager.default.temporaryDirectory.appendingPathComponent("ow-foreign-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+            try Data("keep".utf8).write(to: foreign.appendingPathComponent("notes.txt"))
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: self.binary())
+            process.arguments = PhoneArguments.delete(out: foreign.path)
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(object["deleted"] as? Bool, false)
+            XCTAssertTrue((object["message"] as? String)?.contains("not an OpenWorld result") == true)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.appendingPathComponent("notes.txt").path))
+            try FileManager.default.removeItem(at: foreign)
+        }
+    }
+
+    func testANewFileOnTheDevicePageSaysWhenTheResultCannotBeDeleted() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            let file = try XCTUnwrap(model.file)
+            model.goBack()
+            model.goBack()
+            model.goBack()
+            model.goBack()
+            XCTAssertEqual(model.step, .device)
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: result.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: result.path) }
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-before-delete.png"))
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            let next = try self.still("blank")
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertEqual(model.file?.path, file.path)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("result.json").path))
+            let lines = PhonePreview.lines(screen: "device", model: model)
+            XCTAssertEqual(lines.first, model.deleteNotice)
+            XCTAssertEqual(lines.dropFirst().first, "Back")
+            XCTAssertEqual(lines.filter { $0 == model.deleteNotice }.count, 1)
+            XCTAssertFalse(lines.contains("The file could not be read. Refusing."))
+            XCTAssertTrue(lines.contains(file.lastPathComponent))
+            XCTAssertFalse(lines.contains(next.lastPathComponent))
+            model.loadBundles()
+            model.continueFromBundles()
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            let estimate = PhonePreview.lines(screen: "estimate", model: model)
+            let noticeAt = try XCTUnwrap(estimate.firstIndex(of: "The result could not be deleted."))
+            let backAt = try XCTUnwrap(estimate.firstIndex(of: "Back"))
+            XCTAssertLessThan(noticeAt, backAt)
+            XCTAssertEqual(estimate.filter { $0 == "The result could not be deleted." }.count, 1)
+            XCTAssertTrue(estimate.contains("Estimate"))
+            model.startScan()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertFalse(model.scanning)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            let stayed = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(stayed.filter { $0 == "The result could not be deleted." }.count, 1)
+            XCTAssertTrue(stayed.contains("Analyze"))
+            XCTAssertFalse(stayed.contains("Scanning"))
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertNil(model.deleteNotice)
+            let size = PhonePreview.lines(screen: "size", model: model)
+            XCTAssertFalse(size.contains("The result could not be deleted."))
+            model.loadEstimate()
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: result.path)
+            model.startScan()
+            XCTAssertEqual(model.deleteNotice, "The result could not be deleted.")
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: result.path)
+            model.choose(next)
+            XCTAssertEqual(model.step, .device)
+            XCTAssertNil(model.deleteNotice)
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.file?.path, next.path)
+            model.loadBundles()
+            model.continueFromBundles()
+            model.loadEstimate()
+            let cleared = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertFalse(cleared.contains("The result could not be deleted."))
+        }
+    }
+
+    func testARefusedDeleteKeepsTheResultOnScreen() throws {
+        try MainActor.assumeIsolated {
+            let model = try self.scan("scene")
+            let result = try XCTUnwrap(model.resultDirectory)
+            try FileManager.default.removeItem(at: result.appendingPathComponent("result.json"))
+            model.deleteResult()
+            XCTAssertEqual(model.report?.summary, "Possible candidate. Not an identification.")
+            XCTAssertFalse(model.report?.candidates.isEmpty ?? true)
+            XCTAssertEqual(model.deleteNotice, "Refusing to delete a directory that is not an OpenWorld result.")
+            let refusedDelete = PhonePreview.lines(screen: "results", model: model)
+            let noticeAt = try XCTUnwrap(refusedDelete.firstIndex(of: model.deleteNotice ?? ""))
+            let backAt = try XCTUnwrap(refusedDelete.firstIndex(of: "Back"))
+            let headlineAt = try XCTUnwrap(refusedDelete.firstIndex(of: Copy.possible))
+            XCTAssertLessThan(noticeAt, backAt)
+            XCTAssertLessThan(noticeAt, headlineAt)
+            XCTAssertEqual(refusedDelete.filter { $0 == model.deleteNotice }.count, 1)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertNil(model.error)
+            model.goBack()
+            XCTAssertEqual(model.step, .estimate)
+            model.deleteNotice = "The result could not be deleted."
+            model.deleteNotice = nil
+            model.analyze()
+            XCTAssertEqual(model.step, .results)
+            XCTAssertEqual(model.report?.summary, "Possible candidate. Not an identification.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+            XCTAssertNotEqual(model.resultDirectory?.path, result.path)
+        }
+    }
+
+    func testARefusalLeavesTheBundleUnnamed() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.report = try JSONDecoder().decode(ScanReport.self, from: Data(refusedJSON.utf8))
+            model.step = .results
+            let preview = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(preview.first, "Back")
+            XCTAssertEqual(preview.dropFirst().first, "The file could not be read. Refusing.")
+            XCTAssertFalse(preview.contains { $0.hasPrefix("Bundle:") })
+            XCTAssertFalse(preview.contains("Fixture markers were read."))
+            XCTAssertFalse(preview.contains(""))
+            XCTAssertFalse(preview.contains(Copy.clearance))
+            XCTAssertTrue(preview.contains("Nothing is uploaded."))
+            XCTAssertEqual(preview.last, "Choose another file")
+            XCTAssertEqual(PhonePreview.contextLines(model.report), [])
+        }
+    }
+
+    func testAnIncompleteReportKeepsTheReason() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.report = try JSONDecoder().decode(ScanReport.self, from: Data(incompleteJSON.utf8))
+            model.step = .results
+            XCTAssertEqual(model.report?.summary, Copy.incomplete)
+            XCTAssertEqual(model.report?.status, "incomplete")
+            XCTAssertEqual(model.report?.message, "The file was not fully decoded.")
+            XCTAssertNotEqual(model.report?.message, model.report?.summary)
+            XCTAssertFalse(model.resultRefused)
+            XCTAssertEqual(model.resultHeadline, Copy.incomplete)
+            XCTAssertEqual(model.resultReason, "The file was not fully decoded.")
+            let preview = PhonePreview.lines(screen: "results", model: model)
+            XCTAssertEqual(Array(preview.prefix(3)), ["Back", "Incomplete.", "The file was not fully decoded."])
+            XCTAssertEqual(preview.filter { $0 == "The file was not fully decoded." }.count, 1)
+            model.report = nil
+            XCTAssertNil(model.resultReason)
+        }
+    }
+
+    func testAMissingOutputDirectoryRefusesTheEstimate() throws {
+        try MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let file = try self.still("blank")
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-40 * 24 * 3600)],
+                ofItemAtPath: file.path
+            )
+            model.choose(file)
+            XCTAssertTrue(model.oldFile)
+            model.loadBundles()
+            model.loadEstimate()
+            XCTAssertNotNil(model.estimate)
+            XCTAssertEqual(model.estimateWarning, Copy.oldFile)
+            XCTAssertTrue(model.showsAnalyze)
+            let blocker = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ow-not-a-dir-\(UUID().uuidString)")
+            XCTAssertTrue(FileManager.default.createFile(atPath: blocker.path, contents: Data("keep".utf8)))
+            defer { try? FileManager.default.removeItem(at: blocker) }
+            model.scratchDirectory = blocker
+            model.analyze()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertNil(model.report)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertFalse(model.showsAnalyze)
+            XCTAssertEqual(model.error, "The output directory could not be created. Refusing.")
+            let lines = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(lines.dropFirst().first, "The output directory could not be created. Refusing.")
+            XCTAssertEqual(lines.filter { $0 == "The output directory could not be created. Refusing." }.count, 1)
+            XCTAssertFalse(lines.contains("Estimate"))
+            XCTAssertFalse(lines.contains(Copy.oldFile))
+            XCTAssertFalse(lines.contains("Analyze"))
+            XCTAssertFalse(lines.contains("Missing"))
+            XCTAssertFalse(lines.contains("Wanted"))
+            XCTAssertFalse(lines.contains(Copy.clearance))
+            model.choose(URL(fileURLWithPath: "/tmp/openworld-no-such-photo-on-uncreatable.png"))
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertEqual(model.error, "The file could not be read. Refusing.")
+            XCTAssertEqual(model.estimateHeadline, "The output directory could not be created. Refusing.")
+            XCTAssertTrue(model.showsTopError)
+            XCTAssertFalse(model.showsAnalyze)
+            let kept = PhonePreview.lines(screen: "estimate", model: model)
+            XCTAssertEqual(kept.first, "The file could not be read. Refusing.")
+            XCTAssertEqual(kept.dropFirst(2).first, "The output directory could not be created. Refusing.")
+            XCTAssertEqual(kept.filter { $0 == "The file could not be read. Refusing." }.count, 1)
+            XCTAssertEqual(kept.filter { $0 == "The output directory could not be created. Refusing." }.count, 1)
+            XCTAssertFalse(kept.contains("Estimate"))
+            XCTAssertFalse(kept.contains(Copy.oldFile))
+            XCTAssertFalse(kept.contains("Analyze"))
+            XCTAssertFalse(kept.contains("Missing"))
+            XCTAssertFalse(kept.contains("Wanted"))
+            XCTAssertEqual(try Data(contentsOf: blocker), Data("keep".utf8))
+        }
+    }
+
+    @MainActor
+    private func scan(_ kind: String, coverage: String = "complete", wanted: Bool = true) throws -> FlowModel {
+        let model = FlowModel(phone: true)
+        model.choose(try still(kind))
+        model.loadBundles()
+        model.longSide = "640"
+        model.coverage = coverage
+        model.includeWanted = wanted
+        model.loadEstimate()
+        XCTAssertNotNil(model.estimate)
+        model.analyze()
+        XCTAssertEqual(model.step, .results)
+        XCTAssertNil(model.error)
+        return model
+    }
+
+    private func still(_ kind: String) throws -> URL {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("ow-\(kind)-\(UUID().uuidString).png")
+        var args = ["--json", "--bundles", bundlesDir(), "fixture-still", "--out", out.path]
+        switch kind {
+        case "scene": args.append("--scene")
+        case "blank": args.append("--blank")
+        case "impostor": args.append(contentsOf: ["--id", "99", "--module", "16", "--x", "16", "--y", "16"])
+        case "below": args.append(contentsOf: ["--id", "7", "--module", "16", "--below-cutoff"])
+        case "uncompared": args.append(contentsOf: ["--id", "11", "--module", "8", "--x", "16", "--y", "16"])
+        case "tiny": args.append(contentsOf: ["--id", "7", "--module", "4", "--x", "16", "--y", "16"])
+        default: XCTFail(kind)
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary())
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            XCTFail(text)
+        }
+        return out
+    }
+
+    private func laterFrameGif() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-later-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let scene = try still("scene")
+        let blank = try still("blank")
+        let size = try pngSize(scene)
+        let wide = root.appendingPathComponent("wide.png")
+        try ffmpeg(["-i", blank.path, "-vf", "scale=\(size.0):\(size.1):flags=neighbor", "-frames:v", "1", wide.path])
+        try ffmpeg(["-i", wide.path, "-vf", "drawbox=x=0:y=0:w=1:h=1:color=black:t=fill", root.appendingPathComponent("f0.png").path])
+        try FileManager.default.copyItem(at: scene, to: root.appendingPathComponent("f1.png"))
+        try ffmpeg(["-i", wide.path, "-vf", "drawbox=x=20:y=20:w=1:h=1:color=black:t=fill", root.appendingPathComponent("f2.png").path])
+        let palette = root.appendingPathComponent("pal.png")
+        try ffmpeg([
+            "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+            "-frames:v", "3", "-vf", "palettegen=stats_mode=full:max_colors=8", palette.path,
+        ])
+        let gif = root.appendingPathComponent("later.gif")
+        try ffmpeg([
+            "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+            "-i", palette.path, "-frames:v", "3", "-lavfi", "paletteuse=dither=none", "-loop", "0", gif.path,
+        ])
+        return gif
+    }
+
+    private func pngSize(_ url: URL) throws -> (Int, Int) {
+        let data = try Data(contentsOf: url)
+        let bytes = [UInt8](data.prefix(24))
+        XCTAssertEqual(bytes.count, 24)
+        let width = (Int(bytes[16]) << 24) | (Int(bytes[17]) << 16) | (Int(bytes[18]) << 8) | Int(bytes[19])
+        let height = (Int(bytes[20]) << 24) | (Int(bytes[21]) << 16) | (Int(bytes[22]) << 8) | Int(bytes[23])
+        return (width, height)
+    }
+
+    private func movingPicture(_ kind: String) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-move-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try ffmpeg([
+            "-f", "lavfi", "-i", "testsrc2=size=32x32:rate=5:duration=0.6",
+            "-start_number", "0", root.appendingPathComponent("f%d.png").path,
+        ])
+        let out = root.appendingPathComponent("move.\(kind)")
+        if kind == "apng" {
+            try ffmpeg([
+                "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+                "-frames:v", "3", "-plays", "1", "-f", "apng", out.path,
+            ])
+        } else {
+            try ffmpeg([
+                "-framerate", "5", "-start_number", "0", "-i", root.appendingPathComponent("f%d.png").path,
+                "-frames:v", "3", "-loop", "0", "-c:v", "libwebp", out.path,
+            ])
+        }
+        return out
+    }
+
+    private func ffmpeg(_ args: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ffmpeg")
+        process.arguments = ["-y", "-v", "error"] + args
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            XCTFail(text)
+        }
+    }
+
+    private func binary() -> String {
+        if let env = ProcessInfo.processInfo.environment["OPENWORLD_BIN"], !env.isEmpty {
+            return env
+        }
+        return "openworld"
+    }
+
+    private func bundlesDir() -> String {
+        if let env = ProcessInfo.processInfo.environment["OPENWORLD_BUNDLES"], !env.isEmpty {
+            return env
+        }
+        return "bundles"
+    }
+
+    @MainActor
+    private func drawScreens() throws {
+        let model = FlowModel(phone: true)
+
+        model.choose(try self.still("blank"))
+        let step = model.step
+        XCTAssertEqual(step, .device)
+
+        model.bundles = [try row()]
+        model.step = .bundle
+
+        model.step = .size
+        model.coverage = "measured"
+        XCTAssertEqual(Copy.brief, "A brief face can be missed.")
+
+        model.estimate = try JSONDecoder().decode(Estimate.self, from: Data(estimateJSON.utf8))
+        model.coverage = "complete"
+        model.step = .estimate
+        let deviceNote = model.estimate?.deviceNote
+        XCTAssertEqual(deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
+
+        model.report = try JSONDecoder().decode(ScanReport.self, from: Data(reportJSON.utf8))
+        model.leaveError = "OpenWorld only opens an FBI page."
+        let refused = PhonePreview.lines(screen: "results", model: model)
+        let noticeAt = try XCTUnwrap(refused.firstIndex(of: "OpenWorld only opens an FBI page."))
+        let backAt = try XCTUnwrap(refused.firstIndex(of: "Back"))
+        let headlineAt = try XCTUnwrap(refused.firstIndex(of: Copy.possible))
+        XCTAssertLessThan(noticeAt, backAt)
+        XCTAssertLessThan(noticeAt, headlineAt)
+        model.leaveError = nil
+        model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
+        model.step = .results
+        let summary = model.report?.summary
+        let disclosure = model.report?.disclosure ?? []
+        let warnings = model.report?.warnings ?? []
+        XCTAssertEqual(summary, Copy.possible)
+        XCTAssertEqual(warnings, [Copy.disagree])
+        XCTAssertEqual(Copy.leaving, "You are leaving OpenWorld.")
+        let leaving = PhonePreview.lines(screen: "leaving", model: model)
+        let pageAt = try XCTUnwrap(leaving.firstIndex(of: "https://www.fbi.gov/wanted"))
+        let openAt = try XCTUnwrap(leaving.firstIndex(of: "Open"))
+        let stayAt = try XCTUnwrap(leaving.firstIndex(of: "Stay"))
+        XCTAssertLessThan(pageAt, openAt)
+        XCTAssertLessThan(openAt, stayAt)
+        XCTAssertEqual(Copy.clearance, "No candidate is not a clearance.")
+        XCTAssertEqual(Copy.incomplete, "Incomplete.")
+        XCTAssertEqual(Copy.notCompared, "Not compared.")
+        XCTAssertTrue(disclosure.contains("Nothing is uploaded."))
+        XCTAssertTrue(disclosure.contains("Nobody is enrolled."))
+        XCTAssertTrue(disclosure.contains("OpenWorld does not train on this file."))
+        XCTAssertTrue(disclosure.contains("OpenWorld does not contact an agency."))
+        XCTAssertTrue(disclosure.contains("A candidate is not an identification."))
+        XCTAssertTrue(disclosure.contains("No candidate is not a clearance."))
+        XCTAssertTrue(disclosure.contains("This file is not authenticated."))
+        XCTAssertTrue(disclosure.contains("On-device does not mean the file is real."))
+        let score = "Score 0.98. Fast keeps a candidate at 0.55 and above."
+        let preview = PhonePreview.lines(screen: "results", model: model)
+        XCTAssertTrue(preview.contains(score))
+        XCTAssertFalse(preview.contains { $0.contains("Cosine") || $0.contains("locked cutoff") })
+        XCTAssertFalse(preview.contains { $0.contains("keeps a candidate") && $0.contains(Copy.possible) })
+        XCTAssertTrue(preview.contains("1 frame analyzed."))
+        XCTAssertTrue(preview.contains("Missing and wanted."))
+        XCTAssertTrue(preview.contains("640 px on the long side."))
+        XCTAssertTrue(preview.contains("Every decoded frame."))
+        if let scoreAt = preview.firstIndex(of: score),
+           let posterAt = preview.firstIndex(of: "Fixture subject A (Missing)") {
+            XCTAssertLessThan(scoreAt, posterAt)
+        } else {
+            XCTFail("the score line or the poster line was missing")
+        }
+    }
+
+    private func row() throws -> BundleRow {
+        try JSONDecoder().decode(BundleRow.self, from: Data("""
+        {"id":"fast","name":"Fast","best_for":"Phones and long video.","curve_line":"Fixture curve measured. Real FBI photos stay off.","preselected":true}
+        """.utf8))
+    }
+}
+
+private func webpWithOrientation(_ tag: UInt8, prefix: Bool) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x4D, 0x4D, 0x00, 0x2A,
+        0x00, 0x00, 0x00, 0x08,
+        0x00, 0x01,
+        0x01, 0x12,
+        0x00, 0x03,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, tag,
+        0x00, 0x00,
+    ]
+    let exif = (prefix ? [0x45, 0x78, 0x69, 0x66, 0x00, 0x00] : []) + tiff
+    let vp8x: [UInt8] = [0x08, 0, 0, 0, 0xDF, 0x01, 0x00, 0x7F, 0x02, 0x00]
+    let body = Array("WEBP".utf8) + riffChunk("VP8X", vp8x) + riffChunk("EXIF", exif)
+    return Array("RIFF".utf8) + le32(body.count) + body
+}
+
+private func riffChunk(_ tag: String, _ payload: [UInt8]) -> [UInt8] {
+    var out = Array(tag.utf8) + le32(payload.count) + payload
+    if payload.count % 2 == 1 { out.append(0) }
+    return out
+}
+
+private func le32(_ value: Int) -> [UInt8] {
+    [
+        UInt8(value & 0xFF),
+        UInt8((value >> 8) & 0xFF),
+        UInt8((value >> 16) & 0xFF),
+        UInt8((value >> 24) & 0xFF),
+    ]
+}
+
+private func pngWithOrientation(_ tag: UInt8) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ]
+    let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    let chunk = be32(tiff.count) + Array("eXIf".utf8) + tiff + be32(0)
+    let end = be32(0) + Array("IEND".utf8) + be32(0)
+    return signature + chunk + end
+}
+
+private func be32(_ value: Int) -> [UInt8] {
+    [
+        UInt8((value >> 24) & 0xFF),
+        UInt8((value >> 16) & 0xFF),
+        UInt8((value >> 8) & 0xFF),
+        UInt8(value & 0xFF),
+    ]
+}
+
+private func rgbTiff(_ pages: [(Int, Int, [UInt8], UInt8)]) -> [UInt8] {
+    let entryCount = 10
+    let ifdLen = 2 + entryCount * 12 + 4
+    var cursor = 8
+    var layout: [(Int, Int, Int)] = []
+    for (width, height, rgb, _) in pages {
+        if rgb.count != width * height * 3 { return [] }
+        let ifd = cursor
+        let bits = ifd + ifdLen
+        let pixels = bits + 6
+        cursor = pixels + rgb.count
+        layout.append((ifd, bits, pixels))
+    }
+    var out = [UInt8](repeating: 0, count: cursor)
+    out[0] = 0x49
+    out[1] = 0x49
+    out[2] = 0x2A
+    out[4] = 8
+    for index in pages.indices {
+        let (width, height, rgb, tag) = pages[index]
+        let (ifd, bits, pixels) = layout[index]
+        let next = index + 1 < layout.count ? layout[index + 1].0 : 0
+        put16(&out, ifd, entryCount)
+        let entries: [(Int, Int, Int, Int)] = [
+            (256, 4, 1, width),
+            (257, 4, 1, height),
+            (258, 3, 3, bits),
+            (259, 3, 1, 1),
+            (262, 3, 1, 2),
+            (273, 4, 1, pixels),
+            (274, 3, 1, Int(tag)),
+            (277, 3, 1, 3),
+            (278, 4, 1, height),
+            (279, 4, 1, rgb.count),
+        ]
+        var at = ifd + 2
+        for (entryTag, kind, count, value) in entries {
+            put16(&out, at, entryTag)
+            put16(&out, at + 2, kind)
+            put32(&out, at + 4, count)
+            put32(&out, at + 8, value)
+            at += 12
+        }
+        put32(&out, at, next)
+        put16(&out, bits, 8)
+        put16(&out, bits + 2, 8)
+        put16(&out, bits + 4, 8)
+        for (offset, byte) in rgb.enumerated() {
+            out[pixels + offset] = byte
+        }
+    }
+    return out
+}
+
+private final class ErrorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Error?
+
+    func set(_ error: Error) {
+        lock.lock()
+        value = error
+        lock.unlock()
+    }
+
+    func get() -> Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
+private func put16(_ out: inout [UInt8], _ offset: Int, _ value: Int) {
+    out[offset] = UInt8(value & 0xFF)
+    out[offset + 1] = UInt8((value >> 8) & 0xFF)
+}
+
+private func put32(_ out: inout [UInt8], _ offset: Int, _ value: Int) {
+    put16(&out, offset, value & 0xFFFF)
+    put16(&out, offset + 2, (value >> 16) & 0xFFFF)
+}
+
+private func jpegWithOrientation(_ tag: UInt8) -> [UInt8] {
+    let tiff: [UInt8] = [
+        0x49, 0x49, 0x2A, 0x00,
+        0x08, 0x00, 0x00, 0x00,
+        0x01, 0x00,
+        0x12, 0x01,
+        0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+        tag, 0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ]
+    let payload: [UInt8] = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00] + tiff
+    let length = payload.count + 2
+    return [0xFF, 0xD8, 0xFF, 0xE1, UInt8(length >> 8), UInt8(length & 0xFF)] + payload + [0xFF, 0xD9]
+}
+
+private let interlacedGif = Data(hex: "47494638376110001000810000ffffff0000000000000000002c000000001000100040082f0003081c281080c18308132a3c4890e0c287101b0e7c28b120c48b182356a4b87161c5001c25661c49b2a449830101003b")
+
+private extension Data {
+    init(hex: String) {
+        var bytes: [UInt8] = []
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let next = hex.index(index, offsetBy: 2)
+            bytes.append(UInt8(hex[index..<next], radix: 16) ?? 0)
+            index = next
+        }
+        self.init(bytes)
+    }
+}
+
+private let refusedJSON = """
+{"status":"refused","summary":"The file could not be read. Refusing.","message":"The file could not be read. Refusing.","bundle_name":"","perception_note":"","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":[],"faces_seen_not_compared":0,"inventory":[],"candidates":[],"comparisons":[]}
+"""
+
+private let incompleteJSON = """
+{"status":"incomplete","summary":"Incomplete.","message":"The file was not fully decoded.","disclosure":["Nothing is uploaded."],"warnings":[],"faces_seen_not_compared":0,"inventory":[],"candidates":[],"comparisons":[]}
+"""
+
+private let estimateJSON = """
+{"human":"Less than a second","caveat":"This is a planning estimate, not a thermal measurement.","device_note":"This scan runs on the CPU. It will be slower, warmer, and use more battery.","heat_note":"This phone may get hot. If heat or the system stops the scan, the result is Incomplete.","battery_note":"A long scan uses a lot of battery."}
+"""
+
+private let reportJSON = """
+{"status":"complete","summary":"Possible candidate. Not an identification.","bundle_name":"Fast","frames_note":"1 frame analyzed.","class_note":"Missing and wanted.","detection_note":"640 px on the long side.","coverage_note":"Every decoded frame.","perception_note":"Fixture markers were read.","disclosure":["Nothing is uploaded.","Nobody is enrolled.","OpenWorld does not train on this file.","OpenWorld does not contact an agency.","A candidate is not an identification.","No candidate is not a clearance.","This file is not authenticated.","On-device does not mean the file is real."],"warnings":["The file timestamps disagree."],"faces_seen_not_compared":1,"inventory":[{"kind":"face","label":"Possible candidate. Not an identification.","frame_index":0,"frame_label":"Frame 1."},{"kind":"face","label":"Not compared.","frame_index":0,"frame_label":"Frame 1."}],"candidates":[{"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.98. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"a"}],"comparisons":[]}
+"""
+#endif
