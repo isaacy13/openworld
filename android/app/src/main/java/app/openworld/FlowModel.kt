@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -133,10 +135,12 @@ class FlowModel : ViewModel() {
         pickNotice = null
         val previous = localCopy
         fileName = displayName(uri, resolver)
-        originalModified(uri, resolver)?.let { modified -> copy.setLastModified(modified) }
+        val modified = originalModified(uri, resolver)
+        if (modified != null) stampCopy(copy, modified)
         localCopy = copy
         if (previous != null && previous.absolutePath != copy.absolutePath) previous.delete()
-        val ageMs = System.currentTimeMillis() - copy.lastModified()
+        val stamped = modified ?: copy.lastModified()
+        val ageMs = System.currentTimeMillis() - stamped
         oldFile = ageMs > 30L * 24 * 60 * 60 * 1000
         step = Step.Device
     }
@@ -638,6 +642,19 @@ class FlowModel : ViewModel() {
         )
     }
 
+    /** File.setLastModified refuses a time before 1970. The copy still needs that time so the scan can warn. */
+    private fun stampCopy(copy: File, modified: Long) {
+        try {
+            if (modified < 0L) {
+                Files.setLastModifiedTime(copy.toPath(), FileTime.fromMillis(modified))
+            } else {
+                copy.setLastModified(modified)
+            }
+        } catch (_: Exception) {
+            // The page still warns from the time the provider reported.
+        }
+    }
+
     private fun discardImport() {
         localCopy?.delete()
         localCopy = null
@@ -678,7 +695,9 @@ class FlowModel : ViewModel() {
                 val index = it.getColumnIndex(name)
                 if (index < 0 || it.isNull(index)) continue
                 val value = it.getLong(index)
-                if (value <= 0L) continue
+                // Zero means the column did not report a time. A negative value is a
+                // real date from before 1970.
+                if (value == 0L) continue
                 val millis = name == "last_modified" || name == "datetaken"
                 return if (millis) value else value * 1000
             }
@@ -695,8 +714,9 @@ class FlowModel : ViewModel() {
         } ?: return null
         val modified = try {
             // st_mtime is seconds. A zero stat means this platform did not report a time.
+            // A negative stat is a real date from before 1970.
             val seconds = android.system.Os.fstat(descriptor.fileDescriptor).st_mtime
-            if (seconds > 0L) seconds * 1000L else null
+            if (seconds == 0L) null else seconds * 1000L
         } catch (_: Exception) {
             null
         }

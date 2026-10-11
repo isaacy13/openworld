@@ -540,6 +540,31 @@ class PhoneFlowTest {
         assertFalse(fresh.oldFile)
     }
 
+    @Test
+    fun aDateFromBefore1970StillCountsAsOld() {
+        // 1960-01-01T00:00:00Z. A negative unix time is a real date.
+        // Zero stays unknown: the column did not report a time.
+        val millis = -315_619_200_000L
+        val seconds = -315_619_200L
+        val dated = chooseDated("content://app.openworld/epoch-doc.png", "last_modified", millis)
+        assertTrue(dated.oldFile)
+        dated.continueFromDevice()
+        dated.continueFromSize()
+        dated.analyze()
+        assertTrue(dated.warnings.contains("This file is older than about 30 days."))
+        assertTrue(chooseDated("content://app.openworld/epoch-store.png", "date_modified", seconds).oldFile)
+        assertTrue(chooseDated("content://app.openworld/epoch-taken.png", "datetaken", millis).oldFile)
+        assertFalse(chooseDated("content://app.openworld/unknown-store.png", "date_modified", 0L).oldFile)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h800dp", shadows = [SharedFileOsShadow::class])
+    fun aSharedFileFromBefore1970StillCountsAsOld() {
+        val model = chooseSharedFile("archive.png", -315_619_200_000L)
+        assertTrue(model.oldFile)
+        assertEquals(Step.Device, model.step)
+    }
+
     private fun chooseDated(address: String, column: String, value: Long): FlowModel {
         val model = FlowModel()
         val uri = Uri.parse(address)
@@ -1189,7 +1214,14 @@ class PhoneFlowTest {
 
     private fun chooseSharedFile(name: String, modified: Long, columnMillis: Long? = null): FlowModel {
         val source = still("blank")
-        assertTrue(source.setLastModified(modified))
+        if (modified >= 0L) {
+            assertTrue(source.setLastModified(modified))
+        } else {
+            java.nio.file.Files.setLastModifiedTime(
+                source.toPath(),
+                java.nio.file.attribute.FileTime.fromMillis(modified),
+            )
+        }
         val uri = Uri.parse("content://app.openworld.files/$name")
         val provider = object : ContentProvider() {
             override fun onCreate() = true
