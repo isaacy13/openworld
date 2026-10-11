@@ -364,6 +364,28 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testALongAddressFitsTheColumn() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        XCTAssertTrue(
+            view.contains("PhonePreview.wrappingFileName(model.leavingURL?.absoluteString ?? \"\")"),
+            "the leave dialog shows the address without a break"
+        )
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            let url = "https://www.fbi.gov/wanted/" + String(repeating: "person-", count: 12)
+            model.leavingURL = URL(string: url)
+            let wrapped = PhonePreview.wrapped(screen: "leaving", model: model, width: 34)
+            XCTAssertTrue(wrapped.joined().contains(url), wrapped.joined())
+            let wide = wrapped.filter { $0.count > 34 }
+            XCTAssertTrue(wide.isEmpty, "the address left the column: \(wide)")
+        }
+    }
+
     func testSceneScanReachesTheResultsScreen() throws {
         try MainActor.assumeIsolated {
             if ProcessInfo.processInfo.environment["OPENWORLD_LIB"] != nil {

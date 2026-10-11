@@ -174,18 +174,32 @@ public enum PhonePreview {
 
     static func wrap(_ text: String, width: Int) -> [String] {
         if text.isEmpty { return [""] }
+        if width < 1 { return [text] }
         var lines: [String] = []
         var line = ""
-        for word in text.split(separator: " ") {
-            let word = String(word)
+        func place(_ word: String) {
+            var rest = word
+            while rest.count > width {
+                if !line.isEmpty {
+                    lines.append(line)
+                    line = ""
+                }
+                let end = rest.index(rest.startIndex, offsetBy: width)
+                lines.append(String(rest[..<end]))
+                rest = String(rest[end...])
+            }
+            if rest.isEmpty { return }
             if line.isEmpty {
-                line = word
-            } else if line.count + 1 + word.count <= width {
-                line += " " + word
+                line = rest
+            } else if line.count + 1 + rest.count <= width {
+                line += " " + rest
             } else {
                 lines.append(line)
-                line = word
+                line = rest
             }
+        }
+        for word in text.split(separator: " ") {
+            place(String(word))
         }
         if !line.isEmpty { lines.append(line) }
         return lines

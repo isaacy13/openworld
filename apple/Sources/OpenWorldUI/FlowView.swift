@@ -995,7 +995,7 @@ public struct FlowView: View {
             }
             Button("Stay", role: .cancel) { model.leavingURL = nil }
         } message: {
-            Text(model.leavingURL?.absoluteString ?? "")
+            Text(PhonePreview.wrappingFileName(model.leavingURL?.absoluteString ?? ""))
         }
     }
 
