@@ -125,6 +125,7 @@ struct MacRoot: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Choose File") { showPicker = true }
+                        .disabled(model.scanning)
                 }
             }
             .fileImporter(isPresented: $showPicker, allowedContentTypes: chooseFileTypes) { result in

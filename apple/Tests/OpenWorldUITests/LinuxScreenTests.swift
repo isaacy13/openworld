@@ -364,6 +364,22 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testChooseFileInTheMacToolbarStaysOffWhileScanning() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorld/OpenWorldApp.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let toolbar = view.components(separatedBy: ".toolbar").dropFirst().first ?? ""
+        let item = toolbar.components(separatedBy: ".fileImporter").first ?? ""
+        XCTAssertTrue(item.contains("Choose File"), "the Mac window has no Choose File control: \(item)")
+        XCTAssertTrue(
+            item.contains(".disabled(model.scanning)"),
+            "Choose File stays available while Scanning and then ignores the file: \(item)"
+        )
+    }
+
     func testTheFirstPageScrollsSoChooseFileStaysReachable() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
