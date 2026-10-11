@@ -275,7 +275,7 @@ fn a_stopped_scan_without_a_reason_is_incomplete() {
 
 #[test]
 fn landmarks_move_into_the_original_crop() {
-    let map = FrameMap { det_to_orig: 2.0 };
+    let map = FrameMap::uniform(2.0);
     let points = [(10.0, 20.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
     let orig = Rect {
         x: 4,

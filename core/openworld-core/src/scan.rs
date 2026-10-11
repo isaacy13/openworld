@@ -971,11 +971,10 @@ fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {
 }
 
 fn landmarks_in_crop(map: FrameMap, points: [(f32, f32); 5], orig: Rect) -> [(f32, f32); 5] {
-    let scale = map.det_to_orig;
     let mut local = points;
     for point in &mut local {
-        point.0 = point.0 * scale - orig.x as f32;
-        point.1 = point.1 * scale - orig.y as f32;
+        point.0 = point.0 * map.det_to_orig_x - orig.x as f32;
+        point.1 = point.1 * map.det_to_orig_y - orig.y as f32;
     }
     local
 }

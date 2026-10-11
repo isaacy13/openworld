@@ -70,22 +70,27 @@ impl Rect {
 /// How the detection image was produced from the original frame.
 #[derive(Clone, Copy, Debug)]
 pub struct FrameMap {
-    /// Multiply a detection-image pixel length by this to get original pixels.
-    pub det_to_orig: f32,
+    /// Multiply a detection-image x length by this to get original pixels.
+    pub det_to_orig_x: f32,
+    /// Multiply a detection-image y length by this to get original pixels.
+    pub det_to_orig_y: f32,
 }
 
 impl FrameMap {
     pub fn identity() -> Self {
-        Self { det_to_orig: 1.0 }
+        Self { det_to_orig_x: 1.0, det_to_orig_y: 1.0 }
+    }
+
+    pub fn uniform(scale: f32) -> Self {
+        Self { det_to_orig_x: scale, det_to_orig_y: scale }
     }
 
     pub fn to_original(self, det: Rect) -> Rect {
-        let s = self.det_to_orig;
         Rect {
-            x: (det.x as f32 * s).round() as u32,
-            y: (det.y as f32 * s).round() as u32,
-            w: (det.w as f32 * s).round().max(1.0) as u32,
-            h: (det.h as f32 * s).round().max(1.0) as u32,
+            x: (det.x as f32 * self.det_to_orig_x).round() as u32,
+            y: (det.y as f32 * self.det_to_orig_y).round() as u32,
+            w: (det.w as f32 * self.det_to_orig_x).round().max(1.0) as u32,
+            h: (det.h as f32 * self.det_to_orig_y).round().max(1.0) as u32,
         }
     }
 }
@@ -108,7 +113,7 @@ pub fn resize_long_side(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) 
                 dst.put_pixel(x, y, *src.get_pixel(x * factor, y * factor));
             }
         }
-        return (dst, FrameMap { det_to_orig: factor as f32 });
+        return (dst, FrameMap::uniform(factor as f32));
     }
     let scale = long_side as f32 / long as f32;
     let nw = ((w as f32 * scale).round() as u32).max(1);
@@ -121,7 +126,15 @@ pub fn resize_long_side(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) 
             dst.put_pixel(x, y, *src.get_pixel(sx.min(w - 1), sy.min(h - 1)));
         }
     }
-    (dst, FrameMap { det_to_orig: w as f32 / nw as f32 })
+    // Each axis is rounded on its own. A tall frame's height scale is not its width scale,
+    // and the short side of a wide face is that height.
+    (
+        dst,
+        FrameMap {
+            det_to_orig_x: w as f32 / nw as f32,
+            det_to_orig_y: h as f32 / nh as f32,
+        },
+    )
 }
 
 pub fn crop(img: &RgbImage, rect: Rect) -> Option<RgbImage> {
@@ -239,12 +252,30 @@ mod tests {
         src.put_pixel(600, 300, Rgb([0, 0, 0]));
         let (dst, map) = resize_long_side(&src, 640);
         assert_eq!(dst.dimensions(), (640, 360));
-        assert_eq!(map.det_to_orig, 6.0);
+        assert_eq!(map.det_to_orig_x, 6.0);
+        assert_eq!(map.det_to_orig_y, 6.0);
         let det = Rect { x: 100, y: 50, w: 64, h: 64 };
         let orig = map.to_original(det);
         assert_eq!(orig.w, 384);
         assert!(orig.short() >= FACE_COMPARE_PX);
         assert!(det.short() >= FACE_SEEN_PX);
+    }
+
+    #[test]
+    fn a_wide_face_on_a_tall_frame_keeps_the_short_side() {
+        // Height is the long side, so the two axes do not share one scale.
+        // A wide face's short side is its height. Mapping that height by the
+        // width scale reports 111 px and skips a comparison the original crop can take.
+        let (_dst, map) = resize_long_side(&blank(241, 322), 320);
+        let det = Rect { x: 0, y: 0, w: 120, h: 111 };
+        let orig = map.to_original(det);
+        assert!(
+            orig.short() >= FACE_COMPARE_PX,
+            "short side {} from {}x{}",
+            orig.short(),
+            orig.w,
+            orig.h
+        );
     }
 
     #[test]

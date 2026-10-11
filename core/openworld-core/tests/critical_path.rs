@@ -716,7 +716,8 @@ fn product_sentences_and_catalog_edges_stay_closed() {
 
     let (image, map) = resize_long_side(&blank(100, 80), 30);
     assert!(image.width() < 100);
-    assert!(map.det_to_orig > 1.0);
+    assert!(map.det_to_orig_x > 1.0);
+    assert!(map.det_to_orig_y > 1.0);
 
     let bundle_dir = tempfile::tempdir().unwrap();
     fs::write(
