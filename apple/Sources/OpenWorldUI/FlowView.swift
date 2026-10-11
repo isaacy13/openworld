@@ -890,22 +890,20 @@ public struct FlowView: View {
     }
 
     private var estimate: some View {
-        ScrollViewReader { proxy in
+        VStack(alignment: .leading, spacing: 0) {
+            if let notice = model.deleteNotice, !notice.isEmpty {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+            }
             ScrollView { estimateColumn }
-                .onChange(of: model.deleteNotice, initial: true) { _, notice in
-                    if notice != nil {
-                        proxy.scrollTo("deleteNotice", anchor: .top)
-                    }
-                }
         }
     }
 
     private var estimateColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             backControl
-            if let notice = model.deleteNotice {
-                Text(notice).foregroundStyle(.orange).id("deleteNotice")
-            }
             Text(model.estimateHeadline)
                 .font(model.phone ? .largeTitle : .title)
                 .foregroundStyle(model.estimate == nil && !model.scanning && model.error != nil ? .orange : .primary)
@@ -956,20 +954,20 @@ public struct FlowView: View {
 
     @ViewBuilder
     private var results: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                resultsColumn
+        VStack(alignment: .leading, spacing: 0) {
+            if let notice = model.leaveError, !notice.isEmpty {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
             }
-            .onChange(of: model.leaveError, initial: true) { _, notice in
-                if notice != nil {
-                    proxy.scrollTo("leaveError", anchor: .top)
-                }
+            if let notice = model.deleteNotice, !notice.isEmpty {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
             }
-            .onChange(of: model.deleteNotice, initial: true) { _, notice in
-                if notice != nil {
-                    proxy.scrollTo("deleteNotice", anchor: .top)
-                }
-            }
+            ScrollView { resultsColumn }
         }
         .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
             Button("Open") {
@@ -984,12 +982,6 @@ public struct FlowView: View {
     private var resultsColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
                 backControl
-                if let notice = model.leaveError {
-                    Text(notice).foregroundStyle(.orange).id("leaveError")
-                }
-                if let notice = model.deleteNotice {
-                    Text(notice).foregroundStyle(.orange).id("deleteNotice")
-                }
                 Text(model.resultHeadline)
                     .font(model.phone ? .largeTitle : .title)
                     .foregroundStyle(model.resultRefused ? .orange : .primary)

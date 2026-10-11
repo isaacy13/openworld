@@ -59,8 +59,9 @@ public enum PhonePreview {
             lines.append("Continue")
             return lines
         case "estimate":
-            var lines = ["Back"]
-            if let notice = model.deleteNotice { lines.append(notice) }
+            var lines: [String] = []
+            if let notice = model.deleteNotice, !notice.isEmpty { lines.append(notice) }
+            lines.append("Back")
             lines.append(model.estimateHeadline)
             if model.scanning, !model.liveCrops.isEmpty {
                 lines.append("Crops from this file.")
@@ -90,9 +91,10 @@ public enum PhonePreview {
             }
             return lines
         case "results", "leaving":
-            var lines = ["Back"]
-            if let notice = model.leaveError { lines.append(notice) }
-            if let notice = model.deleteNotice { lines.append(notice) }
+            var lines: [String] = []
+            if let notice = model.leaveError, !notice.isEmpty { lines.append(notice) }
+            if let notice = model.deleteNotice, !notice.isEmpty { lines.append(notice) }
+            lines.append("Back")
             lines.append(model.resultHeadline)
             if let reason = model.resultReason {
                 lines.append(reason)

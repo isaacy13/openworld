@@ -98,15 +98,16 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.pickNotice?.let { Text(it, color = warningColor) }
+                if (model.step == Step.Results) {
+                    model.leaveNotice?.let { Text(it, color = warningColor) }
+                }
+                model.deleteNotice?.let { Text(it, color = warningColor) }
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(scroll),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                if (model.step != Step.Estimate && model.step != Step.Results) {
-                    model.deleteNotice?.let { Text(it, color = warningColor) }
-                }
                 if (model.step != Step.Choose) {
                     TextButton(onClick = model::back, enabled = !model.scanning) { Text("Back") }
                 }
@@ -217,7 +218,6 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Button(onClick = model::continueFromSize) { Text("Continue") }
                     }
                     Step.Estimate -> {
-                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         val refused = !model.scanning && !model.estimateOk && model.estimateText.isNotBlank()
                         if (refused) {
                             Text(model.estimateText, style = MaterialTheme.typography.headlineMedium, color = warningColor)
@@ -294,8 +294,6 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         }
                     }
                     Step.Results -> {
-                        model.leaveNotice?.let { Text(it, color = warningColor) }
-                        model.deleteNotice?.let { Text(it, color = warningColor) }
                         val headline = model.summary.ifBlank {
                             when (model.status) {
                                 "complete" -> if (model.candidateRows.isNotEmpty()) ProductCopy.possible else ProductCopy.clearance
