@@ -128,6 +128,26 @@ def main() -> None:
                 "the coverage choice left a narrow window: "
                 f"window {width}x{app.window.get_height()}, choice {choice_box}, lines {choice_lines}"
             )
+        indicator = None
+        sibling = app.measured_button.get_first_child()
+        while sibling is not None:
+            if not isinstance(sibling, Gtk.Label):
+                indicator = sibling
+            sibling = sibling.get_next_sibling()
+        mark = None if indicator is None else bounds(app.window, indicator)
+        first_line = 0 if choice_box is None else choice_box[3] / choice_lines
+        mark_center = None if mark is None else mark[1] + mark[3] / 2
+        beside_first_line = (
+            mark is not None
+            and choice_box is not None
+            and mark_center is not None
+            and mark_center <= choice_box[1] + first_line * 0.75
+        )
+        if not beside_first_line:
+            raise SystemExit(
+                "the coverage mark left the first line: "
+                f"choice {choice_box}, mark {mark}, lines {choice_lines}"
+            )
         app._go("device")
         app.window.set_default_size(900, 640)
         pump(context, 12)

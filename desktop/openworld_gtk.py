@@ -710,7 +710,7 @@ class OpenWorld(Gtk.Application):
         return f"{label}. Selected."
 
     def _wrap_choice(self, button: Gtk.CheckButton) -> None:
-        """A long choice uses the width it is given."""
+        """A long choice uses the width it is given. The mark stays on the first line."""
         child = button.get_first_child()
         while child is not None:
             if isinstance(child, Gtk.Label):
@@ -718,7 +718,36 @@ class OpenWorld(Gtk.Application):
                 child.set_wrap_mode(Pango.WrapMode.WORD)
                 child.set_xalign(0)
                 child.set_hexpand(True)
+                if getattr(button, "choice_label", None) is not child:
+                    button.choice_label = child
+                    child.connect("notify::width", lambda *_args, button=button: self._align_choice_mark(button))
             child = child.get_next_sibling()
+        self._align_choice_mark(button)
+
+    def _align_choice_mark(self, button: Gtk.CheckButton) -> None:
+        icon = None
+        label = None
+        child = button.get_first_child()
+        while child is not None:
+            if isinstance(child, Gtk.Label):
+                label = child
+            else:
+                icon = child
+            child = child.get_next_sibling()
+        if icon is None or label is None:
+            return
+        layout = label.get_layout()
+        if layout is None or layout.get_line_count() < 1:
+            return
+        _ink, logical = layout.get_line_readonly(0).get_extents()
+        line_px = logical.height / Pango.SCALE
+        if line_px < 1:
+            return
+        icon_h = icon.get_allocated_height()
+        if icon_h < 1:
+            icon_h = 16
+        icon.set_valign(Gtk.Align.START)
+        icon.set_margin_top(max(0, int(round((line_px - icon_h) / 2.0))))
 
     def _set_choice_text(self, button: Gtk.CheckButton, text: str) -> None:
         button.set_label(text)
