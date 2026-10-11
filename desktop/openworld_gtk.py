@@ -201,7 +201,10 @@ class OpenWorld(Gtk.Application):
             ("estimate", self.page_estimate),
             ("results", self.page_results),
         ):
-            self.stack.add_named(page, name)
+            # Bundle and results already scroll. The other pages scroll too, so a
+            # large font can reach the last line in a short window.
+            child = page if name in ("bundle", "results") else self._page_scroll(page)
+            self.stack.add_named(child, name)
         self.history = ["choose"]
         self._show("choose")
 
@@ -384,6 +387,16 @@ class OpenWorld(Gtk.Application):
         box.append(self.wanted_button)
         box.append(self.estimate_delete)
         return box
+
+    def _page_scroll(self, child: Gtk.Widget) -> Gtk.ScrolledWindow:
+        """The page scrolls. The window can be shorter than the page."""
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_child(child)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        scroll.set_propagate_natural_height(False)
+        scroll.set_overlay_scrolling(False)
+        return scroll
 
     def _results_page(self) -> Gtk.Widget:
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
