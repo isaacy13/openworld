@@ -114,10 +114,13 @@ def main() -> None:
         def picture_of(box):
             from gi.repository import Gtk
 
+            if isinstance(box, Gtk.Picture):
+                return box
             child = box.get_first_child()
             while child is not None:
-                if not isinstance(child, Gtk.Label):
-                    return child
+                found = picture_of(child)
+                if found is not None:
+                    return found
                 child = child.get_next_sibling()
             return None
 

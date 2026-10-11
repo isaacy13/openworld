@@ -56,7 +56,7 @@ def find_bundles() -> str:
     return os.environ.get("OPENWORLD_BUNDLES", str(repo_root() / "bundles"))
 
 
-def bounded_picture(path: str, width: int, height: int) -> Gtk.Picture:
+def bounded_picture(path: str, width: int, height: int) -> Gtk.Widget:
     """A crop thumbnail. A wide or tall file stays inside this box."""
     try:
         fitted = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, True)
@@ -87,12 +87,16 @@ def bounded_picture(path: str, width: int, height: int) -> Gtk.Picture:
     picture.set_hexpand(False)
     picture.set_vexpand(False)
     picture.set_halign(Gtk.Align.CENTER)
-    # The canvas already letterboxes the file. Centering the widget drops a
-    # thumbnail whose caption is shorter than the one beside it.
-    picture.set_valign(Gtk.Align.START)
+    picture.set_valign(Gtk.Align.CENTER)
     picture.set_can_shrink(False)
     picture.set_content_fit(Gtk.ContentFit.CONTAIN)
-    return picture
+    # A caption is wider than the thumbnail. At that width a picture's natural
+    # height grows with the width, and a shorter caption spends the extra space
+    # above its frame line. The center box keeps the requested height.
+    holder = Gtk.CenterBox()
+    holder.set_size_request(width, height)
+    holder.set_center_widget(picture)
+    return holder
 
 
 def filter_rules(item: Gtk.FileFilter) -> list[str]:
