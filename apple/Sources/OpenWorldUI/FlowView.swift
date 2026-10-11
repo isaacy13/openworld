@@ -210,6 +210,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func loadBundles() {
+        guard !closed else { return }
         let previousCatalog = catalogNotice
         let keptFile = error == "The file could not be read. Refusing."
         do {
@@ -287,6 +288,7 @@ public final class FlowModel: ObservableObject {
 
     /// An empty or unreadable catalog already says why. Continue does not open the size page.
     public func continueFromBundles() {
+        guard !closed else { return }
         guard !bundles.isEmpty else { return }
         step = .size
     }
@@ -321,6 +323,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func loadEstimate() {
+        guard !closed else { return }
         guard let file else {
             estimate = nil
             canAnalyze = false
@@ -408,6 +411,7 @@ public final class FlowModel: ObservableObject {
     public var backEnabled: Bool { !scanning }
 
     public func goBack() {
+        guard !closed else { return }
         guard !scanning else { return }
         leavingURL = nil
         leaveError = nil
@@ -429,6 +433,7 @@ public final class FlowModel: ObservableObject {
     }
 
     public func chooseAnother() {
+        guard !closed else { return }
         guard !scanning else { return }
         guard releaseResult() else { return }
         file = nil
@@ -657,6 +662,7 @@ public final class FlowModel: ObservableObject {
 
     /// Ask the library before any FBI page is shown. A lookalike host stays closed.
     public func requestLeave(_ urlString: String) {
+        guard !closed else { return }
         leavingURL = nil
         leaveError = nil
         let data: Data
@@ -698,6 +704,7 @@ public final class FlowModel: ObservableObject {
 
     /// Remove the result directory through the library, then the temporary frames beside it.
     public func deleteResult() {
+        guard !closed else { return }
         guard removeResult() else { return }
         report = nil
         leavingURL = nil

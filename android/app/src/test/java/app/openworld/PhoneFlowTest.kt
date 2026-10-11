@@ -215,6 +215,37 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun backContinueAndChooseAnotherFileAsThePhoneClosesStayOnThePage() {
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val first = still("blank")
+        val firstUri = Uri.parse("content://app.openworld/stay.png")
+        shadowOf(resolver).registerInputStream(firstUri, first.inputStream())
+        val model = FlowModel()
+        model.choose(firstUri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        assertEquals(Step.Size, model.step)
+        assertFalse(model.bundleRows.isEmpty())
+        val name = model.fileName
+        model.abandonScan()
+        model.back()
+        assertEquals(Step.Size, model.step)
+        assertEquals(name, model.fileName)
+        model.continueFromSize()
+        assertEquals(Step.Size, model.step)
+        assertEquals(name, model.fileName)
+        model.chooseAnother()
+        assertEquals(Step.Size, model.step)
+        assertEquals(name, model.fileName)
+        model.deleteResult()
+        assertEquals(Step.Size, model.step)
+        assertEquals("", model.summary)
+        model.prepareLeave("https://www.fbi.gov/")
+        assertNull(model.leavingUrl)
+        assertNull(model.leaveNotice)
+    }
+
+    @Test
     fun sceneShowsACandidateAndAFaceThatWasNotCompared() {
         val model = drive("scene")
         assertEquals("Possible candidate. Not an identification.", model.summary)

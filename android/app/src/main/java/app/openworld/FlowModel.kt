@@ -142,6 +142,7 @@ class FlowModel : ViewModel() {
     }
 
     fun continueFromDevice() {
+        if (abandoned.get()) return
         try {
             applyBundlePayload(Core.json(listOf("--json", "--bundles", Core.bundlesDir(), "bundles")))
         } catch (err: IOException) {
@@ -180,7 +181,7 @@ class FlowModel : ViewModel() {
         }
     }
     fun continueFromBundle() {
-        if (bundleRows.isEmpty()) return
+        if (abandoned.get() || bundleRows.isEmpty()) return
         step = Step.Size
     }
 
@@ -193,7 +194,7 @@ class FlowModel : ViewModel() {
     }
 
     fun back() {
-        if (scanning) return
+        if (abandoned.get() || scanning) return
         leavingUrl = null
         leaveNotice = null
         deleteNotice = null
@@ -208,7 +209,7 @@ class FlowModel : ViewModel() {
     }
 
     fun chooseAnother() {
-        if (scanning) return
+        if (abandoned.get() || scanning) return
         if (!removeResult(abandonUnmarked = true)) return
         discardImport()
         step = Step.Choose
@@ -241,6 +242,7 @@ class FlowModel : ViewModel() {
     }
 
     fun deleteResult() {
+        if (abandoned.get()) return
         if (!removeResult()) return
         summary = "Deleted."
         status = "deleted"
@@ -292,6 +294,7 @@ class FlowModel : ViewModel() {
     }
 
     fun prepareLeave(url: String) {
+        if (abandoned.get()) return
         leaveNotice = null
         leavingUrl = null
         try {
@@ -309,6 +312,7 @@ class FlowModel : ViewModel() {
     }
 
     fun continueFromSize() {
+        if (abandoned.get()) return
         val file = localCopy
         if (file == null) {
             estimateOk = false

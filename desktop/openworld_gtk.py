@@ -409,6 +409,8 @@ class OpenWorld(Gtk.Application):
         return dialog
 
     def pick_file(self) -> None:
+        if self.closed:
+            return
         self.file_dialog().open(self.window, None, self._file_chosen)
 
     def _file_chosen(self, dialog: Gtk.FileDialog, result: Gio.AsyncResult) -> None:
@@ -1121,6 +1123,8 @@ class OpenWorld(Gtk.Application):
         return message, allowed
 
     def confirm_leave(self, url: str) -> None:
+        if self.closed:
+            return
         message, allowed = self.leave_decision(url)
         if allowed is None:
             dialog = Gtk.MessageDialog(
@@ -1152,6 +1156,8 @@ class OpenWorld(Gtk.Application):
             Gio.AppInfo.launch_default_for_uri(url, None)
 
     def delete_result(self) -> bool:
+        if self.closed:
+            return False
         if self.out_dir is None:
             return True
         if not self.out_dir.exists():
@@ -1265,6 +1271,8 @@ class OpenWorld(Gtk.Application):
             child = nxt
 
     def on_primary(self) -> None:
+        if self.closed:
+            return
         name = self.stack.get_visible_child_name()
         if name == "device":
             self.load_bundles()
@@ -1282,6 +1290,8 @@ class OpenWorld(Gtk.Application):
             self.choose_another()
 
     def choose_another(self) -> None:
+        if self.closed:
+            return
         if self.scan_thread is not None and self.scan_thread.is_alive():
             return
         if not self.release_result():
@@ -1319,6 +1329,8 @@ class OpenWorld(Gtk.Application):
         self._show("choose")
 
     def go_back(self) -> None:
+        if self.closed:
+            return
         if len(self.history) <= 1:
             return
         self.history.pop()

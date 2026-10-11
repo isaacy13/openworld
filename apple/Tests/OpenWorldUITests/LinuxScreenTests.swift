@@ -170,6 +170,34 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testBackContinueAndChooseAnotherFileAsTheWindowClosesStayOnThePage() throws {
+        let file = try still("blank")
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: false)
+            model.choose(file)
+            model.loadBundles()
+            XCTAssertFalse(model.bundles.isEmpty)
+            model.continueFromBundles()
+            XCTAssertEqual(model.step, .size)
+            model.closeWindow()
+            model.goBack()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.chooseAnother()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertEqual(model.file?.path, file.path)
+            model.deleteResult()
+            XCTAssertEqual(model.step, .size)
+            XCTAssertNil(model.error)
+            model.requestLeave("https://www.fbi.gov/")
+            XCTAssertNil(model.leavingURL)
+            XCTAssertNil(model.leaveError)
+        }
+    }
+
     func testClosingOneWindowLeavesTheOtherWindowsScanRunning() throws {
         let first = try still("blank")
         let second = try still("blank")

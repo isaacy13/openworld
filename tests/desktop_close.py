@@ -121,6 +121,27 @@ def main() -> None:
                 "a scan started as the window closed reached the screen: "
                 f"{app.stack.get_visible_child_name()!r} {app.summary.get_text()!r} {app.primary.get_label()!r}"
             )
+        app.stack.set_visible_child_name("size")
+        app.history = ["choose", "device", "bundle", "size"]
+        app.go_back()
+        if app.stack.get_visible_child_name() != "size" or app.file_label.get_text() != "open.png":
+            raise SystemExit(
+                "back as the window closed left the page: "
+                f"{app.stack.get_visible_child_name()!r} {app.file_label.get_text()!r}"
+            )
+        app.on_primary()
+        if app.stack.get_visible_child_name() != "size" or app.file_label.get_text() != "open.png":
+            raise SystemExit(
+                "continue as the window closed left the page: "
+                f"{app.stack.get_visible_child_name()!r} {app.file_label.get_text()!r}"
+            )
+        app.stack.set_visible_child_name("results")
+        app.choose_another()
+        if app.stack.get_visible_child_name() != "results" or app.file_label.get_text() != "open.png":
+            raise SystemExit(
+                "choose another file as the window closed left the page: "
+                f"{app.stack.get_visible_child_name()!r} {app.file_label.get_text()!r}"
+            )
     finally:
         if running.poll() is None:
             running.kill()
