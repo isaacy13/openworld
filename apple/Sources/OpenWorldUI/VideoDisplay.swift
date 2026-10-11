@@ -71,11 +71,8 @@ public enum VideoDisplay {
         if productOverflow {
             return width
         }
-        let (rounded, roundOverflow) = product.addingReportingOverflow(Int64(den) / 2)
-        if roundOverflow {
-            return width
-        }
-        let shown = rounded / Int64(den)
+        // The fraction is dropped. Rounding up is one pixel the desktop decoder does not write.
+        let shown = product / Int64(den)
         if shown < 1 {
             return 1
         }

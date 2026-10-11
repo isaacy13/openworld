@@ -351,7 +351,8 @@ object PlatformDecode {
         if (width <= 0 || height <= 0 || sarWidth <= 0 || sarHeight <= 0 || sarWidth == sarHeight) {
             return width to height
         }
-        val shown = (width.toLong() * sarWidth.toLong() + sarHeight.toLong() / 2) / sarHeight.toLong()
+        // The fraction is dropped. Rounding up is one pixel the desktop decoder does not write.
+        val shown = width.toLong() * sarWidth.toLong() / sarHeight.toLong()
         if (shown > Int.MAX_VALUE.toLong()) {
             return width to height
         }

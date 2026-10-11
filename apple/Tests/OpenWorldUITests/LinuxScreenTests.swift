@@ -2035,6 +2035,7 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(turned.0, 640)
         XCTAssertEqual(turned.1, 480)
         XCTAssertEqual(VideoDisplay.squareWidth(320, num: 2, den: 1), 640)
+        XCTAssertEqual(VideoDisplay.squareWidth(640, num: 45, den: 44), 654)
         // A stretch past a 32-bit image size keeps the coded width. The multiply used to trap.
         XCTAssertEqual(VideoDisplay.squareWidth(320, num: Int(Int32.max), den: 1), 320)
         XCTAssertEqual(VideoDisplay.squareWidth(320, num: Int.max, den: 1), 320)

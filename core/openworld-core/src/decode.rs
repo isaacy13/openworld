@@ -1582,8 +1582,10 @@ fn displayed_size(width: u32, height: u32, sar_num: u32, sar_den: u32, turned: b
     }
 }
 
+/// `scale=iw*sar:ih` drops the fraction. Rounding up asks for a pixel the
+/// decoder does not write, and the short frame refuses the file.
 fn square_width(width: u32, num: u32, den: u32) -> u32 {
-    let wide = (u64::from(width) * u64::from(num) + u64::from(den) / 2) / u64::from(den);
+    let wide = u64::from(width) * u64::from(num) / u64::from(den);
     u32::try_from(wide).unwrap_or(width).max(1)
 }
 
@@ -2745,6 +2747,8 @@ mod tests {
         assert_eq!(super::sample_aspect(Some("2:1")), (2, 1));
         assert_eq!(super::square_width(320, 2, 1), 640);
         assert_eq!(super::square_width(320, 3, 2), 480);
+        assert_eq!(super::square_width(320, 4, 3), 426);
+        assert_eq!(super::square_width(640, 45, 44), 654);
         assert_eq!(super::displayed_size(480, 320, 1, 2, true), (640, 480, true));
         assert_eq!(super::displayed_size(320, 480, 2, 1, true), (240, 320, true));
         assert_eq!(super::displayed_size(320, 480, 2, 1, false), (640, 480, true));

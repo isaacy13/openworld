@@ -3981,3 +3981,57 @@ fn an_edit_list_hold_stays_on_the_pictures_a_player_shows() {
     let probed = openworld_core::decode::probe(&request.input).unwrap();
     assert_eq!(report.frames_decoded, probed.frames);
 }
+
+#[test]
+fn a_fractional_sample_aspect_is_scanned() {
+    // 45:44 lands between two pixels. Rounding up asks for one more pixel than
+    // the decoder writes, and that short frame used to refuse the file.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let movie = dir.path().join("wide.mp4");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args([
+            "-vf",
+            "setsar=45/44",
+            "-frames:v",
+            "2",
+            "-r",
+            "10",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: movie,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert!(report.frames_decoded > 0, "{}", report.message);
+}
