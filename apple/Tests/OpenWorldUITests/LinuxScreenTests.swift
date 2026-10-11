@@ -1417,6 +1417,15 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAFrameFileKeepsDigitOrderWhenTheLocaleGroupsNumbers() {
+        let locale = Locale(identifier: "en_US")
+        XCTAssertEqual(VideoDisplay.frameFileName(2, locale: locale), "frame_000002.png")
+        let early = VideoDisplay.frameFileName(999_999, locale: locale)
+        let late = VideoDisplay.frameFileName(1_000_000, locale: locale)
+        XCTAssertEqual(early, "frame_999999.png")
+        XCTAssertEqual(late, "frame_1000000.png")
+    }
+
     func testAGifDelayUsesAPeriodWhenTheLocaleUsesAComma() {
         XCTAssertEqual(GifFrames.presentationLine(100, locale: Locale(identifier: "de_DE")), "1.0000")
         XCTAssertEqual(GifFrames.presentationLine(4, locale: Locale(identifier: "de_DE")), "0.0400")

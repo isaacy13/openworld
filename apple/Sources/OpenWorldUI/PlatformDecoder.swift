@@ -273,7 +273,7 @@ enum PlatformDecoder {
                 image = image.transformed(by: CGAffineTransform(translationX: -origin.x, y: -origin.y))
             }
             image = stretchToSquarePixels(image, sarNum: sarNum, sarDen: sarDen, quarterTurn: quarter)
-            let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
+            let dest = directory.appendingPathComponent(VideoDisplay.frameFileName(index))
             try context.writePNGRepresentation(
                 of: image,
                 to: dest,
@@ -382,7 +382,7 @@ enum PlatformDecoder {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
             let tag = pageTag(source: source, index: index, tags: tags)
-            let image = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
+            let image = directory.appendingPathComponent(VideoDisplay.frameFileName(index))
             if tag <= 1 {
                 try writePNG(cg, to: image)
             } else {

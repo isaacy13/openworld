@@ -39,6 +39,12 @@ public enum VideoDisplay {
         return Int(shown)
     }
 
+    /// `frame_000002.png`. A grouped locale writes `frame_000,002.png`, and past a million
+    /// frames that name sorts ahead of an earlier frame. The scan reads names in sorted order.
+    public static func frameFileName(_ index: Int, locale _: Locale = .current) -> String {
+        String(format: "frame_%06d.png", locale: Locale(identifier: "en_US_POSIX"), index)
+    }
+
     /// How many pictures the estimate counts. `pictureSeconds` is the video track.
     /// A count that does not fit in `Int` is 0, so the estimate refuses instead of trapping.
     public static func frameCount(pictureSeconds: Double, rate: Double) -> Int {

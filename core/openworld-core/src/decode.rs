@@ -937,7 +937,8 @@ fn json_u32(value: Option<&Value>) -> Option<u32> {
 }
 
 /// Ordered stills already decoded by a platform shell or a test.
-/// Names sort in decode order, so callers pad the index (`frame_000001.png`).
+/// The digits in the name are the decode index, so `frame_1000000.png` stays
+/// after `frame_999999.png`. A grouped mark in the name is not part of the index.
 /// One display time, in seconds, per decoded frame. The phone writes this next to the frames.
 pub const PRESENTATION_FILE: &str = "presentation.txt";
 
@@ -1048,7 +1049,7 @@ pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
             names.push(path);
         }
     }
-    names.sort();
+    names.sort_by(|left, right| frame_order_key(left).cmp(&frame_order_key(right)));
     if names.is_empty() {
         return Err(MediaError::BadCodec);
     }
@@ -1058,6 +1059,18 @@ pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
         frames.push(image);
     }
     Ok(frames)
+}
+
+/// Text order puts `frame_1000000.png` before `frame_999999.png`.
+fn frame_order_key(path: &Path) -> (u64, String) {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_string();
+    let digits: String = name.chars().filter(|c| c.is_ascii_digit()).collect();
+    let index = digits.parse::<u64>().unwrap_or(u64::MAX);
+    (index, name)
 }
 
 /// The container clock the desktop probe reports as `creation_time`. A still has none.
@@ -2010,6 +2023,33 @@ mod tests {
         }
         bytes.push(0x3B);
         assert_eq!(super::gif_delays_in(&bytes), Some(vec![0.04, 0.1, 0.04]));
+    }
+
+    #[test]
+    fn a_later_frame_with_more_digits_stays_after_the_earlier_frame() {
+        let dir = std::env::temp_dir().join(format!("ow-frame-order-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut early = RgbImage::new(1, 1);
+        early.put_pixel(0, 0, image::Rgb([1, 2, 3]));
+        let mut late = RgbImage::new(1, 1);
+        late.put_pixel(0, 0, image::Rgb([4, 5, 6]));
+        early.save(dir.join("frame_999999.png")).unwrap();
+        late.save(dir.join("frame_1000000.png")).unwrap();
+        let frames = super::load_frame_dir(&dir).unwrap();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].get_pixel(0, 0), &image::Rgb([1, 2, 3]));
+        assert_eq!(frames[1].get_pixel(0, 0), &image::Rgb([4, 5, 6]));
+        let _ = fs::remove_dir_all(&dir);
+        let grouped = std::env::temp_dir().join(format!("ow-frame-group-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&grouped);
+        fs::create_dir_all(&grouped).unwrap();
+        early.save(grouped.join("frame_999,999.png")).unwrap();
+        late.save(grouped.join("frame_1,000,000.png")).unwrap();
+        let frames = super::load_frame_dir(&grouped).unwrap();
+        let _ = fs::remove_dir_all(&grouped);
+        assert_eq!(frames[0].get_pixel(0, 0), &image::Rgb([1, 2, 3]));
+        assert_eq!(frames[1].get_pixel(0, 0), &image::Rgb([4, 5, 6]));
     }
 
     fn movie_clock(created: u32) -> Vec<u8> {

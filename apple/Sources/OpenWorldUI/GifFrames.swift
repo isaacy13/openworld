@@ -46,7 +46,7 @@ public enum GifFrames {
         do {
             for (index, rgb) in reel.frames.enumerated() {
                 if stopped() { throw DecodeStopped() }
-                let dest = directory.appendingPathComponent(String(format: "frame_%06d.png", index))
+                let dest = directory.appendingPathComponent(VideoDisplay.frameFileName(index))
                 try writePng(rgb, width: reel.width, height: reel.height, to: dest)
             }
             if reel.video {
