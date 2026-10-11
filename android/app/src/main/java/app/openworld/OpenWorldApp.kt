@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -34,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -243,11 +246,20 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             val stripScroll = rememberScrollState()
                             val bringLatest = remember { BringIntoViewRequester() }
-                            LaunchedEffect(model.liveCrops.size, stripScroll.maxValue) {
+                            val placed = remember { mutableStateOf(0) }
+                            val latestHeight = remember { mutableStateOf(0) }
+                            LaunchedEffect(model.liveCrops.size, stripScroll.maxValue, latestHeight.value) {
                                 stripScroll.scrollTo(stripScroll.maxValue)
-                                // A page the person already moved stays put. At the top, the new label comes on screen.
-                                if (scroll.value == 0) {
-                                    bringLatest.bringIntoView()
+                                // A page the person already moved stays put. The end of the latest label
+                                // still comes on screen when the only movement was the previous crop.
+                                if (scroll.value == placed.value) {
+                                    val height = latestHeight.value.toFloat()
+                                    if (height > 1f) {
+                                        bringLatest.bringIntoView(Rect(0f, height - 1f, 1f, height))
+                                    } else {
+                                        bringLatest.bringIntoView()
+                                    }
+                                    placed.value = scroll.value
                                 }
                             }
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
@@ -274,7 +286,13 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                         Text(
                                             crop.label,
                                             textAlign = TextAlign.Center,
-                                            modifier = if (latest) Modifier.bringIntoViewRequester(bringLatest) else Modifier,
+                                            modifier = if (latest) {
+                                                Modifier
+                                                    .bringIntoViewRequester(bringLatest)
+                                                    .onSizeChanged { latestHeight.value = it.height }
+                                            } else {
+                                                Modifier
+                                            },
                                         )
                                     }
                                 }

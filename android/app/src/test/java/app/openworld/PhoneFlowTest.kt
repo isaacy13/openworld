@@ -1610,6 +1610,46 @@ class PhoneScreenTest {
     }
 
     @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h360dp")
+    fun aTallerCropLabelStaysOnAShortScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Estimate
+        model.scanning = true
+        val path = picture.absolutePath
+        val first = "Line\n".repeat(30).trim()
+        model.liveCrops = listOf(LiveCrop(first, path, "Frame 1."))
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val second = "Line\n".repeat(70).trim()
+        compose.runOnUiThread {
+            model.liveCrops = listOf(
+                LiveCrop(first, path, "Frame 1."),
+                LiveCrop(second, path, "Frame 2."),
+            )
+        }
+        compose.waitForIdle()
+        val node = compose.onNodeWithText(second).fetchSemanticsNode()
+        val scrollNode = compose.onAllNodes(SemanticsMatcher("vertical scroll") {
+            it.config.contains(SemanticsProperties.VerticalScrollAxisRange)
+        }).fetchSemanticsNodes().single()
+        val range = scrollNode.config[SemanticsProperties.VerticalScrollAxisRange]
+        val gap = range.maxValue() - range.value()
+        assertTrue(
+            "the taller crop label left the short screen: scroll ${range.value()} of ${range.maxValue()} label ${node.boundsInRoot} root $root",
+            node.boundsInRoot.height > 0f &&
+                node.boundsInRoot.top < root.bottom &&
+                gap < scrollNode.size.height,
+        )
+    }
+
+    @Test
     @Config(sdk = [34], qualifiers = "w800dp-h360dp")
     fun aCropLabelStaysOnAShortScreen() {
         val picture = File.createTempFile("openworld-crop", ".png")
