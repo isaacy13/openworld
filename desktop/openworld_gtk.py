@@ -118,6 +118,11 @@ class OpenWorld(Gtk.Application):
         self.window.set_default_size(980, 860)
         self._css()
         header = Gtk.HeaderBar()
+        # The default title shrinks to a few characters, so "OpenWorld" is cut off
+        # beside Continue and Choose another file.
+        title = Gtk.Label(label="OpenWorld")
+        title.set_ellipsize(Pango.EllipsizeMode.NONE)
+        header.set_title_widget(title)
         self.back = Gtk.Button(label="Back")
         self.back.connect("clicked", lambda *_: self.go_back())
         header.pack_start(self.back)
