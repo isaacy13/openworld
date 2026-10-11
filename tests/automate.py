@@ -78,6 +78,7 @@ def desktop() -> None:
         run([sys.executable, str(ROOT / "tests/desktop_close.py")])
         run([sys.executable, str(ROOT / "tests/desktop_remote.py")])
         run([sys.executable, str(ROOT / "tests/desktop_bundle.py")])
+        run([sys.executable, str(ROOT / "tests/desktop_bundle_row.py")])
         run([sys.executable, str(ROOT / "tests/desktop_crops.py")])
         run([sys.executable, str(ROOT / "tests/desktop_leave.py")])
         run([sys.executable, str(ROOT / "tests/desktop_title.py")])

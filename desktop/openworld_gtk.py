@@ -207,9 +207,9 @@ class OpenWorld(Gtk.Application):
             ("estimate", self.page_estimate),
             ("results", self.page_results),
         ):
-            # Bundle and results already scroll. The other pages scroll too, so a
-            # large font can reach the last line in a short window.
-            child = page if name in ("bundle", "results") else self._page_scroll(page)
+            # Results keeps its own scroll so Delete stays on the screen. The
+            # other pages scroll, so a large font can reach the last line.
+            child = page if name == "results" else self._page_scroll(page)
             self.stack.add_named(child, name)
         self.history = ["choose"]
         self._show("choose")
@@ -302,9 +302,25 @@ class OpenWorld(Gtk.Application):
         self.bundle_list.connect("row-selected", self._on_bundle_row)
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(self.bundle_list)
-        scroll.set_vexpand(True)
+        # The page scrolls. A row stays as tall as its lines, so a short window
+        # can reach the curve instead of crushing the list to one line.
+        scroll.set_vexpand(False)
+        scroll.set_propagate_natural_height(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.bundle_scroll = scroll
+        # Allocation does not notify. Refit when the row's width changes.
+        last_width = {"value": -1}
+
+        def watch_width(_widget, _clock):
+            if self.closed:
+                return False
+            width = scroll.get_width()
+            if width > 1 and width != last_width["value"]:
+                last_width["value"] = width
+                self._fit_bundle_list()
+            return True
+
+        scroll.add_tick_callback(watch_width)
         box.append(self.bundle_title)
         box.append(self.bundle_hint)
         box.append(scroll)
@@ -691,6 +707,18 @@ class OpenWorld(Gtk.Application):
         if chosen is not None:
             self.bundle_list.select_row(chosen)
         self._mark_bundle_rows()
+        self._fit_bundle_list()
+
+    def _fit_bundle_list(self) -> None:
+        """Keep every bundle row as tall as its lines. The page scrolls to them."""
+        width = self.bundle_scroll.get_width()
+        if width <= 1:
+            return
+        _minimum, natural, _min_baseline, _nat_baseline = self.bundle_list.measure(
+            Gtk.Orientation.VERTICAL, width
+        )
+        if natural > 0:
+            self.bundle_scroll.set_min_content_height(natural)
 
     def _mark_bundle_rows(self) -> None:
         index = 0
