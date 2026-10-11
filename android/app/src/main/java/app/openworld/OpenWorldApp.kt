@@ -89,7 +89,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
     MaterialTheme {
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
             val scroll = rememberScrollState()
-            LaunchedEffect(model.step) { scroll.scrollTo(0) }
+            LaunchedEffect(model.step, model.leaveNotice) { scroll.scrollTo(0) }
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -289,6 +289,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         model.deleteNotice?.let { Text(it, color = warningColor) }
                     }
                     Step.Results -> {
+                        model.leaveNotice?.let { Text(it, color = warningColor) }
                         val headline = model.summary.ifBlank {
                             when (model.status) {
                                 "complete" -> if (model.candidateRows.isNotEmpty()) ProductCopy.possible else ProductCopy.clearance
@@ -354,7 +355,6 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             }
                         }
                         if (model.detail.isNotBlank()) Text(model.detail)
-                        model.leaveNotice?.let { Text(it, color = warningColor) }
                         if (model.resultDir != null) {
                             Button(onClick = model::deleteResult) { Text("Delete") }
                         }

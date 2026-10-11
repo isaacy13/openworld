@@ -949,8 +949,15 @@ public struct FlowView: View {
 
     @ViewBuilder
     private var results: some View {
-        ScrollView {
-            resultsColumn
+        ScrollViewReader { proxy in
+            ScrollView {
+                resultsColumn
+            }
+            .onChange(of: model.leaveError, initial: true) { _, notice in
+                if notice != nil {
+                    proxy.scrollTo("leaveError", anchor: .top)
+                }
+            }
         }
         .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
             Button("Open") {
@@ -965,6 +972,9 @@ public struct FlowView: View {
     private var resultsColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
                 backControl
+                if let notice = model.leaveError {
+                    Text(notice).foregroundStyle(.orange).id("leaveError")
+                }
                 Text(model.resultHeadline)
                     .font(model.phone ? .largeTitle : .title)
                     .foregroundStyle(model.resultRefused ? .orange : .primary)
@@ -1021,9 +1031,6 @@ public struct FlowView: View {
                 }
                 ForEach(PhonePreview.disclosureLines(model), id: \.self) { line in
                     Text(line).font(.footnote)
-                }
-                if let notice = model.leaveError {
-                    Text(notice).foregroundStyle(.orange)
                 }
                 if model.resultDirectory != nil {
                     prominent("Delete") { model.deleteResult() }

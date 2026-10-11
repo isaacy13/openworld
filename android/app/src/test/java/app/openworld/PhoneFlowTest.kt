@@ -1286,6 +1286,72 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aRefusedPageSaysSoOnTheOpenScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Results
+        model.summary = "Possible candidate. Not an identification."
+        model.context = listOf(
+            "1 frame analyzed.",
+            "Missing and wanted.",
+            "Bundle: Fast",
+            "640 px on the long side.",
+            "Every decoded frame.",
+            "Fixture markers were read.",
+        ).joinToString("\n")
+        model.warnings = "The file timestamps disagree."
+        model.detail = listOf(
+            "Nothing is uploaded.",
+            "Nobody is enrolled.",
+            "OpenWorld does not train on this file.",
+            "OpenWorld does not contact an agency.",
+            "A candidate is not an identification.",
+            "No candidate is not a clearance.",
+            "This file is not authenticated.",
+            "On-device does not mean the file is real.",
+        ).joinToString("\n")
+        val path = picture.absolutePath
+        model.candidateRows = listOf(
+            CandidateRow(
+                "Possible candidate. Not an identification.",
+                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Fixture subject A",
+                "Missing",
+                "https://www.fbi.gov.evil.com/wanted",
+                path,
+                path,
+                "Frame 1.",
+            ),
+            CandidateRow(
+                "A vehicle is not a person.",
+                "The plate reads FIX123.",
+                "Fixture vehicle C",
+                "Wanted",
+                "https://www.fbi.gov/wanted",
+                path,
+                path,
+                "Frame 1.",
+            ),
+        )
+        model.strip = List(4) { index ->
+            StripCrop("Not compared.", path, "Frame ${index + 1}.")
+        }
+        model.leaveNotice = "OpenWorld only opens an FBI page."
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val notice = compose.onNodeWithText("OpenWorld only opens an FBI page.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the refusal stayed off screen: $notice",
+            notice.height > 0f && notice.top >= 0f && notice.top < 800f && notice.bottom > 0f,
+        )
+    }
+
+    @Test
     fun draggingOnACropStillScrollsTheResult() {
         val model = FlowModel()
         model.step = Step.Results

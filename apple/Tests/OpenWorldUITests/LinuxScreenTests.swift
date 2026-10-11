@@ -1845,6 +1845,12 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(deviceNote, "This scan runs on the CPU. It will be slower, warmer, and use more battery.")
 
         model.report = try JSONDecoder().decode(ScanReport.self, from: Data(reportJSON.utf8))
+        model.leaveError = "OpenWorld only opens an FBI page."
+        let refused = PhonePreview.lines(screen: "results", model: model)
+        let noticeAt = try XCTUnwrap(refused.firstIndex(of: "OpenWorld only opens an FBI page."))
+        let headlineAt = try XCTUnwrap(refused.firstIndex(of: Copy.possible))
+        XCTAssertLessThan(noticeAt, headlineAt)
+        model.leaveError = nil
         model.leavingURL = URL(string: "https://www.fbi.gov/wanted")
         model.step = .results
         let summary = model.report?.summary

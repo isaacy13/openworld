@@ -91,7 +91,9 @@ public enum PhonePreview {
             }
             return lines
         case "results", "leaving":
-            var lines = ["Back", model.resultHeadline]
+            var lines = ["Back"]
+            if let notice = model.leaveError { lines.append(notice) }
+            lines.append(model.resultHeadline)
             if let reason = model.resultReason {
                 lines.append(reason)
             }
@@ -113,7 +115,6 @@ public enum PhonePreview {
                 }
             }
             lines.append(contentsOf: disclosureLines(model))
-            if let notice = model.leaveError { lines.append(notice) }
             if model.resultDirectory != nil {
                 lines.append("Delete")
             }
