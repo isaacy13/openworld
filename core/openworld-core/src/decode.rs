@@ -1063,10 +1063,12 @@ fn mp4_created(file: &mut File) -> Option<SystemTime> {
         _ => return None,
     };
     // QuickTime counts seconds from 1904-01-01. Zero means the file has no clock.
-    if created == 0 {
+    // A value below the 1970 offset is left alone: players read that range as a
+    // Unix time, so subtracting the offset would call a 2026 file a 1960 file.
+    if created < 2_082_844_800 {
         return None;
     }
-    let unix = created.checked_sub(2_082_844_800)?;
+    let unix = created - 2_082_844_800;
     Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix))
 }
 
@@ -1106,11 +1108,9 @@ fn matroska_created(file: &mut File) -> Option<SystemTime> {
     let ns = dateutc(&data, 0, data.len())?;
     let secs = ns.div_euclid(1_000_000_000);
     // DateUTC counts nanoseconds from 2001-01-01.
+    // DateUTC counts nanoseconds from 2001-01-01. A date before 1970 is still a clock.
     let unix = secs.checked_add(978_307_200)?;
-    if unix < 0 {
-        return None;
-    }
-    Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix as u64))
+    crate::timeutil::system_time_from_unix(unix)
 }
 
 fn dateutc(data: &[u8], mut pos: usize, end: usize) -> Option<i64> {
@@ -1935,6 +1935,22 @@ mod tests {
         let mkv = dir.path().join("clock.mkv");
         fs::write(&mkv, matroska_clock(599_529_600_000_000_000)).unwrap();
         assert_eq!(super::container_created(&mkv), Some(when));
+        // DateUTC is nanoseconds before 2001-01-01. 1960 is still a clock.
+        fs::write(&mkv, matroska_clock(-1_293_926_400_000_000_000)).unwrap();
+        let mkv_before = super::container_created(&mkv).expect("a 1960 matroska clock");
+        assert_eq!(
+            std::time::SystemTime::UNIX_EPOCH
+                .duration_since(mkv_before)
+                .expect("before 1970")
+                .as_secs(),
+            315_619_200
+        );
+        let now = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let warnings = crate::scan::media_warnings(Some(now), Some(mkv_before), now);
+        assert!(
+            warnings.iter().any(|line| line == crate::copy::TIMESTAMP_DISAGREE),
+            "{warnings:?}"
+        );
         fs::write(dir.path().join("still.png"), []).unwrap();
         assert!(super::container_created(&dir.path().join("still.png")).is_none());
     }

@@ -1048,6 +1048,66 @@ fn a_phone_scan_reads_the_container_clock() {
 }
 
 #[test]
+fn a_container_clock_from_before_1970_still_disagrees() {
+    let dir = tempfile::tempdir().unwrap();
+    let mkv = dir.path().join("old.mkv");
+    let status = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=64x64",
+            "-frames:v",
+            "1",
+            "-r",
+            "1",
+            "-an",
+            "-c:v",
+            "ffv1",
+            "-metadata",
+            "creation_time=1960-01-01T00:00:00Z",
+        ])
+        .arg(&mkv)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+    let clock = parse_rfc3339("1960-01-01T00:00:00Z").unwrap();
+    assert_eq!(openworld_core::decode::probe(&mkv).unwrap().container_created, Some(clock));
+    assert_eq!(openworld_core::decode::container_created(&mkv), Some(clock));
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: mkv,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert!(
+        report.warnings.iter().any(|line| line == "The file timestamps disagree."),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
 fn a_pinned_onnx_bundle_that_does_not_load_refuses_instead_of_clearing() {
     let dir = tempfile::tempdir().unwrap();
     let bundle_dir = dir.path().join("bundles/custom");

@@ -21,14 +21,23 @@ pub fn parse_rfc3339(text: &str) -> Option<SystemTime> {
     }
     let days = days_from_civil(year, month, day)?;
     let secs = days * 86400 + i64::from(hour) * 3600 + i64::from(min) * 60 + i64::from(sec);
-    if secs < 0 {
-        return None;
+    system_time_from_unix(secs)
+}
+
+/// Seconds since 1970-01-01. A negative value is a real date from before then.
+pub fn system_time_from_unix(secs: i64) -> Option<SystemTime> {
+    if secs >= 0 {
+        return Some(SystemTime::UNIX_EPOCH + Duration::from_secs(secs as u64));
     }
-    Some(SystemTime::UNIX_EPOCH + Duration::from_secs(secs as u64))
+    let magnitude = secs.checked_neg()?;
+    SystemTime::UNIX_EPOCH.checked_sub(Duration::from_secs(magnitude as u64))
 }
 
 pub fn format_rfc3339(time: SystemTime) -> String {
-    let secs = time.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+    let secs = match time.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(age) => age.as_secs() as i64,
+        Err(err) => -i64::try_from(err.duration().as_secs()).unwrap_or(0),
+    };
     let days = secs.div_euclid(86400);
     let rem = secs.rem_euclid(86400) as u32;
     let (year, month, day) = civil_from_days(days);
@@ -79,5 +88,11 @@ mod tests {
         assert_eq!(format_rfc3339(t), "1970-01-01T00:00:00Z");
         let later = parse_rfc3339("2026-10-07T05:09:00Z").unwrap();
         assert_eq!(format_rfc3339(later), "2026-10-07T05:09:00Z");
+        let early = parse_rfc3339("1960-01-01T00:00:00Z").unwrap();
+        assert_eq!(
+            SystemTime::UNIX_EPOCH.duration_since(early).unwrap().as_secs(),
+            315_619_200
+        );
+        assert_eq!(format_rfc3339(early), "1960-01-01T00:00:00Z");
     }
 }
