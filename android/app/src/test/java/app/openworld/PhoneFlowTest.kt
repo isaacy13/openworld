@@ -24,6 +24,7 @@ import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -1605,6 +1606,31 @@ class PhoneScreenTest {
         assertTrue(
             "a crop that arrived moved the estimate from $line to $stayed",
             stayed.height > 0f && kotlin.math.abs(stayed.top - line.top) < 8f,
+        )
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w800dp-h360dp")
+    fun aCropLabelStaysOnAShortScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Estimate
+        model.scanning = true
+        model.liveCrops = listOf(
+            LiveCrop("Possible candidate. Not an identification.", picture.absolutePath, "Frame 1.")
+        )
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val label = compose.onNodeWithText("Possible candidate. Not an identification.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the crop label left the short screen: $label root $root",
+            label.height > 0f && label.top >= 0f && label.bottom <= root.bottom + 1f && label.right <= root.right + 1f,
         )
     }
 

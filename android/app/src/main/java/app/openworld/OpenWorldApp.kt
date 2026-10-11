@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -80,7 +83,7 @@ private val disclosure = listOf(
     "On-device does not mean the file is real.",
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Unit) {
     BackHandler(enabled = model.step != Step.Choose || model.scanning) {
@@ -226,8 +229,13 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         }
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
                             val stripScroll = rememberScrollState()
+                            val bringLatest = remember { BringIntoViewRequester() }
                             LaunchedEffect(model.liveCrops.size, stripScroll.maxValue) {
                                 stripScroll.scrollTo(stripScroll.maxValue)
+                                // A page the person already moved stays put. At the top, the new label comes on screen.
+                                if (scroll.value == 0) {
+                                    bringLatest.bringIntoView()
+                                }
                             }
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
                             Row(
@@ -235,6 +243,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 model.liveCrops.forEach { crop ->
+                                    val latest = crop == model.liveCrops.last()
                                     Column(
                                         modifier = Modifier.width(140.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -249,7 +258,11 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                             )
                                         }
                                         Text(crop.frameLabel, textAlign = TextAlign.Center)
-                                        Text(crop.label, textAlign = TextAlign.Center)
+                                        Text(
+                                            crop.label,
+                                            textAlign = TextAlign.Center,
+                                            modifier = if (latest) Modifier.bringIntoViewRequester(bringLatest) else Modifier,
+                                        )
                                     }
                                 }
                             }
