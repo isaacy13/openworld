@@ -11,6 +11,7 @@ orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
 orientation tag, a 16-bit TIFF with that tag, a palette TIFF, a bilevel TIFF,
 a YCbCr TIFF, a subsampled YCbCr TIFF, a two-page TIFF whose marker is only on the second page,
 a video whose edit list hides the samples a player does not show,
+a trimmed hold whose average rate rounds back to the packet count,
 a Matroska file that does not store a frame count, with the marker on the picture that stays up,
 an AVI file whose header counts a nominal rate, with the marker on the picture that stays up,
 an Ogg Theora file of the fixture scene whose average rate is empty,
@@ -347,6 +348,7 @@ def main() -> int:
         "subsampled_tiff_candidate": 0,
         "tiff_later_candidate": 0,
         "edit_list_candidate": 0,
+        "edit_hold_candidate": 0,
         "oriented_video_candidate": 0,
         "anamorphic_video_candidate": 0,
         "turned_anamorphic_video_candidate": 0,
@@ -917,6 +919,43 @@ def main() -> int:
         report = scan(args.bin, args.bundles, posters, blank_edit, out, "complete")
         assert_clearance(report, "edit list that hides the marker")
 
+        for index in range(8):
+            shutil.copyfile(scene if index == 3 else wide, root / f"e{index}.png")
+        hold_steady = root / "hold-steady.mp4"
+        hold_stamped = root / "hold-stamped.mp4"
+        hold_trim = root / "hold-trim.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "25", "-start_number", "0",
+            "-i", str(root / "e%d.png"), "-frames:v", "8", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0",
+            str(hold_steady),
+        ])
+        if proc.returncode != 0 or not hold_steady.is_file():
+            fail(proc.stderr or "held edit source was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(hold_steady), "-c", "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,4),PTS,PTS+12800)':dts='if(lt(N\\,4),DTS,DTS+12800)'",
+            str(hold_stamped),
+        ])
+        if proc.returncode != 0 or not hold_stamped.is_file():
+            fail(proc.stderr or "held edit timestamps were not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-ss", "0.10", "-i", str(hold_stamped),
+            "-c", "copy", str(hold_trim),
+        ])
+        if proc.returncode != 0 or not hold_trim.is_file():
+            fail(proc.stderr or "trimmed hold was not written")
+        report = scan(args.bin, args.bundles, posters, hold_trim, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"trimmed hold {report.get('status')!r} {report.get('summary')!r} {report.get('message')}")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 0 for item in found):
+            fail(f"trimmed hold candidates were not on the picture that stays up: {found}")
+        if not report.get("frames_decoded"):
+            fail("trimmed hold decoded no frames")
+        counts["edit_hold_candidate"] += 1
+
         stored_video = root / "stored.mp4"
         shown_video = root / "shown.mp4"
         proc = run([
@@ -1059,6 +1098,7 @@ def main() -> int:
         or counts["subsampled_tiff_candidate"] != 1
         or counts["tiff_later_candidate"] != 1
         or counts["edit_list_candidate"] != 1
+        or counts["edit_hold_candidate"] != 1
         or counts["oriented_video_candidate"] != 1
         or counts["anamorphic_video_candidate"] != 1
         or counts["turned_anamorphic_video_candidate"] != 1

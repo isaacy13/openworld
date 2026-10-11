@@ -1249,6 +1249,19 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (Some(listed), _) => Some(listed),
         (None, packets) => packets,
     };
+    // A hold makes the average rate the packet count over the duration, so
+    // duration times that rate rounds back to the packets. An edit list can
+    // still hide one of those packets. The frames a player lists are the pictures.
+    // A short packet count is left alone: that file was cut, and the header
+    // still names samples that are no longer there.
+    let stored = match (stored, packets, video_displayed_frames(path, shown)) {
+        (Some(listed), Some(counted), Some(visible))
+            if header_matches_packets && counted == listed && visible > 0 && visible < listed =>
+        {
+            Some(visible)
+        }
+        (stored, _, _) => stored,
+    };
     let frames = match (stored, presented) {
         (Some(exact), Some(presented)) if header_matches_packets && presented > 0 && presented < exact => presented,
         (Some(exact), _) => exact,
@@ -1343,6 +1356,34 @@ fn video_packet_count(path: &Path, shown: usize) -> Option<u64> {
     }
     let value: Value = serde_json::from_slice(&output.stdout).ok()?;
     let count = json_u32(value.pointer("/streams/0/nb_read_packets")).map(u64::from)?;
+    if count == 0 { None } else { Some(count) }
+}
+
+/// Pictures a player lists for the shown track. Zero is not a count.
+/// This is smaller than the packet count when an edit list hides a sample.
+fn video_displayed_frames(path: &Path, shown: usize) -> Option<u64> {
+    let selector = format!("v:{shown}");
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            &selector,
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let frames = value.get("frames").and_then(|frames| frames.as_array())?;
+    let count = u64::try_from(frames.len()).ok()?;
     if count == 0 { None } else { Some(count) }
 }
 

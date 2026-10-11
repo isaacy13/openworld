@@ -3905,3 +3905,79 @@ fn an_edit_list_scans_the_frames_a_player_shows() {
     assert!(gone.candidates.is_empty());
     assert_eq!(gone.frames_decoded, dropped.frames);
 }
+
+#[test]
+fn an_edit_list_hold_stays_on_the_pictures_a_player_shows() {
+    // The hold makes the average rate the header count over the duration, so
+    // duration times that rate rounds back to the packets. One of those packets
+    // stays hidden. The scan used to call the finished file incomplete.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    for index in 0..8 {
+        let path = dir.path().join(format!("f{index}.png"));
+        let image = if index == 3 { scene.image.clone() } else { blank(width, height) };
+        image.save(&path).unwrap();
+    }
+    let steady = dir.path().join("steady.mp4");
+    let held = dir.path().join("held.mp4");
+    let movie = dir.path().join("trimmed.mp4");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-framerate", "25", "-start_number", "0", "-i"])
+        .arg(dir.path().join("f%d.png"))
+        .args(["-frames:v", "8", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0"])
+        .arg(&steady)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let stamped = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&steady)
+        .args([
+            "-c",
+            "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,4),PTS,PTS+12800)':dts='if(lt(N\\,4),DTS,DTS+12800)'",
+        ])
+        .arg(&held)
+        .status()
+        .expect("ffmpeg");
+    assert!(stamped.success());
+    let trimmed = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-ss", "0.10", "-i"])
+        .arg(&held)
+        .args(["-c", "copy"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(trimmed.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = ScanRequest {
+        input: movie,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack,
+        out_dir: dir.path().join("out"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Complete,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let report = scan_path(&request, &mut |_| {});
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    assert!(
+        report.candidates.iter().any(|candidate| candidate.kind == "face" && candidate.frame_index == 0),
+        "{:?}",
+        report.candidates.iter().map(|candidate| candidate.frame_index).collect::<Vec<_>>()
+    );
+    let probed = openworld_core::decode::probe(&request.input).unwrap();
+    assert_eq!(report.frames_decoded, probed.frames);
+}
