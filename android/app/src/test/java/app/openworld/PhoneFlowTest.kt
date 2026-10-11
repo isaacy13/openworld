@@ -24,6 +24,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -1728,6 +1729,77 @@ class PhoneScreenTest {
             arrived.height > 0f && arrived.left >= 0f && arrived.right <= 360f && arrived.top >= 0f && arrived.top < 800f &&
                 stillScanning.any { it.height > 0f && it.top >= 0f && it.top < 800f },
         )
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w240dp-h800dp")
+    fun theFramePhotoMatchesTheCropOnANarrowScreen() {
+        val picture = evidencePng()
+        val model = evidenceModel(picture)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val crop = compose.onNodeWithContentDescription("Crop").fetchSemanticsNode().boundsInRoot
+        val frame = compose.onNodeWithContentDescription("Frame 1.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the frame photo no longer matches the crop: crop $crop frame $frame root $root",
+            crop.width > 40f &&
+                kotlin.math.abs(crop.width - crop.height) < 2f &&
+                kotlin.math.abs(frame.width - frame.height) < 2f &&
+                kotlin.math.abs(crop.width - frame.width) < 2f &&
+                crop.left >= root.left - 1f &&
+                frame.left >= crop.right - 1f &&
+                frame.right <= root.right + 1f &&
+                crop.bottom <= root.bottom + 1f &&
+                frame.bottom <= root.bottom + 1f,
+        )
+    }
+
+    @Test
+    fun theEvidencePhotosStaySquareOnAPhone() {
+        val model = evidenceModel(evidencePng())
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val crop = compose.onNodeWithContentDescription("Crop").fetchSemanticsNode().boundsInRoot
+        val frame = compose.onNodeWithContentDescription("Frame 1.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the evidence photos left the square: crop $crop frame $frame",
+            crop.width in 100f..124f &&
+                kotlin.math.abs(crop.width - crop.height) < 2f &&
+                kotlin.math.abs(frame.width - crop.width) < 2f &&
+                kotlin.math.abs(frame.height - frame.width) < 2f,
+        )
+    }
+
+    private fun evidencePng(): File {
+        val picture = File.createTempFile("openworld-frame", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(80, 60, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        return picture
+    }
+
+    private fun evidenceModel(picture: File): FlowModel {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "Possible candidate. Not an identification."
+        val path = picture.absolutePath
+        model.candidateRows = listOf(
+            CandidateRow(
+                wording = "Possible candidate. Not an identification.",
+                uncertainty = "Score 0.90.",
+                title = "Fixture subject A",
+                posterClassLabel = "Missing",
+                url = "https://www.fbi.gov/wanted",
+                cropPath = path,
+                framePath = path,
+                frameLabel = "Frame 1.",
+            )
+        )
+        return model
     }
 
     @Test

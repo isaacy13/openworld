@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** A break between characters, so a long name with no spaces wraps on the page. */
@@ -388,10 +389,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (model.warnings.isNotBlank()) Text(model.warnings, color = warningColor)
                         model.candidateRows.forEach { row ->
                             Text(row.wording, style = MaterialTheme.typography.titleMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                evidencePicture(row.cropPath, "Crop")
-                                evidencePicture(row.framePath, row.frameLabel)
-                            }
+                            evidencePictures(row.cropPath, row.framePath, row.frameLabel)
                             if (row.uncertainty.isNotBlank()) Text(row.uncertainty)
                             val poster = posterLine(row.title, row.posterClassLabel)
                             if (poster.isNotBlank()) Text(poster)
@@ -478,18 +476,52 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
 }
 
 @Composable
-private fun evidencePicture(path: String?, caption: String) {
-    if (path.isNullOrBlank()) return
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun evidencePictures(cropPath: String?, framePath: String?, frameLabel: String) {
+    val slots = listOfNotNull(
+        cropPath?.takeIf { it.isNotBlank() }?.let { "Crop" to it },
+        framePath?.takeIf { it.isNotBlank() }?.let { frameLabel to it },
+    )
+    if (slots.isEmpty()) return
+    // Both photos stay square and the same size. A narrow window shrinks them
+    // together instead of squeezing only the frame into the leftover width.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val gap = 8.dp
+        val preferred = 112.dp
+        val width = if (maxWidth.value.isFinite()) maxWidth else preferred
+        val side = if (slots.size == 1) {
+            minOf(preferred, width)
+        } else {
+            minOf(preferred, (width - gap) / slots.size)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            slots.forEach { (caption, path) ->
+                evidencePicture(path, caption, side)
+            }
+        }
+    }
+}
+
+@Composable
+private fun evidencePicture(path: String, caption: String, side: Dp) {
+    Column(
+        modifier = Modifier.width(side),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         val bitmap = BitmapFactory.decodeFile(path)
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = caption,
-                modifier = Modifier.size(112.dp),
+                modifier = Modifier.size(side),
             )
         }
-        Text(caption, style = MaterialTheme.typography.bodySmall)
+        Text(
+            caption,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
