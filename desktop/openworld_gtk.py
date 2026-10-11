@@ -367,6 +367,11 @@ class OpenWorld(Gtk.Application):
         self.strip_scroll.set_propagate_natural_height(True)
         self.strip_scroll.set_overlay_scrolling(False)
         self.strip_scroll.set_hexpand(True)
+        _minimum, bar_height, _min_baseline, _nat_baseline = self.strip_scroll.get_hscrollbar().measure(
+            Gtk.Orientation.VERTICAL, -1
+        )
+        # The scrollbar sits on the bottom of this row. The margin keeps the crop label above it.
+        self.strip.set_margin_bottom(max(bar_height, 16))
         self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         scroll = Gtk.ScrolledWindow()
         self.results_scroll = scroll

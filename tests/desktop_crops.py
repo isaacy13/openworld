@@ -126,6 +126,21 @@ def main() -> None:
             raise SystemExit(
                 f"the crop that arrived left the screen: {crop}, Scanning was {scanning}, window {width}x{height}"
             )
+        caption = app.strip.get_last_child().get_last_child()
+        caption_bounds = bounds(app.window, caption)
+        bar = bounds(app.window, app.strip_scroll.get_hscrollbar())
+        covered = (
+            caption_bounds is None
+            or bar is None
+            or caption.get_text() != "Not compared."
+            or caption_bounds[1] + caption_bounds[3] > bar[1] + 1
+            or caption_bounds[0] < 0
+            or caption_bounds[0] + caption_bounds[2] > width
+        )
+        if covered:
+            raise SystemExit(
+                f"the crop label is under the scrollbar: {caption_bounds}, bar {bar}, window {width}x{height}"
+            )
         app.summary.set_text("No candidate is not a clearance.")
         app._fill_strip(
             {
