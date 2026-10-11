@@ -20,8 +20,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
+gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Pango", "1.0")
-from gi.repository import Gdk, Gio, GLib, Gtk, Pango
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 
 PHRASES = {
@@ -53,6 +54,19 @@ def find_bin() -> str:
 
 def find_bundles() -> str:
     return os.environ.get("OPENWORLD_BUNDLES", str(repo_root() / "bundles"))
+
+
+def bounded_picture(path: str, width: int, height: int) -> Gtk.Picture:
+    """A crop thumbnail. The file's pixel size does not become the row's size."""
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, True)
+        picture = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pixbuf))
+    except GLib.Error:
+        picture = Gtk.Picture.new_for_filename(path)
+    picture.set_size_request(width, height)
+    picture.set_can_shrink(False)
+    picture.set_content_fit(Gtk.ContentFit.CONTAIN)
+    return picture
 
 
 def filter_rules(item: Gtk.FileFilter) -> list[str]:
@@ -924,9 +938,7 @@ class OpenWorld(Gtk.Application):
         if not path.is_file():
             return False
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        picture = Gtk.Picture.new_for_filename(str(path))
-        picture.set_size_request(112, 112)
-        picture.set_can_shrink(False)
+        picture = bounded_picture(str(path), 112, 112)
         caption = self._crop_caption(label)
         box.append(picture)
         frame = event.get("frame_label") or ""
@@ -1081,9 +1093,7 @@ class OpenWorld(Gtk.Application):
             if not path.is_file():
                 continue
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            picture = Gtk.Picture.new_for_filename(str(path))
-            picture.set_size_request(112, 112)
-            picture.set_can_shrink(False)
+            picture = bounded_picture(str(path), 112, 112)
             frame = Gtk.Label(label=item.get("frame_label") or "", xalign=0.5)
             caption = self._crop_caption(item.get("label", ""))
             box.append(picture)
@@ -1143,8 +1153,7 @@ class OpenWorld(Gtk.Application):
                 path = self.out_dir / rel
                 if path.is_file():
                     pair = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-                    picture = Gtk.Picture.new_for_filename(str(path))
-                    picture.set_size_request(160, 120)
+                    picture = bounded_picture(str(path), 160, 120)
                     label = Gtk.Label(label=caption, xalign=0)
                     pair.append(picture)
                     pair.append(label)
