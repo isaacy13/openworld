@@ -269,7 +269,7 @@ object PlatformDecode {
         val shown = displayedVideoSize(width, height, aspect.first, aspect.second, rotationDegrees(format))
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
         val duration = durationUs / 1_000_000.0
-        val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() else 0.0
+        val fps = mediaFrameRate(format)
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
         val frames = videoFrameCount(duration, fps)
         if (frames <= 0L) throw IOException("Bad codec or unreadable file. Refusing.")
@@ -368,6 +368,21 @@ object PlatformDecode {
  * A count that does not fit in a 64-bit integer is 0, so the estimate refuses
  * instead of planning [Int.MAX_VALUE] frames.
  */
+/**
+ * Tracks store a frame rate as an integer or as a float. [MediaFormat.getInteger]
+ * throws when the value is a float, and Continue only catches [IOException].
+ * [MediaFormat.getFloat] throws when the value is an integer. A missing key stays 0
+ * so the caller still refuses a track that did not report a rate.
+ */
+internal fun mediaFrameRate(format: MediaFormat): Double {
+    if (!format.containsKey(MediaFormat.KEY_FRAME_RATE)) return 0.0
+    return try {
+        format.getFloat(MediaFormat.KEY_FRAME_RATE).toDouble()
+    } catch (_: ClassCastException) {
+        format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()
+    }
+}
+
 internal fun videoFrameCount(durationSec: Double, fps: Double): Long {
     if (!durationSec.isFinite() || durationSec <= 0.0 || !fps.isFinite() || fps <= 0.0) return 1L
     val pictures = durationSec * fps

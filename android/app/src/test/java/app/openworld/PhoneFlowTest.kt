@@ -896,6 +896,17 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aFractionalFrameRateStaysFractional() {
+        val fractional = MediaFormat()
+        fractional.setFloat(MediaFormat.KEY_FRAME_RATE, 29.97f)
+        assertEquals(29.97, mediaFrameRate(fractional), 0.001)
+        val whole = MediaFormat()
+        whole.setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+        assertEquals(30.0, mediaFrameRate(whole), 0.0)
+        assertEquals(0.0, mediaFrameRate(MediaFormat()), 0.0)
+    }
+
+    @Test
     fun aVideoPlaneStartsAtTheBufferPositionAndStudioBlackIsBlack() {
         val plane = ByteBuffer.allocate(8)
         plane.put(0, 9)
