@@ -1403,6 +1403,53 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun anUnreadableFileStaysOnScreenWhileTheResultScrolls() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Results
+        model.summary = "Possible candidate. Not an identification."
+        model.pickNotice = "The file could not be read. Refusing."
+        model.context = listOf(
+            "1 frame analyzed.",
+            "Missing and wanted.",
+            "Bundle: Fast",
+            "640 px on the long side.",
+            "Every decoded frame.",
+            "Fixture markers were read.",
+        ).joinToString("\n")
+        model.detail = (0 until 12).joinToString("\n") { "Disclosure line $it." }
+        val path = picture.absolutePath
+        model.candidateRows = listOf(
+            CandidateRow(
+                "Possible candidate. Not an identification.",
+                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Fixture subject A",
+                "Missing",
+                "https://www.fbi.gov/wanted",
+                path,
+                path,
+                "Frame 1.",
+            ),
+        )
+        model.strip = List(6) { index -> StripCrop("Not compared.", path, "Frame ${index + 1}.") }
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Choose another file").performScrollTo()
+        compose.waitForIdle()
+        val button = compose.onNodeWithText("Choose another file").fetchSemanticsNode().boundsInRoot
+        assertTrue("Choose another file was not on screen: $button", button.height > 0f && button.top < 800f)
+        val notice = compose.onNodeWithText("The file could not be read. Refusing.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the refusal left the screen: $notice, Choose another file was $button",
+            notice.height > 0f && notice.top >= 0f && notice.top < 800f && notice.bottom > 0f,
+        )
+    }
+
+    @Test
     fun draggingOnACropStillScrollsTheResult() {
         val model = FlowModel()
         model.step = Step.Results

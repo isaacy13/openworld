@@ -94,11 +94,16 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                 modifier = Modifier
                     .padding(padding)
                     .padding(20.dp)
-                    .fillMaxSize()
-                    .verticalScroll(scroll),
+                    .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.pickNotice?.let { Text(it, color = warningColor) }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scroll),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                 if (model.step != Step.Estimate && model.step != Step.Results) {
                     model.deleteNotice?.let { Text(it, color = warningColor) }
                 }
@@ -361,6 +366,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         }
                         Button(onClick = model::chooseAnother) { Text("Choose another file") }
                     }
+                }
                 }
             }
         }
