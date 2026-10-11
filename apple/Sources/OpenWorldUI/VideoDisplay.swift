@@ -25,15 +25,26 @@ public enum VideoDisplay {
         return (codedWidth, codedHeight)
     }
 
+    /// Stored width stretched by the pixel aspect. A product that does not fit in a
+    /// 32-bit image size keeps the coded width. The multiply used to trap, and a
+    /// truncated width is a 1 px frame with the face gone.
     public static func squareWidth(_ width: Int, num: Int, den: Int) -> Int {
         if width <= 0 || num <= 0 || den <= 0 || num == den {
             return max(width, 1)
         }
-        let shown = (Int64(width) * Int64(num) + Int64(den) / 2) / Int64(den)
+        let (product, productOverflow) = Int64(width).multipliedReportingOverflow(by: Int64(num))
+        if productOverflow {
+            return width
+        }
+        let (rounded, roundOverflow) = product.addingReportingOverflow(Int64(den) / 2)
+        if roundOverflow {
+            return width
+        }
+        let shown = rounded / Int64(den)
         if shown < 1 {
             return 1
         }
-        if shown > Int64(Int.max) {
+        if shown > Int64(Int32.max) {
             return width
         }
         return Int(shown)

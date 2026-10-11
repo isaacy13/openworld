@@ -339,13 +339,20 @@ object PlatformDecode {
         return JpegOrientation.displaySize(squared.first, squared.second, tag)
     }
 
-    /** Stored width and height, stretched by the pixel aspect a player uses. */
+    /**
+     * Stored width and height, stretched by the pixel aspect a player uses.
+     * A stretch that does not fit in a 32-bit size keeps the coded width.
+     * Truncating that product used to leave a 1 px frame, and the face was gone.
+     */
     internal fun squarePixelSize(width: Int, height: Int, sarWidth: Int, sarHeight: Int): Pair<Int, Int> {
         if (width <= 0 || height <= 0 || sarWidth <= 0 || sarHeight <= 0 || sarWidth == sarHeight) {
             return width to height
         }
-        val shown = ((width.toLong() * sarWidth + sarHeight / 2) / sarHeight).toInt().coerceAtLeast(1)
-        return shown to height
+        val shown = (width.toLong() * sarWidth.toLong() + sarHeight.toLong() / 2) / sarHeight.toLong()
+        if (shown > Int.MAX_VALUE.toLong()) {
+            return width to height
+        }
+        return shown.toInt().coerceAtLeast(1) to height
     }
 
     private fun pixelAspect(format: MediaFormat): Pair<Int, Int> {

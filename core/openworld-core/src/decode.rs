@@ -1574,6 +1574,14 @@ fn ebml_size(data: &[u8], pos: usize) -> Option<(u64, usize, bool)> {
 #[cfg(test)]
 mod tests {
     use super::open_oriented;
+
+    #[test]
+    fn a_sample_aspect_that_does_not_fit_keeps_the_coded_width() {
+        // 320 * u32::MAX does not fit in the displayed width. The coded width stays.
+        assert_eq!(super::square_width(320, u32::MAX, 1), 320);
+        assert_eq!(super::square_width(320, 2, 1), 640);
+    }
+
     use image::{DynamicImage, ImageEncoder, RgbImage};
     use std::fs;
     use std::path::PathBuf;

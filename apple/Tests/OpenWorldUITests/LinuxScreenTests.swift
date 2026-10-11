@@ -1903,6 +1903,12 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(turned.0, 640)
         XCTAssertEqual(turned.1, 480)
         XCTAssertEqual(VideoDisplay.squareWidth(320, num: 2, den: 1), 640)
+        // A stretch past a 32-bit image size keeps the coded width. The multiply used to trap.
+        XCTAssertEqual(VideoDisplay.squareWidth(320, num: Int(Int32.max), den: 1), 320)
+        XCTAssertEqual(VideoDisplay.squareWidth(320, num: Int.max, den: 1), 320)
+        let kept = VideoDisplay.shownSize(codedWidth: 320, codedHeight: 480, sarNum: Int(Int32.max), sarDen: 1, quarterTurn: false)
+        XCTAssertEqual(kept.0, 320)
+        XCTAssertEqual(kept.1, 480)
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0.8, rate: 10), 8)
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 30, rate: 10), 300)
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0, rate: 10), 1)

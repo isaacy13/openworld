@@ -1321,6 +1321,13 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aSampleAspectThatDoesNotFitKeepsTheCodedWidth() {
+        // The stretch is wider than a 32-bit size. Truncating it left a 1 px frame, so the face was gone.
+        assertEquals(320 to 480, PlatformDecode.squarePixelSize(320, 480, Int.MAX_VALUE, 1))
+        assertEquals(320 to 480, PlatformDecode.displayedVideoSize(320, 480, Int.MAX_VALUE, 1, 0))
+    }
+
+    @Test
     fun aJpegOrientationTagIsReadWithoutAnExtension() {
         val file = File.createTempFile("ow-orient", "")
         file.writeBytes(jpegWithOrientation(6))
