@@ -141,13 +141,43 @@ def main() -> None:
             raise SystemExit(
                 f"the crop label is under the scrollbar: {caption_bounds}, bar {bar}, window {width}x{height}"
             )
+        app._clear_strip()
+        long = "Possible candidate. Not an identification."
+        for index in range(8):
+            app._add_crop(
+                {
+                    "kind": "face",
+                    "crop": "crops/a.png",
+                    "label": long,
+                    "frame_label": f"Frame {index + 1}.",
+                }
+            )
+        pump(context, 30)
+        long_caption = app.strip.get_last_child().get_last_child()
+        long_bounds = bounds(app.window, long_caption)
+        long_bar = bounds(app.window, app.strip_scroll.get_hscrollbar())
+        long_covered = (
+            long_bounds is None
+            or long_bar is None
+            or long_caption.get_text() != long
+            or long_bounds[3] < 20
+            or long_bounds[1] + long_bounds[3] > long_bar[1] + 1
+            or long_bounds[0] < 0
+            or long_bounds[0] + long_bounds[2] > width
+            or long_bounds[1] < 0
+            or long_bounds[1] + long_bounds[3] > height
+        )
+        if long_covered:
+            raise SystemExit(
+                f"the long crop label is under the scrollbar: {long_bounds}, bar {long_bar}, window {width}x{height}"
+            )
         app.summary.set_text("No candidate is not a clearance.")
         app._fill_strip(
             {
                 "inventory": [
                     {
                         "crop": "crops/a.png",
-                        "label": "Not compared.",
+                        "label": "Possible candidate. Not an identification.",
                         "frame_label": f"Frame {index}.",
                     }
                     for index in range(1, 31)
@@ -172,6 +202,22 @@ def main() -> None:
         )
         if not first_on:
             raise SystemExit(f"the finished strip did not start at the first crop: {first}")
+        finished = app.strip.get_first_child().get_last_child()
+        finished_bounds = bounds(app.window, finished)
+        finished_bar = bounds(app.window, app.strip_scroll.get_hscrollbar())
+        finished_covered = (
+            finished_bounds is None
+            or finished_bar is None
+            or finished.get_text() != "Possible candidate. Not an identification."
+            or finished_bounds[1] + finished_bounds[3] > finished_bar[1] + 1
+            or finished_bounds[0] < 0
+            or finished_bounds[0] + finished_bounds[2] > width
+        )
+        if finished_covered:
+            raise SystemExit(
+                "the finished crop label is under the scrollbar: "
+                f"{finished_bounds}, bar {finished_bar}, window {width}x{height}"
+            )
     finally:
         app.do_shutdown()
     print("desktop crops ok")

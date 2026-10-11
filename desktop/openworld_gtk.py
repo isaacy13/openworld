@@ -923,6 +923,9 @@ class OpenWorld(Gtk.Application):
         picture.set_size_request(112, 112)
         picture.set_can_shrink(False)
         caption = Gtk.Label(label=label, wrap=True, justify=Gtk.Justification.CENTER)
+        # width_chars keeps the column at the wrap width. A narrower column
+        # makes the label taller than the row, and the scrollbar covers it.
+        caption.set_width_chars(18)
         caption.set_max_width_chars(18)
         box.append(picture)
         frame = event.get("frame_label") or ""
@@ -1069,6 +1072,7 @@ class OpenWorld(Gtk.Application):
             picture.set_can_shrink(False)
             frame = Gtk.Label(label=item.get("frame_label") or "", xalign=0.5)
             caption = Gtk.Label(label=item.get("label", ""), wrap=True, justify=Gtk.Justification.CENTER)
+            caption.set_width_chars(18)
             caption.set_max_width_chars(18)
             box.append(picture)
             box.append(frame)
