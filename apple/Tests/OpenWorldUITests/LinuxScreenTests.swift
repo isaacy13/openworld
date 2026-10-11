@@ -2003,6 +2003,24 @@ final class OpenWorldUITests: XCTestCase {
         ])
     }
 
+    func testALargerVideoTrackIsTheOneShown() {
+        // The first track is a small blank. Both are default, so a player shows the larger picture.
+        let blank = VideoTrackChoice(width: 64, height: 64, defaultTrack: true)
+        let scene = VideoTrackChoice(width: 320, height: 240, defaultTrack: true)
+        XCTAssertEqual(VideoDisplay.shownTrack([blank, scene]), 1)
+        // Only the small track is the default. That is the picture a player shows.
+        XCTAssertEqual(VideoDisplay.shownTrack([blank, VideoTrackChoice(width: 320, height: 240, defaultTrack: false)]), 0)
+        // No default flag. The larger picture is still the one shown.
+        XCTAssertEqual(VideoDisplay.shownTrack([
+            VideoTrackChoice(width: 64, height: 64, defaultTrack: false),
+            VideoTrackChoice(width: 320, height: 240, defaultTrack: false),
+        ]), 1)
+        // The same size keeps the earlier track.
+        let same = VideoTrackChoice(width: 320, height: 240, defaultTrack: true)
+        XCTAssertEqual(VideoDisplay.shownTrack([same, same]), 0)
+        XCTAssertNil(VideoDisplay.shownTrack([]))
+    }
+
     func testATurnedVideoWithNonSquarePixelsUsesTheShownSize() {
         let upright = VideoDisplay.shownSize(codedWidth: 480, codedHeight: 320, sarNum: 1, sarDen: 2, quarterTurn: true)
         XCTAssertEqual(upright.0, 640)

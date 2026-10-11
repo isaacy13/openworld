@@ -4,7 +4,42 @@ import Foundation
 /// Display size for a video frame. A quarter turn runs first and inverts the
 /// pixel aspect, matching the desktop player. The frame count uses the video
 /// track. Audio that continues after the pictures is not part of that count.
+/// One video track. `defaultTrack` is the container's default flag.
+public struct VideoTrackChoice: Equatable {
+    public var width: Int
+    public var height: Int
+    public var defaultTrack: Bool
+
+    public init(width: Int, height: Int, defaultTrack: Bool) {
+        self.width = width
+        self.height = height
+        self.defaultTrack = defaultTrack
+    }
+}
+
 public enum VideoDisplay {
+    /// Index of the video a player shows. Default tracks win. Among those, the
+    /// largest picture wins. An earlier track wins a tie. No default flag means
+    /// every track is eligible. The first track can be a small blank.
+    public static func shownTrack(_ tracks: [VideoTrackChoice]) -> Int? {
+        if tracks.isEmpty { return nil }
+        let anyDefault = tracks.contains { $0.defaultTrack }
+        var chosen: Int?
+        var best: Int64 = -1
+        for (index, track) in tracks.enumerated() {
+            if anyDefault && !track.defaultTrack { continue }
+            let width = Int64(max(track.width, 0))
+            let height = Int64(max(track.height, 0))
+            let (area, overflow) = width.multipliedReportingOverflow(by: height)
+            let size = overflow ? Int64.max : area
+            if chosen == nil || size > best {
+                chosen = index
+                best = size
+            }
+        }
+        return chosen
+    }
+
     public static func shownSize(
         codedWidth: Int,
         codedHeight: Int,

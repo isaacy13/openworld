@@ -1441,6 +1441,25 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aLargerVideoTrackIsTheOneShown() {
+        // The first track is a small blank. Both are default, so a player shows the larger picture.
+        val blank = PlatformDecode.VideoTrackChoice(64, 64, true)
+        val scene = PlatformDecode.VideoTrackChoice(320, 240, true)
+        assertEquals(1, PlatformDecode.shownVideoTrack(listOf(blank, scene)))
+        // Only the small track is the default. That is the picture a player shows.
+        assertEquals(0, PlatformDecode.shownVideoTrack(listOf(blank, scene.copy(defaultTrack = false))))
+        // No default flag. The larger picture is still the one shown.
+        assertEquals(
+            1,
+            PlatformDecode.shownVideoTrack(listOf(blank.copy(defaultTrack = false), scene.copy(defaultTrack = false))),
+        )
+        // The same size keeps the earlier track.
+        val same = PlatformDecode.VideoTrackChoice(320, 240, true)
+        assertEquals(0, PlatformDecode.shownVideoTrack(listOf(same, same)))
+        assertNull(PlatformDecode.shownVideoTrack(emptyList()))
+    }
+
+    @Test
     fun aSampleAspectThatDoesNotFitKeepsTheCodedWidth() {
         // The stretch is wider than a 32-bit size. Truncating it left a 1 px frame, so the face was gone.
         assertEquals(320 to 480, PlatformDecode.squarePixelSize(320, 480, Int.MAX_VALUE, 1))

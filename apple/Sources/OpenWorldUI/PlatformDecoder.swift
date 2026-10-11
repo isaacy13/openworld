@@ -115,7 +115,7 @@ enum PlatformDecoder {
         }
         if isVideo(url) {
             let asset = AVURLAsset(url: url)
-            guard let track = asset.tracks(withMediaType: .video).first else {
+            guard let track = shownVideoTrack(asset) else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
             let rate = frameRate(track)
@@ -252,7 +252,7 @@ enum PlatformDecoder {
             return facts
         }
         let asset = AVURLAsset(url: url)
-        guard let track = asset.tracks(withMediaType: .video).first else {
+        guard let track = shownVideoTrack(asset) else {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
         let (sarNum, sarDen) = pixelAspect(track)
@@ -535,6 +535,21 @@ enum PlatformDecoder {
         guard CGImageDestinationFinalize(dest) else {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
+    }
+
+    /// The video a player shows. An enabled track is a default. The largest of
+    /// those wins, so a small blank track does not hide the picture.
+    private static func shownVideoTrack(_ asset: AVURLAsset) -> AVAssetTrack? {
+        let tracks = asset.tracks(withMediaType: .video)
+        let choices = tracks.map { track in
+            VideoTrackChoice(
+                width: Int(abs(track.naturalSize.width).rounded()),
+                height: Int(abs(track.naturalSize.height).rounded()),
+                defaultTrack: track.isEnabled
+            )
+        }
+        guard let index = VideoDisplay.shownTrack(choices) else { return nil }
+        return tracks[index]
     }
     #endif
 

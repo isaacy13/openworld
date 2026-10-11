@@ -381,12 +381,55 @@ object PlatformDecode {
         return format.getInteger(MediaFormat.KEY_ROTATION)
     }
 
+    /**
+     * One video track a player would show. Default tracks win. Among those, the
+     * largest picture wins, and an earlier track wins a tie. A file that marks
+     * none of them uses every video track. The first track can be a small blank.
+     */
     private fun trackIndex(extractor: MediaExtractor): Int? {
+        val found = ArrayList<Pair<Int, VideoTrackChoice>>()
         for (i in 0 until extractor.trackCount) {
-            val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: continue
-            if (mime.startsWith("video/")) return i
+            val format = extractor.getTrackFormat(i)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+            if (!mime.startsWith("video/")) continue
+            val width = if (format.containsKey(MediaFormat.KEY_WIDTH)) format.getInteger(MediaFormat.KEY_WIDTH) else 0
+            val height = if (format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0
+            found.add(i to VideoTrackChoice(width, height, defaultTrack(format)))
         }
-        return null
+        val picked = shownVideoTrack(found.map { it.second }) ?: return null
+        return found[picked].first
+    }
+
+    private fun defaultTrack(format: MediaFormat): Boolean {
+        if (!format.containsKey(MediaFormat.KEY_IS_DEFAULT)) return false
+        return try {
+            format.getInteger(MediaFormat.KEY_IS_DEFAULT) != 0
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
+    internal data class VideoTrackChoice(val width: Int, val height: Int, val defaultTrack: Boolean)
+
+    /**
+     * Index of the video a player shows. Default tracks win. Among those, the
+     * largest picture wins. An earlier track wins a tie. No default flag means
+     * every track is eligible.
+     */
+    internal fun shownVideoTrack(tracks: List<VideoTrackChoice>): Int? {
+        if (tracks.isEmpty()) return null
+        val anyDefault = tracks.any { it.defaultTrack }
+        var chosen: Int? = null
+        var best = -1L
+        for ((index, track) in tracks.withIndex()) {
+            if (anyDefault && !track.defaultTrack) continue
+            val area = track.width.coerceAtLeast(0).toLong() * track.height.coerceAtLeast(0).toLong()
+            if (chosen == null || area > best) {
+                chosen = index
+                best = area
+            }
+        }
+        return chosen
     }
 
     private fun imageToBitmap(image: Image, fullRange: Boolean): Bitmap {
