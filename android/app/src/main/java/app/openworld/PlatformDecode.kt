@@ -49,7 +49,7 @@ object PlatformDecode {
         }
     }
 
-    fun facts(file: File): Facts {
+    fun facts(file: File, measured: Boolean = true): Facts {
         when (tiffPageCount(file)) {
             null -> Unit
             0, 1 -> throw IOException("Bad codec or unreadable file. Refusing.")
@@ -83,7 +83,7 @@ object PlatformDecode {
             val shown = JpegOrientation.displaySize(bounds.outWidth, bounds.outHeight, JpegOrientation.tag(file))
             return Facts(shown.first, shown.second, 0.0, 1, 0.0, false)
         }
-        return videoTrack(file) ?: throw IOException("Bad codec or unreadable file. Refusing.")
+        return videoTrack(file, measured) ?: throw IOException("Bad codec or unreadable file. Refusing.")
     }
 
     /** One PNG per decoded frame, in order. Not a second video file. */
@@ -272,7 +272,7 @@ object PlatformDecode {
             (bytes[offset + 3].toInt() and 0xFF)
     }
 
-    private fun videoTrack(file: File): Facts? {
+    private fun videoTrack(file: File, measured: Boolean): Facts? {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.absolutePath)
@@ -287,7 +287,7 @@ object PlatformDecode {
         }
         val format = extractor.getTrackFormat(index)
         // One sample is one picture. A held picture is a long gap, not another
-        // frame at the average rate. The estimate counts the pictures on screen.
+        // frame at the average rate.
         val timesUs = sampleTimes(extractor, index)
         extractor.release()
         val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
@@ -302,9 +302,12 @@ object PlatformDecode {
         val fps = mediaFrameRate(format)
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
         val frames = videoFrameCount(duration, fps)
-        if (frames <= 0L) throw IOException("Bad codec or unreadable file. Refusing.")
+        val pictures = if (timesUs.isNotEmpty()) timesUs.size.toLong() else frames
+        if (pictures <= 0L) throw IOException("Bad codec or unreadable file. Refusing.")
         val delays = videoPresentationDelays(timesUs, durationUs)
-        val (plannedFrames, plannedFps) = measuredVideoFacts(frames, fps, delays)
+        // Complete reads every stored picture. Measured reads the picture on screen
+        // at each 5 Hz tick, which is fewer when one picture stays up.
+        val (plannedFrames, plannedFps) = videoEstimateFacts(pictures, fps, delays, measured)
         return Facts(shown.first, shown.second, plannedFps, plannedFrames, duration, true)
     }
 
@@ -520,6 +523,21 @@ internal fun presentationVaries(delays: List<Double>, fps: Double): Boolean {
  * The estimate counts pictures on screen. Passing that count at 1 fps keeps
  * each of them. A steady rate keeps the track's own frame count.
  */
+/**
+ * Complete counts every stored picture. Measured counts the pictures on screen
+ * at a 5 Hz tick. A steady rate is the same count either way.
+ */
+internal fun videoEstimateFacts(
+    sampleCount: Long,
+    fps: Double,
+    delays: List<Double>?,
+    measured: Boolean,
+): Pair<Long, Double> {
+    if (sampleCount <= 0L) return 0L to fps
+    if (!measured) return sampleCount to fps
+    return measuredVideoFacts(sampleCount, fps, delays)
+}
+
 internal fun measuredVideoFacts(rateFrames: Long, fps: Double, delays: List<Double>?): Pair<Long, Double> {
     if (delays == null || !presentationVaries(delays, fps)) return rateFrames to fps
     val keep = framesOnScreen(delays)

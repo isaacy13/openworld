@@ -122,7 +122,7 @@ struct CoreClient {
     }
 
     func estimate(input: URL, bundle: String, longSide: String, coverage: String, phone: Bool) throws -> Estimate {
-        let facts = try PlatformDecoder.facts(url: input)
+        let facts = try PlatformDecoder.facts(url: input, measured: coverage == "measured")
         let args = PhoneArguments.estimate(
             catalog: bundles,
             input: input.path,

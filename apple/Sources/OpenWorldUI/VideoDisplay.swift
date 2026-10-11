@@ -118,6 +118,14 @@ public enum VideoDisplay {
         return delays.contains { abs($0 - nominal) > slack }
     }
 
+    /// Complete counts every stored picture. Measured counts the pictures on screen
+    /// at a 5 Hz tick. A steady rate is the same count either way.
+    public static func estimatePlan(sampleCount: Int, fps: Double, delays: [Double]?, measured: Bool) -> (frames: Int, fps: Double) {
+        if sampleCount <= 0 { return (0, fps) }
+        if !measured { return (sampleCount, fps) }
+        return measuredPlan(rateFrames: sampleCount, fps: fps, delays: delays)
+    }
+
     /// The estimate counts pictures on screen, one each, at 1 fps.
     /// A steady rate keeps the track's own frame count.
     public static func measuredPlan(rateFrames: Int, fps: Double, delays: [Double]?) -> (frames: Int, fps: Double) {

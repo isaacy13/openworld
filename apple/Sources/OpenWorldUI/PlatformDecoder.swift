@@ -42,7 +42,7 @@ enum PlatformDecoder {
 
     #if os(Linux)
     /// A PNG the user already has is one frame. Copy the bytes. Video stays on AVFoundation.
-    static func facts(url: URL) throws -> Facts {
+    static func facts(url: URL, measured _: Bool = true) throws -> Facts {
         if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
@@ -106,7 +106,7 @@ enum PlatformDecoder {
     }
 
     #else
-    static func facts(url: URL) throws -> Facts {
+    static func facts(url: URL, measured: Bool = true) throws -> Facts {
         if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
@@ -139,15 +139,16 @@ enum PlatformDecoder {
             guard shown.0 > 0, shown.1 > 0 else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
-            let frames = VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate)
-            guard frames > 0 else {
+            let rateFrames = VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate)
+            let times = compressedTimes(asset: asset, track: track)
+            let pictures = times.isEmpty ? rateFrames : times.count
+            guard pictures > 0 else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
-            // A held picture is a long gap between samples. The estimate counts
-            // the pictures on screen, not the average rate.
-            let times = compressedTimes(asset: asset, track: track)
+            // Complete reads every stored picture. Measured reads the picture on
+            // screen at each 5 Hz tick, which is fewer when one picture stays up.
             let delays = VideoDisplay.presentationDelays(times: times, duration: seconds)
-            let plan = VideoDisplay.measuredPlan(rateFrames: frames, fps: rate, delays: delays)
+            let plan = VideoDisplay.estimatePlan(sampleCount: pictures, fps: rate, delays: delays, measured: measured)
             return Facts(
                 width: shown.0,
                 height: shown.1,

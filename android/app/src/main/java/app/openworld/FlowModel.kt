@@ -327,7 +327,7 @@ class FlowModel : ViewModel() {
             return
         }
         try {
-            val facts = PlatformDecode.facts(file)
+            val facts = PlatformDecode.facts(file, measured = coverage == "measured")
             val json = Core.json(
                 listOf(
                     "--json", "--bundles", Core.bundlesDir(), "estimate",

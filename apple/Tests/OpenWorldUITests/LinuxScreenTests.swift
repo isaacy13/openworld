@@ -2061,6 +2061,12 @@ final class OpenWorldUITests: XCTestCase {
         let plan = VideoDisplay.measuredPlan(rateFrames: delays?.count ?? 0, fps: average, delays: delays)
         XCTAssertEqual(plan.frames, 5)
         XCTAssertEqual(plan.fps, 1)
+        let every = VideoDisplay.estimatePlan(sampleCount: delays?.count ?? 0, fps: average, delays: delays, measured: false)
+        XCTAssertEqual(every.frames, 20)
+        XCTAssertEqual(every.fps, average)
+        let measured = VideoDisplay.estimatePlan(sampleCount: delays?.count ?? 0, fps: average, delays: delays, measured: true)
+        XCTAssertEqual(measured.frames, plan.frames)
+        XCTAssertEqual(measured.fps, plan.fps)
         let text = VideoDisplay.presentationText(times: times, duration: cursor, fps: 25)
         XCTAssertEqual(text?.split(separator: "\n").map(String.init)[9], "2.0000")
         let steady = (0..<20).map { Double($0) * 0.04 }
