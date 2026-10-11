@@ -244,7 +244,7 @@ class OpenWorld(Gtk.Application):
         )
         self.bundle_hint.add_css_class("dim")
         self.bundle_list = Gtk.ListBox()
-        self.bundle_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.bundle_list.set_selection_mode(Gtk.SelectionMode.BROWSE)
         self.bundle_list.connect("row-selected", self._on_bundle_row)
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(self.bundle_list)
