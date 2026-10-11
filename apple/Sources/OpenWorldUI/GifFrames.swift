@@ -50,7 +50,7 @@ public enum GifFrames {
                 try writePng(rgb, width: reel.width, height: reel.height, to: dest)
             }
             if reel.video {
-                let lines = reel.delaysCs.map { String(format: "%.4f", Double($0) / 100.0) }.joined(separator: "\n")
+                let lines = reel.delaysCs.map { presentationLine($0) }.joined(separator: "\n")
                 try (lines + "\n").write(
                     to: directory.appendingPathComponent("presentation.txt"),
                     atomically: true,
@@ -69,6 +69,12 @@ public enum GifFrames {
             throw Failure(message: "The decoder did not report a frame rate. Refusing.")
         }
         return reel
+    }
+
+    /// One delay, in seconds, for presentation.txt. The scan parses the line as a number.
+    /// A locale that writes `1,0000` is not a delay, so the decimal mark stays a period.
+    static func presentationLine(_ centiseconds: Int, locale _: Locale = .current) -> String {
+        String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), Double(centiseconds) / 100.0)
     }
 
     private struct Failure: LocalizedError {

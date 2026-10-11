@@ -1417,6 +1417,11 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAGifDelayUsesAPeriodWhenTheLocaleUsesAComma() {
+        XCTAssertEqual(GifFrames.presentationLine(100, locale: Locale(identifier: "de_DE")), "1.0000")
+        XCTAssertEqual(GifFrames.presentationLine(4, locale: Locale(identifier: "de_DE")), "0.0400")
+    }
+
     func testAnAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() throws {
         let gif = try laterFrameGif()
         let frames = FileManager.default.temporaryDirectory.appendingPathComponent("ow-gif-\(UUID().uuidString)")
