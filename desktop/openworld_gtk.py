@@ -57,13 +57,37 @@ def find_bundles() -> str:
 
 
 def bounded_picture(path: str, width: int, height: int) -> Gtk.Picture:
-    """A crop thumbnail. The file's pixel size does not become the row's size."""
+    """A crop thumbnail. A wide or tall file stays inside this box."""
     try:
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, True)
-        picture = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pixbuf))
+        fitted = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, True)
+        canvas = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, width, height)
+        canvas.fill(0)
+        source = fitted if fitted.get_has_alpha() else fitted.add_alpha(False, 0, 0, 0)
+        fw = min(source.get_width(), width)
+        fh = min(source.get_height(), height)
+        x = max(0, (width - fw) // 2)
+        y = max(0, (height - fh) // 2)
+        source.composite(
+            canvas,
+            x,
+            y,
+            fw,
+            fh,
+            float(x),
+            float(y),
+            1.0,
+            1.0,
+            GdkPixbuf.InterpType.NEAREST,
+            255,
+        )
+        picture = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(canvas))
     except GLib.Error:
         picture = Gtk.Picture.new_for_filename(path)
     picture.set_size_request(width, height)
+    picture.set_hexpand(False)
+    picture.set_vexpand(False)
+    picture.set_halign(Gtk.Align.CENTER)
+    picture.set_valign(Gtk.Align.CENTER)
     picture.set_can_shrink(False)
     picture.set_content_fit(Gtk.ContentFit.CONTAIN)
     return picture
