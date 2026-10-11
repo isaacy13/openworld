@@ -89,6 +89,56 @@ def main() -> None:
                 f"{None if selected is None else selected.bundle_id!r} "
                 f"{app.bundle_id!r} {accurate.bundle_name_label.get_text()!r}"
             )
+        app.measured_button.set_active(True)
+        app._mark_coverage()
+        app._go("size")
+        app.window.set_default_size(360, 800)
+        pump(context, 16)
+        choice = None
+
+        def find_choice(widget):
+            nonlocal choice
+            if isinstance(widget, Gtk.Label) and widget.get_text().startswith("Measured. 5 frames"):
+                choice = widget
+            child = widget.get_first_child()
+            while child is not None:
+                find_choice(child)
+                child = child.get_next_sibling()
+
+        find_choice(app.page_size)
+        indicator = None
+        sibling = app.measured_button.get_first_child()
+        while sibling is not None:
+            if not isinstance(sibling, Gtk.Label):
+                indicator = sibling
+            sibling = sibling.get_next_sibling()
+
+        def box(widget):
+            if widget is None:
+                return None
+            found = widget.compute_bounds(app.window)
+            if not found:
+                return None
+            rect = found.out_bounds
+            return rect.get_x(), rect.get_y(), rect.get_width(), rect.get_height()
+
+        choice_box = box(choice)
+        mark = box(indicator)
+        lines = 0 if choice is None or choice.get_layout() is None else choice.get_layout().get_line_count()
+        first = 0 if choice_box is None or lines < 1 else choice_box[3] / lines
+        on_first_line = (
+            choice_box is not None
+            and mark is not None
+            and lines >= 2
+            and mark[3] > 8
+            and mark[1] >= choice_box[1] - 1
+            and mark[1] + mark[3] <= choice_box[1] + first + 1
+        )
+        if not on_first_line:
+            raise SystemExit(
+                "the coverage mark left the first line: "
+                f"choice {choice_box}, mark {mark}, lines {lines}"
+            )
     finally:
         app.do_shutdown()
     print("desktop bundle ok")

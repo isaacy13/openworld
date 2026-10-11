@@ -734,9 +734,34 @@ class OpenWorld(Gtk.Application):
                 child.set_hexpand(True)
                 if getattr(button, "choice_label", None) is not child:
                     button.choice_label = child
-                    child.connect("notify::width", lambda *_args, button=button: self._align_choice_mark(button))
+                    child.connect("notify::width", lambda *_args, button=button: self._schedule_choice_mark(button))
             child = child.get_next_sibling()
+        self._schedule_choice_mark(button)
+
+    def _schedule_choice_mark(self, button: Gtk.CheckButton) -> None:
+        """Line the mark up once the indicator has its real height."""
         self._align_choice_mark(button)
+        if getattr(button, "choice_mark_tick", None) is not None:
+            return
+
+        tries = 0
+
+        def tick(_widget, _clock):
+            nonlocal tries
+            tries += 1
+            self._align_choice_mark(button)
+            icon = None
+            child = button.get_first_child()
+            while child is not None:
+                if not isinstance(child, Gtk.Label):
+                    icon = child
+                child = child.get_next_sibling()
+            if (icon is not None and icon.get_allocated_height() >= 12) or tries >= 30:
+                button.choice_mark_tick = None
+                return False
+            return True
+
+        button.choice_mark_tick = button.add_tick_callback(tick)
 
     def _align_choice_mark(self, button: Gtk.CheckButton) -> None:
         icon = None
@@ -758,8 +783,10 @@ class OpenWorld(Gtk.Application):
         if line_px < 1:
             return
         icon_h = icon.get_allocated_height()
-        if icon_h < 1:
-            icon_h = 16
+        # A height of a few pixels is the indicator before it is drawn. Using it
+        # pushes the finished mark onto the next line.
+        if icon_h < 12:
+            return
         icon.set_valign(Gtk.Align.START)
         icon.set_margin_top(max(0, int(round((line_px - icon_h) / 2.0))))
 
