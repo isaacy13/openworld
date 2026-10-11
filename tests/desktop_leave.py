@@ -114,6 +114,46 @@ def main() -> None:
         pump(context, 15)
         if dialogs(app, Gtk):
             raise SystemExit("Stay left the FBI dialog on the screen")
+        long_url = "https://www.fbi.gov/wanted/" + ("person-" * 800)
+        app.confirm_leave(long_url)
+        pump(context, 30)
+        tall = dialogs(app, Gtk)
+        if len(tall) != 1:
+            raise SystemExit(f"a long address did not show one dialog: {len(tall)}")
+        tall_dialog = tall[0]
+        screen = tall_dialog.get_display().get_monitors().get_item(0).get_geometry().height
+        tall_height = tall_dialog.get_height()
+        stay_button = next(button for button in walk(tall_dialog, Gtk.Button) if button.get_label() == "Stay")
+        open_button = next(button for button in walk(tall_dialog, Gtk.Button) if button.get_label() == "Open")
+        stay_box = bounds(tall_dialog, stay_button)
+        open_box = bounds(tall_dialog, open_button)
+        address_label = next(label for label in walk(tall_dialog, Gtk.Label) if label.get_text() == long_url)
+        adjustment = None
+        parent = address_label.get_parent()
+        while parent is not None and not isinstance(parent, Gtk.ScrolledWindow):
+            parent = parent.get_parent()
+        if isinstance(parent, Gtk.ScrolledWindow):
+            adjustment = parent.get_vadjustment()
+        reachable = (
+            tall_height <= screen
+            and stay_box is not None
+            and open_box is not None
+            and stay_box[1] + stay_box[3] <= tall_height + 1
+            and open_box[1] + open_box[3] <= tall_height + 1
+            and adjustment is not None
+            and adjustment.get_upper() > adjustment.get_page_size() + 1
+        )
+        if not reachable:
+            raise SystemExit(
+                "a long address pushed Stay and Open off the screen: "
+                f"dialog {tall_dialog.get_width()}x{tall_height}, screen {screen}, "
+                f"Stay {stay_box}, Open {open_box}, "
+                f"scroll {None if adjustment is None else (adjustment.get_value(), adjustment.get_upper(), adjustment.get_page_size())}"
+            )
+        stay_button.activate()
+        pump(context, 15)
+        if dialogs(app, Gtk):
+            raise SystemExit("Stay left the long address on the screen")
         app.confirm_leave("https://www.fbi.gov.evil.com/wanted")
         pump(context, 20)
         refused = dialogs(app, Gtk)

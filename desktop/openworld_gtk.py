@@ -1204,6 +1204,16 @@ class OpenWorld(Gtk.Application):
         frame.set_child(box)
         return frame
 
+    def _leave_address_height(self) -> int:
+        """Room for the address. The title and the buttons stay on the screen."""
+        height = 600
+        display = self.window.get_display()
+        if display is not None:
+            monitors = display.get_monitors()
+            if monitors is not None and monitors.get_n_items() > 0:
+                height = monitors.get_item(0).get_geometry().height
+        return max(96, height // 3)
+
     def leave_decision(self, url: str) -> tuple[str, str | None]:
         payload = self._run_json(
             ["--json", "leave", "--url", url],
@@ -1240,11 +1250,18 @@ class OpenWorld(Gtk.Application):
         dialog.add_button("Stay", Gtk.ResponseType.CANCEL)
         dialog.add_button("Open", Gtk.ResponseType.ACCEPT)
         # GTK 4 dropped format_secondary_text. A URL has no spaces, so the
-        # address wraps by character and stays inside the dialog.
+        # address wraps by character. A long address scrolls, and Stay and Open
+        # stay on the screen.
         address = Gtk.Label(label=allowed, wrap=True, xalign=0, selectable=True)
         address.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         address.set_max_width_chars(42)
-        dialog.get_message_area().append(address)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_child(address)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_propagate_natural_height(True)
+        scroll.set_max_content_height(self._leave_address_height())
+        scroll.set_overlay_scrolling(False)
+        dialog.get_message_area().append(scroll)
         dialog.connect("response", self._leave_response, allowed)
         dialog.present()
 
