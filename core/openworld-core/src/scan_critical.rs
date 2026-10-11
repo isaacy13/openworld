@@ -51,6 +51,7 @@ fn opts(out: Option<PathBuf>) -> ScanOpts {
         warnings: Vec::new(),
         out_dir: out,
         on_screen: None,
+        cover_index: None,
     }
 }
 

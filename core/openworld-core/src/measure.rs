@@ -233,6 +233,7 @@ fn still_opts(detection: DetectionSize) -> ScanOpts {
         warnings: Vec::new(),
         out_dir: None,
         on_screen: None,
+        cover_index: None,
     }
 }
 

@@ -163,6 +163,8 @@ pub struct ScanOpts {
     /// Frames on screen at a 5 Hz tick when the delays are not an even rate.
     /// Empty means the even rate already names those frames.
     pub on_screen: Option<Vec<u64>>,
+    /// The motion-photo cover. Measured coverage always reads this still.
+    pub cover_index: Option<u64>,
 }
 
 pub fn media_warnings(mtime: Option<SystemTime>, container: Option<SystemTime>, now: SystemTime) -> Vec<String> {
@@ -278,6 +280,11 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
         warnings,
         out_dir: Some(req.out_dir.clone()),
         on_screen: on_screen_frames(req.coverage, probed.fps, probed.frames, delays),
+        cover_index: if probed.motion_cover && probed.frames > 0 {
+            Some(probed.frames - 1)
+        } else {
+            None
+        },
     };
         let models = match open_models(&bundle, &pack) {
         Ok(models) => models,
@@ -390,6 +397,7 @@ fn scan_decoded_dir(
         warnings,
         out_dir: Some(req.out_dir.clone()),
         on_screen: on_screen_frames(req.coverage, fps, frames.len() as u64, delays),
+        cover_index: None,
     };
         let models = match open_models(bundle, pack) {
         Ok(models) => models,
@@ -552,7 +560,11 @@ impl<'a> Engine<'a> {
     }
 
     /// `measured` keeps the frame on screen at each 5 Hz tick. `complete` keeps every frame.
+    /// The cover is the last picture, so reading it does not move the tick.
     fn take_sample(&mut self, index: u64) -> bool {
+        if self.opts.cover_index == Some(index) {
+            return true;
+        }
         if self.opts.coverage != Coverage::Measured {
             return true;
         }
@@ -1168,8 +1180,8 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         return Err(refused("unreadable", "The file could not be read. Refusing."));
     }
     let bundle = require_bundle(&req.bundles_dir, &req.bundle_id)?;
-    let (frames, fps, duration, long_side) = if let Some(media) = &req.media {
-        (media.frames, media.fps, media_duration(media), media.width.max(media.height))
+    let (mut frames, mut fps, duration, long_side, mut cover) = if let Some(media) = &req.media {
+        (media.frames, media.fps, media_duration(media), media.width.max(media.height), false)
     } else {
         let probed = decode::probe(&req.input).map_err(|_| refused("bad_codec", "Bad codec or unreadable file. Refusing."))?;
         let duration = if probed.video {
@@ -1183,13 +1195,22 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         } else {
             0.0
         };
-        (probed.frames.max(1), probed.fps, duration, probed.width.max(probed.height))
+        (
+            probed.frames.max(1),
+            probed.fps,
+            duration,
+            probed.width.max(probed.height),
+            probed.motion_cover,
+        )
     };
     // A GIF frame that stays up is one picture, however many average-rate slots it covers.
-    let (frames, fps) = match on_screen_frames(req.coverage, fps, frames, decode::gif_delays(&req.input)) {
-        Some(keep) if !keep.is_empty() => (keep.len() as u64, 1.0),
-        _ => (frames, fps),
-    };
+    if let Some(keep) = on_screen_frames(req.coverage, fps, frames, decode::gif_delays(&req.input)) {
+        if !keep.is_empty() {
+            frames = keep.len() as u64;
+            fps = 1.0;
+            cover = false;
+        }
+    }
     Ok(crate::estimate::estimate(&crate::estimate::EstimateInput {
         frames: frames.max(1),
         fps,
@@ -1200,6 +1221,7 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         bundle_factor: bundle.estimate_factor,
         execution: req.execution,
         form_factor: req.form_factor,
+        cover,
     }))
 }
 

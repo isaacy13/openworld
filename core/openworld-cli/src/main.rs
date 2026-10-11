@@ -2039,6 +2039,7 @@ mod cli_tests {
                 bundle_factor: 1.0,
                 execution: openworld_core::Execution::Cpu,
                 form_factor: FormFactor::Phone,
+                cover: false,
             });
         let lines = estimate_lines(
             &measured,
@@ -2139,6 +2140,7 @@ mod cli_tests {
                 bundle_factor: 1.0,
                 execution: openworld_core::Execution::Cpu,
                 form_factor: FormFactor::Computer,
+                cover: false,
             }),
             "Fast",
             DetectionSize::Full,

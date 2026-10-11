@@ -49,6 +49,7 @@ fn opts(detection: DetectionSize, coverage: Coverage) -> ScanOpts {
         warnings: Vec::new(),
         out_dir: None,
         on_screen: None,
+        cover_index: None,
     }
 }
 
@@ -2637,6 +2638,64 @@ fn a_motion_photo_keeps_a_face_that_is_only_on_the_still() {
     assert_eq!(report.frames_decoded, 3);
     assert_eq!(report.summary, POSSIBLE_CANDIDATE);
     assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+#[test]
+fn a_measured_motion_photo_keeps_a_face_that_is_only_on_the_still() {
+    // Two frames at 30 fps, then the cover. Measured coverage keeps index 0.
+    // The cover is index 2, the same slot a full scan already matches, and it
+    // is not a 5 Hz tick.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let still = dir.path().join("scene.jpg");
+    let movie = dir.path().join("blank.mp4");
+    let photo = dir.path().join("cover.jpg");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "1"])
+        .arg(&still)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let blank = Command::new("ffmpeg")
+        .args([
+            "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=30", "-frames:v", "2", "-an", "-c:v",
+            "libx264", "-pix_fmt", "yuv420p",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank.success());
+    stitch_motion_directory(&still, &movie, &photo);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = ScanRequest {
+        input: photo,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack,
+        out_dir: dir.path().join("out"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Measured,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let report = scan_path(&request, &mut |_| {});
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 3);
+    assert_eq!(report.frames_analyzed, 2);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+    let estimate = openworld_core::scan::estimate_for(&request).expect("estimate");
+    assert_eq!(estimate.frames_analyzed, report.frames_analyzed);
 }
 
 fn write_jpeg_xmp(jpg: &[u8], xmp: &[u8], trailer: &[u8], out: &std::path::Path) {

@@ -115,6 +115,8 @@ pub struct EstimateInput {
     pub bundle_factor: f64,
     pub execution: Execution,
     pub form_factor: FormFactor,
+    /// The last frame is a motion-photo cover. Measured coverage reads it.
+    pub cover: bool,
 }
 
 pub fn estimate(input: &EstimateInput) -> Estimate {
@@ -158,7 +160,15 @@ fn analyzed_frames(input: &EstimateInput) -> u64 {
         // The same frames `take_measured_sample` keeps. A rounded duration is
         // one frame short at 29.97 fps, and that frame changes a 4K plan.
         Coverage::Measured => {
-            let n = crate::geom::sample_indices(frames, input.fps, true).len() as u64;
+            let kept = crate::geom::sample_indices(frames, input.fps, true);
+            let mut n = kept.len() as u64;
+            // The cover is past the last 5 Hz tick. The plan counts that still.
+            if input.cover {
+                let last = frames.saturating_sub(1);
+                if kept.last().copied() != Some(last) {
+                    n = n.saturating_add(1);
+                }
+            }
             n.clamp(1, frames)
         }
     }
@@ -209,6 +219,7 @@ mod tests {
             bundle_factor: 1.0,
             execution: Execution::Cpu,
             form_factor: FormFactor::Computer,
+            cover: false,
         }
     }
 

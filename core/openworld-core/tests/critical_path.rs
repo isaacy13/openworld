@@ -652,6 +652,7 @@ fn an_onnx_pack_without_weights_refuses_before_a_clearance() {
         warnings: Vec::new(),
         out_dir: None,
         on_screen: None,
+        cover_index: None,
     };
     let report = scan_images(&[blank(80, 80)], &fast, &loaded, &opts, &mut |_| {});
     assert_eq!(report.refusal.as_deref(), Some("missing_weights"));
@@ -933,6 +934,7 @@ fn a_result_file_that_cannot_be_written_stays_incomplete() {
         warnings: Vec::new(),
         out_dir: Some(out.clone()),
         on_screen: None,
+        cover_index: None,
     };
     let images = scan_images(&[scene.image], &bundle, &loaded, &opts, &mut block);
     assert_unwritable(&images, &out);

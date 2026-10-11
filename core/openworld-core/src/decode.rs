@@ -43,6 +43,8 @@ pub struct Probe {
     pub square_pixels: bool,
     /// Which video stream a player shows, as `v:N`. Stills leave this at 0.
     pub shown_stream: usize,
+    /// The last frame is the JPEG cover of a motion photo. Measured coverage reads it.
+    pub motion_cover: bool,
 }
 
 #[derive(Debug)]
@@ -67,6 +69,7 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
     if let Some(clip) = motion_clip(path)? {
         let mut info = probe_video(&clip.path)?;
         info.frames = info.frames.saturating_add(1);
+        info.motion_cover = true;
         return Ok(info);
     }
     if let Some(info) = probe_image(path) {
@@ -92,6 +95,7 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
                 let keep = on_frame(stats.frames_decoded, &cover);
                 stats.frames_decoded = stats.frames_decoded.saturating_add(1);
                 stats.probe.frames = stats.probe.frames.saturating_add(1);
+                stats.probe.motion_cover = true;
                 if !keep {
                     stats.clean = false;
                 }
@@ -363,6 +367,7 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
         video: moving,
         square_pixels: false,
         shown_stream: 0,
+        motion_cover: false,
     })
 }
 
@@ -521,6 +526,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
         video: false,
         square_pixels: false,
         shown_stream: 0,
+        motion_cover: false,
     })
 }
 
@@ -542,6 +548,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         video: false,
         square_pixels: false,
         shown_stream: 0,
+        motion_cover: false,
     };
     let mut frame = None;
     let stats = decode_video(path, &stored, &mut |_, image| {
@@ -575,6 +582,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
             video: false,
             square_pixels: false,
             shown_stream: 0,
+            motion_cover: false,
         },
     })
 }
@@ -698,6 +706,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         video: false,
         square_pixels: false,
         shown_stream: 0,
+        motion_cover: false,
     })
 }
 
@@ -976,6 +985,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         video: true,
         square_pixels,
         shown_stream: shown,
+        motion_cover: false,
     })
 }
 
