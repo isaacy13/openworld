@@ -364,6 +364,33 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAPinnedWarningLeavesThePageReachable() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let body = view.components(separatedBy: "public var body").dropFirst().first?
+            .components(separatedBy: "private var choose").first ?? ""
+        XCTAssertTrue(
+            body.contains("ScrollView") && body.contains("geo.size.height / 2"),
+            "a pinned warning can cover the page: \(body.prefix(280))"
+        )
+        let estimate = view.components(separatedBy: "private var estimate:").dropFirst().first?
+            .components(separatedBy: "private var estimateColumn").first ?? ""
+        XCTAssertFalse(
+            estimate.contains("deleteNotice"),
+            "the estimate warning sits outside the height cap"
+        )
+        let results = view.components(separatedBy: "private var results:").dropFirst().first?
+            .components(separatedBy: "private var resultsColumn").first ?? ""
+        XCTAssertFalse(
+            results.contains("deleteNotice") || results.contains("leaveError"),
+            "the result warning sits outside the height cap"
+        )
+    }
+
     func testChooseFileInTheMacToolbarStaysOffWhileScanning() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

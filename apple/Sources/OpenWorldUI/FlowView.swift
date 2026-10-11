@@ -777,37 +777,64 @@ public struct FlowView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if model.showsTopError, let error = model.error {
-                Text(error)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-            }
-            if let notice = model.deleteNotice, !notice.isEmpty,
-               model.step != .estimate, model.step != .results {
-                Text(notice)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-            }
-            Group {
-            switch model.step {
-            case .choose:
-                choose
-            case .device:
-                device
-            case .bundle:
-                bundles
-            case .size:
-                size
-            case .estimate:
-                estimate
-            case .results:
-                results
-            }
+        // A short warning stays put while the page scrolls. A stack of warnings
+        // keeps the page reachable on a short screen.
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                if hasPinnedNotice {
+                    ScrollView {
+                        pinnedNoticeColumn
+                    }
+                    .frame(maxHeight: geo.size.height / 2)
+                }
+                Group {
+                    switch model.step {
+                    case .choose:
+                        choose
+                    case .device:
+                        device
+                    case .bundle:
+                        bundles
+                    case .size:
+                        size
+                    case .estimate:
+                        estimate
+                    case .results:
+                        results
+                    }
+                }
             }
         }
+    }
+
+    private var hasPinnedNotice: Bool {
+        if model.showsTopError, let error = model.error, !error.isEmpty { return true }
+        if model.step == .results, let notice = model.leaveError, !notice.isEmpty { return true }
+        if let notice = model.deleteNotice, !notice.isEmpty { return true }
+        return false
+    }
+
+    private var pinnedNoticeColumn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.showsTopError, let error = model.error, !error.isEmpty {
+                Text(error)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if model.step == .results, let notice = model.leaveError, !notice.isEmpty {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let notice = model.deleteNotice, !notice.isEmpty {
+                Text(notice)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var choose: some View {
@@ -904,21 +931,13 @@ public struct FlowView: View {
     }
 
     private var estimate: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let notice = model.deleteNotice, !notice.isEmpty {
-                Text(notice)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-            }
-            ScrollViewReader { proxy in
-                ScrollView { estimateColumn }
-                    .onChange(of: model.scanning, initial: false) { _, scanning in
-                        if scanning {
-                            proxy.scrollTo("estimateHeadline", anchor: .top)
-                        }
+        ScrollViewReader { proxy in
+            ScrollView { estimateColumn }
+                .onChange(of: model.scanning, initial: false) { _, scanning in
+                    if scanning {
+                        proxy.scrollTo("estimateHeadline", anchor: .top)
                     }
-            }
+                }
         }
     }
 
@@ -988,21 +1007,7 @@ public struct FlowView: View {
 
     @ViewBuilder
     private var results: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let notice = model.leaveError, !notice.isEmpty {
-                Text(notice)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-            }
-            if let notice = model.deleteNotice, !notice.isEmpty {
-                Text(notice)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-            }
-            ScrollView { resultsColumn }
-        }
+        ScrollView { resultsColumn }
         .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
             Button("Open") {
                 if let url = model.leavingURL { openURL(url) }
