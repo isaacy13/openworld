@@ -126,6 +126,7 @@ object PlatformDecode {
             null
         }
         val fullRange = videoIsFullRange(range)
+        val shownTimes = ArrayList<Long>()
         try {
             while (true) {
                 if (stopped()) throw DecodeStopped()
@@ -173,6 +174,7 @@ object PlatformDecode {
                             if (first !== bitmap) first.recycle()
                             bitmap.recycle()
                         }
+                        shownTimes.add(info.presentationTimeUs)
                         written += 1
                     } else {
                         image?.close()
@@ -187,7 +189,24 @@ object PlatformDecode {
             extractor.release()
         }
         if (written == 0) throw IOException("Bad codec or unreadable file. Refusing.")
-        return meta.copy(frames = written.toLong(), directory = directory)
+        // The scan reads these gaps. A steady rate stays on the frame-rate path,
+        // because a rounded gap would pick a different frame than that path.
+        val trackFps = mediaFrameRate(format)
+        val pictureUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+            try {
+                format.getLong(MediaFormat.KEY_DURATION)
+            } catch (_: RuntimeException) {
+                0L
+            }
+        } else {
+            0L
+        }
+        val text = videoPresentationText(shownTimes, pictureUs, if (trackFps > 0.0) trackFps else meta.fps)
+        if (text != null) {
+            File(directory, "presentation.txt").writeText(text)
+        }
+        val fps = if (trackFps > 0.0) trackFps else meta.fps
+        return meta.copy(frames = written.toLong(), fps = fps, directory = directory)
     }
 
 
@@ -259,6 +278,9 @@ object PlatformDecode {
             return null
         }
         val format = extractor.getTrackFormat(index)
+        // One sample is one picture. A held picture is a long gap, not another
+        // frame at the average rate. The estimate counts the pictures on screen.
+        val timesUs = sampleTimes(extractor, index)
         extractor.release()
         val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
         if (!mime.startsWith("video/")) return null
@@ -273,7 +295,26 @@ object PlatformDecode {
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
         val frames = videoFrameCount(duration, fps)
         if (frames <= 0L) throw IOException("Bad codec or unreadable file. Refusing.")
-        return Facts(shown.first, shown.second, fps, frames, duration, true)
+        val delays = videoPresentationDelays(timesUs, durationUs)
+        val (plannedFrames, plannedFps) = measuredVideoFacts(frames, fps, delays)
+        return Facts(shown.first, shown.second, plannedFps, plannedFrames, duration, true)
+    }
+
+    /** Display times, in microseconds. Empty when the extractor cannot walk samples. */
+    private fun sampleTimes(extractor: MediaExtractor, index: Int): List<Long> {
+        val times = ArrayList<Long>()
+        try {
+            extractor.selectTrack(index)
+            while (times.size < 1_000_000) {
+                val sample = extractor.sampleTime
+                if (sample < 0L) break
+                times.add(sample)
+                if (!extractor.advance()) break
+            }
+        } catch (_: RuntimeException) {
+            times.clear()
+        }
+        return times
     }
 
     /**
@@ -381,6 +422,79 @@ internal fun mediaFrameRate(format: MediaFormat): Double {
     } catch (_: ClassCastException) {
         format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()
     }
+}
+
+/**
+ * Seconds each picture stays up, from display timestamps.
+ * The last picture runs to the end of the track. A missing clock has no list.
+ */
+internal fun videoPresentationDelays(timesUs: List<Long>, durationUs: Long): List<Double>? {
+    if (timesUs.size < 2 || timesUs.any { it < 0L }) return null
+    val delays = ArrayList<Double>(timesUs.size)
+    for (index in 0 until timesUs.size - 1) {
+        val gap = (timesUs[index + 1] - timesUs[index]) / 1_000_000.0
+        if (!gap.isFinite() || gap < 0.0) return null
+        delays.add(gap)
+    }
+    val lastStart = timesUs.last()
+    val last = if (durationUs > lastStart) (durationUs - lastStart) / 1_000_000.0 else delays.last()
+    if (!last.isFinite() || last < 0.0) return null
+    delays.add(last)
+    if (delays.all { it == 0.0 }) return null
+    return delays
+}
+
+/** A held picture is not the average rate. A steady camera rate is left on that path. */
+internal fun presentationVaries(delays: List<Double>, fps: Double): Boolean {
+    if (!fps.isFinite() || fps <= 0.0) return false
+    val nominal = 1.0 / fps
+    val slack = nominal * 0.5
+    return delays.any { delay -> kotlin.math.abs(delay - nominal) > slack }
+}
+
+/**
+ * The estimate counts pictures on screen. Passing that count at 1 fps keeps
+ * each of them. A steady rate keeps the track's own frame count.
+ */
+internal fun measuredVideoFacts(rateFrames: Long, fps: Double, delays: List<Double>?): Pair<Long, Double> {
+    if (delays == null || !presentationVaries(delays, fps)) return rateFrames to fps
+    val keep = framesOnScreen(delays)
+    if (keep.isEmpty()) return rateFrames to fps
+    return keep.size.toLong() to 1.0
+}
+
+/** One delay per line, with a period, for the scan's presentation file. Null when the rate is enough. */
+internal fun videoPresentationText(timesUs: List<Long>, durationUs: Long, fps: Double): String? {
+    val delays = videoPresentationDelays(timesUs, durationUs) ?: return null
+    if (!presentationVaries(delays, fps)) return null
+    return delays.joinToString(separator = "\n") { delay ->
+        String.format(java.util.Locale.US, "%.4f", delay)
+    } + "\n"
+}
+
+/** Frames on screen at each 5 Hz tick. The same rule as the scan. */
+internal fun framesOnScreen(delays: List<Double>): List<Int> {
+    if (delays.isEmpty()) return emptyList()
+    val starts = ArrayList<Double>(delays.size)
+    var end = 0.0
+    for (delay in delays) {
+        if (!delay.isFinite() || delay < 0.0) return listOf(0)
+        starts.add(end)
+        end += delay
+    }
+    if (!(end > 0.0) || !end.isFinite()) return listOf(0)
+    val out = ArrayList<Int>()
+    var tick = 0
+    while (tick <= 1_000_000) {
+        val whenSec = tick / 5.0
+        if (!whenSec.isFinite() || whenSec + 1e-9 >= end) break
+        val found = starts.binarySearch(whenSec)
+        val idx = if (found >= 0) found else (-found - 1).coerceAtLeast(1) - 1
+        if (out.lastOrNull() != idx) out.add(idx)
+        tick += 1
+    }
+    if (out.isEmpty()) out.add(0)
+    return out
 }
 
 internal fun videoFrameCount(durationSec: Double, fps: Double): Long {

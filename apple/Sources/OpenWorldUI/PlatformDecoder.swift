@@ -140,11 +140,16 @@ enum PlatformDecoder {
             guard frames > 0 else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
+            // A held picture is a long gap between samples. The estimate counts
+            // the pictures on screen, not the average rate.
+            let times = compressedTimes(asset: asset, track: track)
+            let delays = VideoDisplay.presentationDelays(times: times, duration: seconds)
+            let plan = VideoDisplay.measuredPlan(rateFrames: frames, fps: rate, delays: delays)
             return Facts(
                 width: shown.0,
                 height: shown.1,
-                fps: rate,
-                frames: frames,
+                fps: plan.fps,
+                frames: plan.frames,
                 duration: seconds,
                 video: true,
                 containerUnix: nil,
@@ -260,6 +265,7 @@ enum PlatformDecoder {
         }
         let context = CIContext()
         var index = 0
+        var shownTimes: [Double] = []
         while reader.status == .reading {
             if stopped() {
                 reader.cancelReading()
@@ -280,14 +286,45 @@ enum PlatformDecoder {
                 format: .RGBA8,
                 colorSpace: CGColorSpaceCreateDeviceRGB()
             )
+            let when = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            if when.isFinite, when >= 0 {
+                shownTimes.append(when)
+            }
             index += 1
         }
         if reader.status == .failed || index == 0 {
             throw failure("Bad codec or unreadable file. Refusing.")
         }
+        let rate = frameRate(track)
         facts.frames = index
+        facts.fps = rate
         facts.directory = directory
+        // The scan reads these gaps. A steady rate stays on the frame-rate path.
+        if let text = VideoDisplay.presentationText(times: shownTimes, duration: facts.duration, fps: rate) {
+            try text.write(to: directory.appendingPathComponent("presentation.txt"), atomically: true, encoding: .utf8)
+        }
         return facts
+    }
+
+    /// Display times of the compressed samples. The pixels stay compressed.
+    private static func compressedTimes(asset: AVAsset, track: AVAssetTrack) -> [Double] {
+        guard let reader = try? AVAssetReader(asset: asset) else { return [] }
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return [] }
+        reader.add(output)
+        guard reader.startReading() else { return [] }
+        var times: [Double] = []
+        while times.count < 1_000_000, let sample = output.copyNextSampleBuffer() {
+            let when = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            if when.isFinite, when >= 0 {
+                times.append(when)
+            }
+        }
+        if reader.status == .reading {
+            reader.cancelReading()
+        }
+        return times
     }
 
     private static func isVideo(_ url: URL) -> Bool {

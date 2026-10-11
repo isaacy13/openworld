@@ -833,6 +833,31 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aHeldVideoFrameIsThePictureOnScreen() {
+        // Twenty pictures. Nineteen last 0.04 s and one stays up for 2 s.
+        // The average rate skips that picture. It is on screen at a 5 Hz tick.
+        val times = ArrayList<Long>()
+        var cursor = 0L
+        repeat(20) { index ->
+            times.add(cursor)
+            cursor += if (index == 9) 2_000_000L else 40_000L
+        }
+        val delays = videoPresentationDelays(times, cursor)
+        assertNotNull(delays)
+        assertEquals(listOf(0, 5, 9, 11, 16), framesOnScreen(delays!!))
+        val average = delays.size / delays.sum()
+        val (plannedFrames, plannedFps) = measuredVideoFacts(delays.size.toLong(), average, delays)
+        assertEquals(5L, plannedFrames)
+        assertEquals(1.0, plannedFps, 0.0)
+        val text = videoPresentationText(times, cursor, 25.0)
+        assertNotNull(text)
+        assertEquals("2.0000", text!!.trim().lines()[9])
+        val steady = (0 until 20).map { it * 40_000L }
+        assertNull(videoPresentationText(steady, 800_000L, 25.0))
+        assertEquals(20L to 25.0, measuredVideoFacts(20L, 25.0, videoPresentationDelays(steady, 800_000L)))
+    }
+
+    @Test
     fun aOneFrameGifStaysOneFrame() {
         val gif = File.createTempFile("ow-one", ".gif")
         ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=64x64", "-frames:v", "1", gif.absolutePath)

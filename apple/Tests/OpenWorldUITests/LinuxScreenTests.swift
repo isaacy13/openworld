@@ -1657,6 +1657,31 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0, rate: 10), 1)
     }
 
+    func testAHeldVideoFrameIsThePictureOnScreen() {
+        // Twenty pictures. Nineteen last 0.04 s and one stays up for 2 s.
+        // The average rate skips that picture. It is on screen at a 5 Hz tick.
+        var times: [Double] = []
+        var cursor = 0.0
+        for index in 0..<20 {
+            times.append(cursor)
+            cursor += index == 9 ? 2.0 : 0.04
+        }
+        let delays = VideoDisplay.presentationDelays(times: times, duration: cursor)
+        XCTAssertEqual(VideoDisplay.framesOnScreen(delays ?? []), [0, 5, 9, 11, 16])
+        let average = Double(delays?.count ?? 0) / (delays?.reduce(0, +) ?? 1)
+        let plan = VideoDisplay.measuredPlan(rateFrames: delays?.count ?? 0, fps: average, delays: delays)
+        XCTAssertEqual(plan.frames, 5)
+        XCTAssertEqual(plan.fps, 1)
+        let text = VideoDisplay.presentationText(times: times, duration: cursor, fps: 25)
+        XCTAssertEqual(text?.split(separator: "\n").map(String.init)[9], "2.0000")
+        let steady = (0..<20).map { Double($0) * 0.04 }
+        XCTAssertNil(VideoDisplay.presentationText(times: steady, duration: 0.8, fps: 25))
+        let even = VideoDisplay.presentationDelays(times: steady, duration: 0.8)
+        let steadyPlan = VideoDisplay.measuredPlan(rateFrames: 20, fps: 25, delays: even)
+        XCTAssertEqual(steadyPlan.frames, 20)
+        XCTAssertEqual(steadyPlan.fps, 25)
+    }
+
     func testAFrameCountThatDoesNotFitRefusesInsteadOfTrapping() {
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 1e20, rate: 30), 0)
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 1e200, rate: 1e200), 0)
