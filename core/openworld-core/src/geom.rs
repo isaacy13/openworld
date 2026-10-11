@@ -153,8 +153,13 @@ pub fn blank(w: u32, h: u32) -> RgbImage {
     RgbImage::from_pixel(w, h, Rgb([255, 255, 255]))
 }
 
+fn measured_step(fps: f64) -> f64 {
+    if fps <= 5.0 { 1.0 } else { fps / 5.0 }
+}
+
 /// Frame indexes the detector will see.
-/// `measured` is 5 frames a second. `complete` is every frame.
+/// `measured` is the frame on screen at each 5 Hz tick. `complete` is every frame.
+/// Tick `k` is time `k/5` seconds, so the index is `floor(k * fps / 5)`.
 pub fn sample_indices(frame_count: u64, fps: f64, measured: bool) -> Vec<u64> {
     if frame_count == 0 {
         return Vec::new();
@@ -162,23 +167,66 @@ pub fn sample_indices(frame_count: u64, fps: f64, measured: bool) -> Vec<u64> {
     if !measured {
         return (0..frame_count).collect();
     }
-    let step = if fps <= 5.0 { 1.0 } else { fps / 5.0 };
+    let step = measured_step(fps);
+    if !(step > 0.0) || !step.is_finite() {
+        return vec![0];
+    }
     let mut out = Vec::new();
-    let mut t = 0.0_f64;
-    while t < frame_count as f64 {
+    let mut tick = 0u64;
+    while tick <= frame_count {
+        let t = tick as f64 * step;
+        if !t.is_finite() || t >= frame_count as f64 {
+            break;
+        }
         let idx = t.floor() as u64;
         if idx < frame_count && out.last().copied() != Some(idx) {
             out.push(idx);
         }
-        t += step;
-        if step <= 0.0 {
-            break;
-        }
+        tick += 1;
     }
     if out.is_empty() {
         out.push(0);
     }
     out
+}
+
+/// Whether frame `index` is on screen at the next 5 Hz tick.
+/// `next_tick` starts at 0. A skipped index advances the clock, so one missing
+/// frame does not stall the rest of the video.
+pub fn take_measured_sample(index: u64, next_tick: &mut u64, fps: f64) -> bool {
+    let step = measured_step(fps);
+    if !(step > 0.0) || !step.is_finite() {
+        return false;
+    }
+    let mut hops = 0u64;
+    loop {
+        let t = *next_tick as f64 * step;
+        if !t.is_finite() {
+            return false;
+        }
+        let want = t.floor() as u64;
+        if index < want {
+            return false;
+        }
+        if index == want {
+            *next_tick = next_tick.saturating_add(1);
+            let mut extra = 0u32;
+            while extra < 8 {
+                let later = *next_tick as f64 * step;
+                if !later.is_finite() || later.floor() as u64 != index {
+                    break;
+                }
+                *next_tick = next_tick.saturating_add(1);
+                extra += 1;
+            }
+            return true;
+        }
+        *next_tick = next_tick.saturating_add(1);
+        hops += 1;
+        if hops > index.saturating_add(1) {
+            return false;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -207,10 +255,39 @@ mod tests {
         assert!(orig.short() < FACE_COMPARE_PX);
     }
 
+    fn kept(fps: f64, frames: u64) -> Vec<u64> {
+        let mut tick = 0u64;
+        (0..frames).filter(|&index| take_measured_sample(index, &mut tick, fps)).collect()
+    }
+
     #[test]
     fn measured_is_five_frames_a_second() {
         let idx = sample_indices(90, 30.0, true);
         assert_eq!(idx, vec![0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84]);
         assert_eq!(sample_indices(5, 30.0, false).len(), 5);
+    }
+
+    #[test]
+    fn film_rate_samples_the_frame_on_screen() {
+        // 48 frames at 24 fps is two seconds. The frame on screen at each 5 Hz tick
+        // is floor(k * 4.8), not the following frame the scan used to keep.
+        let on_screen = vec![0, 4, 9, 14, 19, 24, 28, 33, 38, 43];
+        assert_eq!(sample_indices(48, 24.0, true), on_screen);
+        assert_eq!(kept(24.0, 48), on_screen);
+        assert_ne!(kept(24.0, 48), vec![0, 5, 10, 15, 20, 24, 29, 34, 39, 44]);
+        assert_eq!(kept(30.0, 90), sample_indices(90, 30.0, true));
+        assert_eq!(kept(29.97, 60), sample_indices(60, 29.97, true));
+        assert_eq!(kept(10.0, 20), sample_indices(20, 10.0, true));
+        assert_eq!(kept(1.0, 8), sample_indices(8, 1.0, true));
+        assert_eq!(kept(0.0, 4), sample_indices(4, 0.0, true));
+    }
+
+    #[test]
+    fn a_missing_frame_does_not_stall_measured_sampling() {
+        let mut tick = 0u64;
+        assert!(take_measured_sample(0, &mut tick, 24.0));
+        assert!(take_measured_sample(9, &mut tick, 24.0));
+        assert!(!take_measured_sample(10, &mut tick, 24.0));
+        assert!(take_measured_sample(14, &mut tick, 24.0));
     }
 }

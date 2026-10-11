@@ -418,7 +418,7 @@ struct Engine<'a> {
     tracker: ByteTrack,
     models: Option<FaceModels>,
     runtime_failure: Option<String>,
-    next_sample: f64,
+    next_tick: u64,
     inventory: Vec<InventoryItem>,
     candidates: Vec<Candidate>,
     comparisons: Vec<Comparison>,
@@ -440,7 +440,7 @@ impl<'a> Engine<'a> {
             tracker: ByteTrack::new(),
             models,
             runtime_failure: None,
-            next_sample: 0.0,
+            next_tick: 0,
             inventory: Vec::new(),
             candidates: Vec::new(),
             comparisons: Vec::new(),
@@ -515,20 +515,12 @@ impl<'a> Engine<'a> {
         true
     }
 
-    /// `measured` keeps about 5 frames a second. `complete` keeps every frame.
+    /// `measured` keeps the frame on screen at each 5 Hz tick. `complete` keeps every frame.
     fn take_sample(&mut self, index: u64) -> bool {
         if self.opts.coverage != Coverage::Measured {
             return true;
         }
-        let step = if self.opts.fps <= 5.0 { 1.0 } else { self.opts.fps / 5.0 };
-        if (index as f64) + 1e-6 < self.next_sample {
-            return false;
-        }
-        if index < self.next_sample.floor() as u64 {
-            return false;
-        }
-        self.next_sample += step;
-        true
+        geom::take_measured_sample(index, &mut self.next_tick, self.opts.fps)
     }
 
     fn ingest(
