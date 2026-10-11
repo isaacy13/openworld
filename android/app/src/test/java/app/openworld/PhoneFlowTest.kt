@@ -698,6 +698,28 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aGifRgbBufferThatDoesNotFitIsRefused() {
+        // 30000² fits in a signed 32-bit pixel count. The RGB buffer is three
+        // bytes a pixel, and that count does not. Continue allocates it.
+        assertFalse(GifFrames.screenFits(30_000, 30_000))
+        val bytes = ByteArray(14)
+        "GIF89a".encodeToByteArray().copyInto(bytes)
+        bytes[6] = 0x30
+        bytes[7] = 0x75
+        bytes[8] = 0x30
+        bytes[9] = 0x75
+        bytes[13] = 0x3B
+        val file = File.createTempFile("ow-rgb-gif", ".gif")
+        file.writeBytes(bytes)
+        try {
+            PlatformDecode.facts(file)
+            throw AssertionError("a screen whose RGB buffer does not fit should be refused")
+        } catch (err: java.io.IOException) {
+            assertTrue(err.message!!.contains("Refusing."))
+        }
+    }
+
+    @Test
     fun anAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() {
         val gif = laterFrameGif()
         val facts = PlatformDecode.facts(gif)

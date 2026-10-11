@@ -323,13 +323,15 @@ object GifFrames {
     private fun bad(): IOException = IOException("Bad codec or unreadable file. Refusing.")
 
     /**
-     * A GIF size is 16-bit. The product has to fit in a signed 32-bit count.
-     * A wrapped product is negative, and allocating that canvas crashes Continue.
+     * A GIF size is 16-bit. The pixels can fit in a signed 32-bit count while the
+     * RGB buffer, three bytes a pixel plus one filter byte a row, does not.
+     * A wrapped length crashes Continue instead of refusing the file.
      */
     internal fun screenFits(width: Int, height: Int): Boolean {
         if (width < 0 || height < 0) return false
-        val count = width.toLong() * height.toLong()
-        return count <= Int.MAX_VALUE.toLong()
+        val pixels = width.toLong() * height.toLong()
+        val stored = pixels * 3 + height.toLong()
+        return stored <= Int.MAX_VALUE.toLong()
     }
 
     private operator fun ByteArray.plus(extra: Byte): ByteArray {

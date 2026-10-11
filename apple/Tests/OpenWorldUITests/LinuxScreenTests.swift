@@ -1448,6 +1448,25 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAGifRgbBufferThatDoesNotFitIsRefused() throws {
+        // 30000² fits in a signed 32-bit pixel count. The RGB buffer does not.
+        XCTAssertNil(GifFrames.canvasPixels(width: 30000, height: 30000))
+        guard GifFrames.canvasPixels(width: 30000, height: 30000) == nil else { return }
+        XCTAssertEqual(GifFrames.canvasPixels(width: 2, height: 2), 4)
+        var bytes = [UInt8](repeating: 0, count: 14)
+        bytes.replaceSubrange(0..<6, with: Array("GIF89a".utf8))
+        bytes[6] = 0x30
+        bytes[7] = 0x75
+        bytes[8] = 0x30
+        bytes[9] = 0x75
+        bytes[13] = 0x3B
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-rgb-gif-\(UUID().uuidString).gif")
+        try Data(bytes).write(to: url)
+        XCTAssertThrowsError(try GifFrames.read(url)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("Refusing."))
+        }
+    }
+
     func testAnAnimatedGifKeepsAFaceThatIsNotOnTheFirstFrame() throws {
         let gif = try laterFrameGif()
         let frames = FileManager.default.temporaryDirectory.appendingPathComponent("ow-gif-\(UUID().uuidString)")

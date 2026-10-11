@@ -71,13 +71,18 @@ public enum GifFrames {
         return reel
     }
 
-    /// A GIF size is 16-bit. The product has to fit in a signed 32-bit count.
-    /// A wrapped product crashes the canvas allocation instead of refusing the file.
+    /// A GIF size is 16-bit. The pixels can fit in a signed 32-bit count while the
+    /// RGB buffer, three bytes a pixel plus one filter byte a row, does not.
+    /// A wrapped length crashes the canvas allocation instead of refusing the file.
     static func canvasPixels(width: Int, height: Int) -> Int? {
         guard width >= 0, height >= 0 else { return nil }
-        let (count, overflow) = width.multipliedReportingOverflow(by: height)
-        guard !overflow, count <= Int(Int32.max) else { return nil }
-        return count
+        let (pixels, pixelOverflow) = width.multipliedReportingOverflow(by: height)
+        guard !pixelOverflow else { return nil }
+        let (rgb, rgbOverflow) = pixels.multipliedReportingOverflow(by: 3)
+        guard !rgbOverflow else { return nil }
+        let (stored, storedOverflow) = rgb.addingReportingOverflow(height)
+        guard !storedOverflow, stored <= Int(Int32.max) else { return nil }
+        return pixels
     }
 
     /// One delay, in seconds, for presentation.txt. The scan parses the line as a number.
