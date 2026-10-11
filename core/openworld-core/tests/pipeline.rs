@@ -1145,6 +1145,105 @@ fn a_held_video_frame_is_the_picture_at_a_sample_tick() {
 }
 
 #[test]
+fn a_held_matroska_picture_is_on_screen_without_a_frame_count() {
+    // Matroska omits nb_frames and keeps the nominal rate. Duration times that
+    // rate is not the pictures, so the average step skips the one that stays up.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let (width, height) = scene.image.dimensions();
+    for index in 0..20 {
+        let path = dir.path().join(format!("f{index:02}.png"));
+        let image = if index == 9 {
+            scene.image.clone()
+        } else {
+            let mut plain = blank(width, height);
+            plain.put_pixel(index, 0, image::Rgb([index.saturating_mul(8) as u8, 1, 1]));
+            plain
+        };
+        image.save(&path).unwrap();
+    }
+    let steady = dir.path().join("steady.mkv");
+    let movie = dir.path().join("held.mkv");
+    let encoded = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-framerate",
+            "25",
+            "-start_number",
+            "0",
+            "-i",
+        ])
+        .arg(dir.path().join("f%02d.png"))
+        .args([
+            "-frames:v",
+            "20",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-g",
+            "1",
+            "-bf",
+            "0",
+        ])
+        .arg(&steady)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let held = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&steady)
+        .args([
+            "-c",
+            "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,10),PTS,PTS+12800)':dts='if(lt(N\\,10),DTS,DTS+12800)'",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(held.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = ScanRequest {
+        input: movie,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack,
+        out_dir: dir.path().join("out"),
+        detection: DetectionSize::Px(640),
+        coverage: Coverage::Measured,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let report = scan_path(&request, &mut |_| {});
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 20, "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    let estimate = openworld_core::scan::estimate_for(&request).expect("estimate");
+    assert_eq!(estimate.frames_analyzed, report.frames_analyzed);
+    assert!(
+        report.candidates.iter().any(|candidate| candidate.kind == "face" && candidate.frame_index == 9),
+        "analyzed {} {:?}",
+        report.frames_analyzed,
+        report
+            .candidates
+            .iter()
+            .map(|candidate| candidate.frame_index)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn platform_frames_scan_without_ffmpeg_and_media_facts_skip_probe() {
     let dir = tempfile::tempdir().unwrap();
     let frames = dir.path().join("frames");
@@ -3440,7 +3539,7 @@ fn a_video_with_audio_past_the_pictures_stays_complete() {
         .expect("ffmpeg");
     assert!(mux.success());
     let probed = openworld_core::decode::probe(&with_audio).unwrap();
-    assert!(!probed.frames_exact, "the container omitted an exact frame count");
+    assert!(probed.frames_exact, "the packet count is the pictures, and the audio is not a picture");
     let pack = dir.path().join("posters");
     posters::write_fixture_pack(&pack, now()).unwrap();
     let out_dir = dir.path().join("out");

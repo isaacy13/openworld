@@ -1234,13 +1234,19 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     // Matroska and WebM put the picture length in the track's DURATION tag.
     // MP4 puts it on the video stream. The frame estimate uses that length.
     let picture = picture_duration(stream, duration);
-    let presented = presented_frames(picture, fps).ok_or(MediaError::BadCodec)?;
+    let presented = presented_frames(picture, fps);
     // nb_frames counts every stored sample. An edit list can hide some of them.
     // The stream duration is the length a player shows.
-    let frames = match nb {
-        Some(exact) if presented > 0 && presented < exact => presented,
-        Some(exact) => exact,
-        None => presented,
+    // Matroska and WebM often omit nb_frames and keep the nominal rate. Duration
+    // times that rate counts pictures that were never stored, and measured
+    // coverage then skips the picture that stays on screen. The packets are
+    // the pictures.
+    let exact = nb.or_else(|| video_packet_count(path, shown));
+    let frames = match (exact, presented) {
+        (Some(exact), Some(presented)) if nb.is_some() && presented > 0 && presented < exact => presented,
+        (Some(exact), _) => exact,
+        (None, Some(presented)) => presented,
+        (None, None) => return Err(MediaError::BadCodec),
     };
     Ok(Probe {
         width,
@@ -1248,7 +1254,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         fps,
         duration_sec: if picture > 0.0 { picture } else { duration },
         frames,
-        frames_exact: nb.is_some(),
+        frames_exact: exact.is_some(),
         container_created: created,
         video: true,
         square_pixels,
@@ -1303,6 +1309,33 @@ fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
         }
     }
     chosen.map(|(index, _)| index).ok_or(MediaError::BadCodec)
+}
+
+/// Stored pictures when the container does not report `nb_frames`.
+/// One packet is one picture for the tracks this scan reads. Zero is not a count.
+fn video_packet_count(path: &Path, shown: usize) -> Option<u64> {
+    let selector = format!("v:{shown}");
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            &selector,
+            "-count_packets",
+            "-show_entries",
+            "stream=nb_read_packets",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let count = json_u32(value.pointer("/streams/0/nb_read_packets")).map(u64::from)?;
+    if count == 0 { None } else { Some(count) }
 }
 
 /// How many pictures `picture` seconds at `fps` is. `None` when that count does not

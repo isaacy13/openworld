@@ -11,6 +11,7 @@ orientation tag, a PNG with a camera orientation tag, a TIFF with a camera
 orientation tag, a 16-bit TIFF with that tag, a palette TIFF, a bilevel TIFF,
 a YCbCr TIFF, a subsampled YCbCr TIFF, a two-page TIFF whose marker is only on the second page,
 a video whose edit list hides the samples a player does not show,
+a Matroska file that does not store a frame count, with the marker on the picture that stays up,
 a video with a quarter-turn
 display rotation, a video with non-square pixels, a video whose audio
 continues after the pictures, and an audio file.
@@ -330,6 +331,7 @@ def main() -> int:
         "gif_later_candidate": 0,
         "apng_later_candidate": 0,
         "held_later_candidate": 0,
+        "mkv_held_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -649,6 +651,49 @@ def main() -> int:
             fail(f"held later candidates were not on the last picture: {found}")
         counts["held_later_candidate"] += 1
 
+        # Matroska does not store a frame count. The nominal rate times the
+        # duration is not the pictures, and the average step skips the marker
+        # on the picture that stays up.
+        for index in range(4):
+            name = root / f"m{index}.png"
+            if index == 1:
+                shutil.copyfile(scene, name)
+                continue
+            proc = run([
+                "ffmpeg", "-y", "-v", "error", "-i", str(wide),
+                "-vf", f"drawbox=x={index}:y=0:w=1:h=1:color=black:t=fill",
+                str(name),
+            ])
+            if proc.returncode != 0:
+                fail(proc.stderr or f"m{index}.png was not written")
+        mkv_steady = root / "steady-held.mkv"
+        mkv_held = root / "held-screen.mkv"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "25", "-start_number", "0",
+            "-i", str(root / "m%d.png"), "-frames:v", "4", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0",
+            str(mkv_steady),
+        ])
+        if proc.returncode != 0 or not mkv_steady.is_file():
+            fail(proc.stderr or "steady matroska was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(mkv_steady), "-c", "copy",
+            "-bsf:v",
+            "setts=pts='if(lt(N\\,2),PTS,PTS+12800)':dts='if(lt(N\\,2),DTS,DTS+12800)'",
+            str(mkv_held),
+        ])
+        if proc.returncode != 0 or not mkv_held.is_file():
+            fail(proc.stderr or "held matroska was not written")
+        report = scan(args.bin, args.bundles, posters, mkv_held, out, "measured")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"held matroska summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 4:
+            fail(f"held matroska decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 1 or item.get("frame_label") != "Frame 2." for item in found):
+            fail(f"held matroska candidates were not on the picture that stays up: {found}")
+        counts["mkv_held_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -940,6 +985,7 @@ def main() -> int:
         or counts["gif_later_candidate"] != 1
         or counts["apng_later_candidate"] != 1
         or counts["held_later_candidate"] != 1
+        or counts["mkv_held_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
