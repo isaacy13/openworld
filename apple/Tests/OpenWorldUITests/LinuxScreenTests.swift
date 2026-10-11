@@ -386,6 +386,21 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAWideFrameStaysInProportion() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let pieces = view.components(separatedBy: ".resizable()")
+        XCTAssertEqual(pieces.count - 1, 4, "the crop and the frame each draw on the phone and the Mac")
+        for piece in pieces.dropFirst() {
+            let head = piece.prefix(80)
+            XCTAssertTrue(head.contains(".scaledToFit()"), "a wide frame stretches into the square: \(head)")
+        }
+    }
+
     func testSceneScanReachesTheResultsScreen() throws {
         try MainActor.assumeIsolated {
             if ProcessInfo.processInfo.environment["OPENWORLD_LIB"] != nil {
