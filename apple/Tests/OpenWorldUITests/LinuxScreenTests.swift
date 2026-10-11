@@ -1644,6 +1644,33 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertFalse(StillMotion.imageSequence(heic))
     }
 
+    func testAMotionPhotoIsRefusedInsteadOfClearingTheStill() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-motion-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let blank = root.appendingPathComponent("blank.jpg")
+        let video = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.path])
+        try ffmpeg([
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.path,
+        ])
+        let motion = root.appendingPathComponent("motion.jpg")
+        try motionPhotoData(still: try Data(contentsOf: blank), video: try Data(contentsOf: video)).write(to: motion)
+        XCTAssertTrue(StillMotion.motionPhoto(motion))
+        XCTAssertFalse(StillMotion.motionPhoto(blank))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(motion)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
         let apng = try movingPicture("apng")
         XCTAssertTrue(StillMotion.animatedPng(apng))
@@ -2218,6 +2245,28 @@ final class OpenWorldUITests: XCTestCase {
             ])
         }
         return out
+    }
+
+    private func motionPhotoData(still jpeg: Data, video: Data) -> Data {
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="1" GCamera:MicroVideo="1" GCamera:MicroVideoOffset="\(video.count)"/>\
+        </rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        var payload = Data("http://ns.adobe.com/xap/1.0/".utf8)
+        payload.append(0)
+        payload.append(contentsOf: xmp.utf8)
+        var bytes = Data([0xFF, 0xD8, 0xFF, 0xE1])
+        let seglen = payload.count + 2
+        bytes.append(UInt8((seglen >> 8) & 0xFF))
+        bytes.append(UInt8(seglen & 0xFF))
+        bytes.append(payload)
+        bytes.append(jpeg.dropFirst(2))
+        bytes.append(video)
+        return bytes
     }
 
     private func ffmpeg(_ args: [String]) throws {

@@ -988,6 +988,35 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aMotionPhotoIsRefusedInsteadOfClearingTheStill() {
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-motion-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val blank = File(root, "blank.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.absolutePath)
+        val video = File(root, "clip.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val motion = File(root, "motion.jpg")
+        motion.writeBytes(motionPhotoBytes(blank.readBytes(), video.readBytes()))
+        assertTrue(StillMotion.motionPhoto(motion))
+        assertFalse(StillMotion.motionPhoto(blank))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/motion.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, motion.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertFalse(model.estimateText.contains("Bad codec"))
+    }
+
+    @Test
     fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
         val apng = movingPicture("apng")
         assertTrue(StillMotion.animatedPng(apng))
@@ -3691,6 +3720,24 @@ private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentT
     }
     assertEquals(Step.Results, model.step)
     assertFalse(model.scanning)
+}
+
+private fun motionPhotoBytes(jpeg: ByteArray, video: ByteArray): ByteArray {
+    val xmp = (
+        "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+            "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+            "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+            "GCamera:MotionPhoto=\"1\" GCamera:MicroVideo=\"1\" " +
+            "GCamera:MicroVideoOffset=\"${video.size}\"/>" +
+            "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+        ).toByteArray(Charsets.UTF_8)
+    val payload = "http://ns.adobe.com/xap/1.0/\u0000".toByteArray(Charsets.ISO_8859_1) + xmp
+    val seglen = payload.size + 2
+    return byteArrayOf(
+        0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE1.toByte(),
+        (seglen shr 8).toByte(), seglen.toByte(),
+    ) + payload + jpeg.copyOfRange(2, jpeg.size) + video
 }
 
 private fun headerFile(brand: String): File {

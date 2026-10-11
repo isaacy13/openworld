@@ -70,6 +70,10 @@ object PlatformDecode {
             throw IOException("The file was not fully decoded. Refusing.")
         }
         if (GifFrames.isGif(file)) return GifFrames.facts(file)
+        // BitmapFactory keeps the JPEG cover of a motion photo. The video is the file.
+        if (StillMotion.motionPhoto(file)) {
+            throw IOException("The file was not fully decoded. Refusing.")
+        }
         if (hasImageHeader(file)) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)

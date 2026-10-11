@@ -43,7 +43,7 @@ enum PlatformDecoder {
     #if os(Linux)
     /// A PNG the user already has is one frame. Copy the bytes. Video stays on AVFoundation.
     static func facts(url: URL) throws -> Facts {
-        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) {
+        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if GifFrames.isGif(url) {
@@ -72,7 +72,7 @@ enum PlatformDecoder {
             gif.directory = directory
             return gif
         }
-        if StillMotion.imageSequence(url) {
+        if StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if stopped() { throw DecodeStopped() }
@@ -107,7 +107,7 @@ enum PlatformDecoder {
 
     #else
     static func facts(url: URL) throws -> Facts {
-        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) {
+        if StillMotion.animatedPng(url) || StillMotion.animatedWebp(url) || StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if GifFrames.isGif(url) {
@@ -209,7 +209,7 @@ enum PlatformDecoder {
             gif.directory = directory
             return gif
         }
-        if StillMotion.imageSequence(url) {
+        if StillMotion.imageSequence(url) || StillMotion.motionPhoto(url) {
             throw failure("The file was not fully decoded. Refusing.")
         }
         if let (source, count) = stillPages(url) {

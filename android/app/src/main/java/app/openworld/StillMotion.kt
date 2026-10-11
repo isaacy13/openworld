@@ -43,6 +43,63 @@ object StillMotion {
 
     fun animatedWebp(file: File): Boolean = file.inputStream().use { animatedWebp(it) }
 
+    /**
+     * A motion photo is a JPEG cover plus a video. BitmapFactory keeps the cover.
+     * The XMP packet names `MicroVideoOffset` or a MotionPhoto item.
+     */
+    fun motionPhoto(file: File): Boolean = file.inputStream().use { motionPhoto(it) }
+
+    private fun motionPhoto(input: InputStream): Boolean {
+        if (readByte(input) != 0xFF || readByte(input) != 0xD8) return false
+        while (true) {
+            val marker = nextJpegMarker(input) ?: return false
+            if (marker == 0xDA || marker == 0xD9) return false
+            if (marker == 0x00 || marker in 0xD0..0xD7) continue
+            val hi = readByte(input)
+            val lo = readByte(input)
+            if (hi < 0 || lo < 0) return false
+            val seglen = (hi shl 8) or lo
+            if (seglen < 2) return false
+            val payload = seglen - 2
+            if (marker == 0xE1 && payload <= 1_000_000) {
+                val buf = ByteArray(payload)
+                if (!readFully(input, buf)) return false
+                if (motionXmp(buf)) return true
+            } else if (!skipFully(input, payload.toLong())) {
+                return false
+            }
+        }
+    }
+
+    private fun motionXmp(buf: ByteArray): Boolean {
+        val prefix = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()
+        if (buf.size < prefix.size || !buf.copyOf(prefix.size).contentEquals(prefix)) return false
+        val text = buf.toString(Charsets.UTF_8)
+        return text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='") ||
+            text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
+    }
+
+    private fun nextJpegMarker(input: InputStream): Int? {
+        if (readByte(input) != 0xFF) return null
+        while (true) {
+            val byte = readByte(input)
+            if (byte < 0) return null
+            if (byte != 0xFF) return byte
+        }
+    }
+
+    private fun readByte(input: InputStream): Int = input.read()
+
+    private fun readFully(input: InputStream, buf: ByteArray): Boolean {
+        var off = 0
+        while (off < buf.size) {
+            val n = input.read(buf, off, buf.size - off)
+            if (n < 0) return false
+            off += n
+        }
+        return true
+    }
+
     private fun animatedPng(input: InputStream): Boolean {
         val signature = ByteArray(8)
         if (input.read(signature) != 8) return false

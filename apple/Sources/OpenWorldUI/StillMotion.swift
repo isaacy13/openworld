@@ -44,6 +44,46 @@ public enum StillMotion {
         return false
     }
 
+    /// A motion photo is a JPEG cover plus a video. The still decoder keeps the cover.
+    /// The XMP packet names `MicroVideoOffset` or a MotionPhoto item.
+    public static func motionPhoto(_ url: URL) -> Bool {
+        guard let input = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? input.close() }
+        guard let soi = try? input.read(upToCount: 2), [UInt8](soi) == [0xFF, 0xD8] else { return false }
+        while true {
+            guard let marker = nextJpegMarker(input) else { return false }
+            if marker == 0xDA || marker == 0xD9 { return false }
+            if marker == 0x00 || (0xD0...0xD7).contains(marker) { continue }
+            guard let lenb = try? input.read(upToCount: 2), lenb.count == 2 else { return false }
+            let raw = [UInt8](lenb)
+            let seglen = (Int(raw[0]) << 8) | Int(raw[1])
+            if seglen < 2 { return false }
+            let payload = seglen - 2
+            if marker == 0xE1 && payload <= 1_000_000 {
+                guard let buf = try? input.read(upToCount: payload), buf.count == payload else { return false }
+                if motionXmp([UInt8](buf)) { return true }
+            } else {
+                guard (try? input.seek(toOffset: input.offsetInFile + UInt64(payload))) != nil else { return false }
+            }
+        }
+    }
+
+    private static func nextJpegMarker(_ input: FileHandle) -> UInt8? {
+        guard let first = try? input.read(upToCount: 1), first.first == 0xFF else { return nil }
+        while let next = try? input.read(upToCount: 1), let byte = next.first {
+            if byte != 0xFF { return byte }
+        }
+        return nil
+    }
+
+    private static func motionXmp(_ buf: [UInt8]) -> Bool {
+        let prefix: [UInt8] = Array("http://ns.adobe.com/xap/1.0/".utf8) + [0]
+        if buf.count < prefix.count || Array(buf.prefix(prefix.count)) != prefix { return false }
+        guard let text = String(bytes: buf, encoding: .utf8) else { return false }
+        return text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='")
+            || text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
+    }
+
     /// A PNG header. The file name is not the type.
     public static func png(_ url: URL) -> Bool {
         guard let input = try? FileHandle(forReadingFrom: url) else { return false }

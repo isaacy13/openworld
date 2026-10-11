@@ -16,8 +16,9 @@ use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
@@ -61,6 +62,11 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         }
         return probe_tiff_player(path);
     }
+    // A motion photo is a JPEG still plus a video. The still decoder keeps the
+    // blank cover and can clear a face that is only in the video.
+    if let Some(clip) = motion_clip(path)? {
+        return probe_video(&clip.path);
+    }
     if let Some(info) = probe_image(path) {
         return Ok(info);
     }
@@ -73,6 +79,10 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
             return decode_tiff(path, info, &mut on_frame);
         }
         return decode_tiff_player(path, &mut on_frame);
+    }
+    if let Some(clip) = motion_clip(path)? {
+        let info = probe_video(&clip.path)?;
+        return decode_video(&clip.path, &info, &mut on_frame);
     }
     let info = probe(path)?;
     if !info.video {
@@ -93,6 +103,162 @@ fn is_tiff(path: &Path) -> bool {
         return false;
     }
     matches!(header, [0x49, 0x49, 0x2A, 0x00] | [0x4D, 0x4D, 0x00, 0x2A])
+}
+
+enum MotionVideo {
+    None,
+    /// The XMP says this is a motion photo, and the video bytes are not a movie.
+    Broken,
+    Span { start: u64, end: u64 },
+}
+
+struct MotionClip {
+    path: PathBuf,
+}
+
+impl Drop for MotionClip {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+static MOTION_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// A JPEG whose XMP points at a video appended to the file. The video is copied
+/// out so FFmpeg can seek in it. The copy is removed when this value drops.
+fn motion_clip(path: &Path) -> Result<Option<MotionClip>, MediaError> {
+    let span = match motion_video(path) {
+        MotionVideo::None => return Ok(None),
+        MotionVideo::Broken => return Err(MediaError::BadCodec),
+        MotionVideo::Span { start, end } => (start, end),
+    };
+    let n = MOTION_SEQ.fetch_add(1, Ordering::Relaxed);
+    let dest = std::env::temp_dir().join(format!("openworld-motion-{}-{n}.mp4", std::process::id()));
+    let mut src = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    src.seek(SeekFrom::Start(span.0)).map_err(|_| MediaError::BadCodec)?;
+    let mut out = File::create(&dest).map_err(|_| MediaError::BadCodec)?;
+    let mut left = span.1 - span.0;
+    let mut buf = [0u8; 65536];
+    while left > 0 {
+        let want = left.min(buf.len() as u64) as usize;
+        let read = src.read(&mut buf[..want]).map_err(|_| MediaError::BadCodec)?;
+        if read == 0 {
+            let _ = std::fs::remove_file(&dest);
+            return Err(MediaError::BadCodec);
+        }
+        out.write_all(&buf[..read]).map_err(|_| MediaError::BadCodec)?;
+        left -= read as u64;
+    }
+    Ok(Some(MotionClip { path: dest }))
+}
+
+/// `MicroVideoOffset` or a MotionPhoto item length is the video at the end of the file.
+fn motion_video(path: &Path) -> MotionVideo {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return MotionVideo::None,
+    };
+    let len = match file.metadata() {
+        Ok(meta) => meta.len(),
+        Err(_) => return MotionVideo::None,
+    };
+    let mut soi = [0u8; 2];
+    if file.read_exact(&mut soi).is_err() || soi != [0xFF, 0xD8] {
+        return MotionVideo::None;
+    }
+    let mut video_len = None;
+    loop {
+        let marker = match next_jpeg_marker(&mut file) {
+            Some(marker) => marker,
+            None => break,
+        };
+        // The scan starts here. The XMP packet is a marker before it.
+        if marker == 0xDA || marker == 0xD9 {
+            break;
+        }
+        if marker == 0x00 || (0xD0..=0xD7).contains(&marker) {
+            continue;
+        }
+        let mut lenb = [0u8; 2];
+        if file.read_exact(&mut lenb).is_err() {
+            break;
+        }
+        let seglen = u16::from_be_bytes(lenb) as u64;
+        if seglen < 2 {
+            return MotionVideo::Broken;
+        }
+        let payload = seglen - 2;
+        if marker == 0xE1 && payload <= 1_000_000 {
+            let mut buf = vec![0u8; payload as usize];
+            if file.read_exact(&mut buf).is_err() {
+                break;
+            }
+            if let Some(n) = motion_length_in_xmp(&buf) {
+                video_len = Some(n);
+            }
+        } else if file.seek(SeekFrom::Current(payload as i64)).is_err() {
+            break;
+        }
+    }
+    let Some(video_len) = video_len else {
+        return MotionVideo::None;
+    };
+    if video_len == 0 || video_len >= len {
+        return MotionVideo::Broken;
+    }
+    let start = len - video_len;
+    let mut header = [0u8; 8];
+    if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut header).is_err() {
+        return MotionVideo::Broken;
+    }
+    if &header[4..8] != b"ftyp" {
+        return MotionVideo::Broken;
+    }
+    MotionVideo::Span { start, end: len }
+}
+
+fn next_jpeg_marker(file: &mut File) -> Option<u8> {
+    let mut byte = [0u8; 1];
+    file.read_exact(&mut byte).ok()?;
+    if byte[0] != 0xFF {
+        return None;
+    }
+    loop {
+        file.read_exact(&mut byte).ok()?;
+        if byte[0] != 0xFF {
+            return Some(byte[0]);
+        }
+    }
+}
+
+fn motion_length_in_xmp(buf: &[u8]) -> Option<u64> {
+    if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
+        return None;
+    }
+    let text = String::from_utf8_lossy(buf);
+    if let Some(n) = xmp_attr_u64(&text, "MicroVideoOffset") {
+        return Some(n);
+    }
+    let idx = text.find("Semantic=\"MotionPhoto\"").or_else(|| text.find("Semantic='MotionPhoto'"))?;
+    let from = idx.saturating_sub(240);
+    let to = (idx + 240).min(text.len());
+    xmp_attr_u64(&text[from..to], "Length")
+}
+
+fn xmp_attr_u64(text: &str, name: &str) -> Option<u64> {
+    for quote in ['"', '\''] {
+        let key = format!("{name}={quote}");
+        let Some(pos) = text.find(&key) else {
+            continue;
+        };
+        let digits: String = text[pos + key.len()..].chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digits.parse::<u64>() {
+            if n > 0 {
+                return Some(n);
+            }
+        }
+    }
+    None
 }
 
 /// Every page, each turned by that page's orientation tag.
