@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
@@ -144,8 +147,16 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             val lines = title.lines()
                             val name = lines.firstOrNull().orEmpty()
                             val best = lines.drop(1).joinToString("\n")
-                            androidx.compose.foundation.layout.Row {
-                                RadioButton(selected = model.bundleId == id, onClick = { model.bundleId = id })
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = model.bundleId == id,
+                                        onClick = { model.bundleId = id },
+                                        role = Role.RadioButton,
+                                    ),
+                            ) {
+                                RadioButton(selected = model.bundleId == id, onClick = null)
                                 Column {
                                     Text(markedChoice(name, model.bundleId == id), style = MaterialTheme.typography.titleMedium)
                                     if (best.isNotBlank()) Text(best)
@@ -159,18 +170,42 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         Text("Detection size", style = MaterialTheme.typography.headlineMedium)
                         Text("Smaller frames are a resize of each decoded frame in memory. A face under 64 px on that image is left out. Evidence crops come from the original frame. If that crop is under 112 px on the short side, the label is \"Not compared.\" Full resolution is slower.")
                         listOf("320" to "320 px on the long side", "480" to "480 px on the long side", "640" to "640 px on the long side", "full" to "Full resolution").forEach { (value, label) ->
-                            androidx.compose.foundation.layout.Row {
-                                RadioButton(selected = model.longSide == value, onClick = { model.longSide = value })
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = model.longSide == value,
+                                        onClick = { model.longSide = value },
+                                        role = Role.RadioButton,
+                                    ),
+                            ) {
+                                RadioButton(selected = model.longSide == value, onClick = null)
                                 Text(markedChoice(label, model.longSide == value), modifier = Modifier.padding(top = 12.dp))
                             }
                         }
                         Text("Coverage", style = MaterialTheme.typography.titleMedium)
-                        androidx.compose.foundation.layout.Row {
-                            RadioButton(selected = model.coverage == "complete", onClick = { model.coverage = "complete" })
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = model.coverage == "complete",
+                                    onClick = { model.coverage = "complete" },
+                                    role = Role.RadioButton,
+                                ),
+                        ) {
+                            RadioButton(selected = model.coverage == "complete", onClick = null)
                             Text(markedChoice("Complete. Every decoded frame.", model.coverage == "complete"), modifier = Modifier.padding(top = 12.dp))
                         }
-                        androidx.compose.foundation.layout.Row {
-                            RadioButton(selected = model.coverage == "measured", onClick = { model.coverage = "measured" })
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = model.coverage == "measured",
+                                    onClick = { model.coverage = "measured" },
+                                    role = Role.RadioButton,
+                                ),
+                        ) {
+                            RadioButton(selected = model.coverage == "measured", onClick = null)
                             Text(markedChoice("Measured. 5 frames a second, plus the tracker.", model.coverage == "measured"), modifier = Modifier.padding(top = 12.dp))
                         }
                         if (model.coverage == "measured") Text("A brief face can be missed.")
@@ -207,24 +242,42 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                         if (model.estimateOk) {
                             if (model.oldFile) Text("This file is older than about 30 days.", color = warningColor)
                             Text(model.estimateText)
-                            Row {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = model.includeMissing,
+                                        enabled = !model.scanning,
+                                        role = Role.Checkbox,
+                                        onValueChange = {
+                                            model.includeMissing = it
+                                            model.refreshClassLine()
+                                        },
+                                    ),
+                            ) {
                                 Checkbox(
                                     checked = model.includeMissing,
-                                    onCheckedChange = {
-                                        model.includeMissing = it
-                                        model.refreshClassLine()
-                                    },
+                                    onCheckedChange = null,
                                     enabled = !model.scanning,
                                 )
                                 Text("Missing", modifier = Modifier.padding(top = 12.dp))
                             }
-                            Row {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = model.includeWanted,
+                                        enabled = !model.scanning,
+                                        role = Role.Checkbox,
+                                        onValueChange = {
+                                            model.includeWanted = it
+                                            model.refreshClassLine()
+                                        },
+                                    ),
+                            ) {
                                 Checkbox(
                                     checked = model.includeWanted,
-                                    onCheckedChange = {
-                                        model.includeWanted = it
-                                        model.refreshClassLine()
-                                    },
+                                    onCheckedChange = null,
                                     enabled = !model.scanning,
                                 )
                                 Text("Wanted", modifier = Modifier.padding(top = 12.dp))

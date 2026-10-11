@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -1223,6 +1225,43 @@ class PhoneScreenTest {
         compose.waitForIdle()
         val returned = compose.onNodeWithText("This file stays on this device.").fetchSemanticsNode().boundsInRoot
         assertTrue("Back opened the file page at $returned", returned.height > 0f && returned.top >= 0f)
+    }
+
+    @Test
+    fun tappingTheChoiceNameSelectsThatChoice() {
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/blank-choice.png")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, still("blank").inputStream())
+        model.choose(uri, resolver)
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Not measured yet.").performScrollTo().performTouchInput { click() }
+        assertEquals("accurate", model.bundleId)
+        compose.onNodeWithText("Accurate. Selected.").assertExists()
+        compose.onNodeWithText("Fast. Selected.").assertDoesNotExist()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Full resolution").performScrollTo().performTouchInput { click() }
+        assertEquals("full", model.longSide)
+        compose.onNodeWithText("Full resolution. Selected.").assertExists()
+        compose.onNodeWithText("Measured. 5 frames a second, plus the tracker.").performScrollTo().performTouchInput { click() }
+        assertEquals("measured", model.coverage)
+        compose.onNodeWithText("Measured. 5 frames a second, plus the tracker. Selected.").assertExists()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Wanted").performScrollTo().performTouchInput { click() }
+        assertFalse(model.includeWanted)
+        assertTrue(model.includeMissing)
+        compose.onNodeWithText("Missing.", substring = true).assertExists()
+        compose.runOnUiThread { model.scanning = true }
+        compose.waitForIdle()
+        compose.onNodeWithText("Wanted").performScrollTo().performTouchInput { click() }
+        assertFalse(model.includeWanted)
+        compose.runOnUiThread { model.scanning = false }
+        compose.waitForIdle()
+        compose.onNodeWithText("Missing").performScrollTo().performTouchInput { click() }
+        assertFalse(model.includeMissing)
+        compose.onNodeWithText("Choose missing, wanted, or both.", substring = true).assertExists()
+        compose.onNodeWithText("Analyze").assertIsNotEnabled()
     }
 
     @Test
