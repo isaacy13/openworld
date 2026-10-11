@@ -407,6 +407,27 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    func testACropThatArrivesStaysOnTheEstimate() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let estimate = view.components(separatedBy: "private var estimate:").dropFirst().first?
+            .components(separatedBy: "private var estimateColumn").first ?? ""
+        XCTAssertTrue(
+            estimate.contains("latestLiveCrop") && estimate.contains("anchor: .bottom"),
+            "a crop that arrives stays below a short estimate: \(estimate)"
+        )
+        let column = view.components(separatedBy: "private var estimateColumn").dropFirst().first?
+            .components(separatedBy: "private var results:").first ?? ""
+        XCTAssertTrue(
+            column.contains("\"latestLiveCrop\""),
+            "the latest crop label has nothing for the page to scroll to"
+        )
+    }
+
     func testTheFirstPageScrollsSoChooseFileStaysReachable() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

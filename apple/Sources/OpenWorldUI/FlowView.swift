@@ -938,6 +938,12 @@ public struct FlowView: View {
                         proxy.scrollTo("estimateHeadline", anchor: .top)
                     }
                 }
+                .onChange(of: model.liveCrops.count, initial: false) { _, count in
+                    // A tall caption sits under the headline. Bring its last line on screen.
+                    if model.scanning, count > 0 {
+                        proxy.scrollTo("latestLiveCrop", anchor: .bottom)
+                    }
+                }
         }
     }
 
@@ -958,7 +964,9 @@ public struct FlowView: View {
                                 VStack(spacing: 4) {
                                     liveImage(crop.path)
                                     Text(crop.frameLabel).multilineTextAlignment(.center)
-                                    Text(crop.label).multilineTextAlignment(.center)
+                                    Text(crop.label)
+                                        .multilineTextAlignment(.center)
+                                        .id(crop.id == model.liveCrops.last?.id ? "latestLiveCrop" : "liveCrop\(crop.id)")
                                 }
                                 .frame(width: 140)
                                 .id(crop.id)
