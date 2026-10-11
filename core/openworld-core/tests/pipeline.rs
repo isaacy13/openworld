@@ -2270,6 +2270,161 @@ fn stitch_motion_photo(still: &std::path::Path, video: &std::path::Path, out: &s
     fs::write(out, bytes).unwrap();
 }
 
+#[test]
+fn a_stripped_motion_photo_keeps_the_face_on_the_still() {
+    // Editors keep the motion-photo directory after the video is gone. The
+    // length no longer lands on a movie. The still is the file, and it has the face.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let still = dir.path().join("scene.jpg");
+    let photo = dir.path().join("stripped.jpg");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "1"])
+        .arg(&still)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let jpg = fs::read(&still).unwrap();
+    let xmp = "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description rdf:about=\"\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\">\
+         <Container:Directory><rdf:Seq>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>\
+         </rdf:li>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"20000\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>";
+    write_jpeg_xmp(&jpg, xmp.as_bytes(), &[], &photo);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: photo,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 1);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+#[test]
+fn a_motion_photo_marked_off_keeps_the_face_on_the_still() {
+    // MotionPhoto 0 means the file is the still, even when a video is appended.
+    // The still has the face. The video is blank.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let still = dir.path().join("scene.jpg");
+    let movie = dir.path().join("blank.mp4");
+    let photo = dir.path().join("off.jpg");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "1"])
+        .arg(&still)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let blank = Command::new("ffmpeg")
+        .args([
+            "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=0.2", "-an", "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank.success());
+    let jpg = fs::read(&still).unwrap();
+    let mp4 = fs::read(&movie).unwrap();
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description rdf:about=\"\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"0\">\
+         <Container:Directory><rdf:Seq>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>\
+         </rdf:li>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"{}\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        mp4.len()
+    );
+    write_jpeg_xmp(&jpg, xmp.as_bytes(), &mp4, &photo);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: photo,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 1);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+fn write_jpeg_xmp(jpg: &[u8], xmp: &[u8], trailer: &[u8], out: &std::path::Path) {
+    assert_eq!(&jpg[..2], b"\xff\xd8");
+    let mut payload = b"http://ns.adobe.com/xap/1.0/\0".to_vec();
+    payload.extend_from_slice(xmp);
+    let seglen = (payload.len() + 2) as u16;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&jpg[..2]);
+    bytes.extend_from_slice(&[0xFF, 0xE1]);
+    bytes.extend_from_slice(&seglen.to_be_bytes());
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&jpg[2..]);
+    bytes.extend_from_slice(trailer);
+    fs::write(out, bytes).unwrap();
+}
+
 fn stitch_motion_directory(still: &std::path::Path, video: &std::path::Path, out: &std::path::Path) {
     let jpg = fs::read(still).unwrap();
     let mp4 = fs::read(video).unwrap();

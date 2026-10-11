@@ -44,28 +44,59 @@ public enum StillMotion {
         return false
     }
 
-    /// A motion photo is a JPEG cover plus a video. The still decoder keeps the cover.
-    /// The XMP packet names `MicroVideoOffset` or a MotionPhoto item.
+    /// A motion photo is a JPEG cover plus a video at the end of the file.
+    /// The still decoder keeps the cover. `MotionPhoto` of 0 or less is a still.
+    /// A length that does not land on `ftyp` means the video was removed.
+    /// A named photo whose length cannot be read is still a motion photo.
     public static func motionPhoto(_ url: URL) -> Bool {
         guard let input = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? input.close() }
         guard let soi = try? input.read(upToCount: 2), [UInt8](soi) == [0xFF, 0xD8] else { return false }
+        guard let fileLen = try? input.seekToEnd() else { return false }
+        guard (try? input.seek(toOffset: 2)) != nil else { return false }
+        var claimed = false
+        var videoLen: UInt64?
         while true {
-            guard let marker = nextJpegMarker(input) else { return false }
-            if marker == 0xDA || marker == 0xD9 { return false }
+            guard let marker = nextJpegMarker(input) else { break }
+            if marker == 0xDA || marker == 0xD9 { break }
             if marker == 0x00 || (0xD0...0xD7).contains(marker) { continue }
-            guard let lenb = try? input.read(upToCount: 2), lenb.count == 2 else { return false }
+            guard let lenb = try? input.read(upToCount: 2), lenb.count == 2 else { break }
             let raw = [UInt8](lenb)
             let seglen = (Int(raw[0]) << 8) | Int(raw[1])
             if seglen < 2 { return false }
             let payload = seglen - 2
             if marker == 0xE1 && payload <= 1_000_000 {
-                guard let buf = try? input.read(upToCount: payload), buf.count == payload else { return false }
-                if motionXmp([UInt8](buf)) { return true }
+                guard let buf = try? input.read(upToCount: payload), buf.count == payload else { break }
+                switch motionXmp([UInt8](buf)) {
+                case .no:
+                    break
+                case .off:
+                    return false
+                case .video(let length):
+                    claimed = true
+                    if videoLen == nil { videoLen = length }
+                case .unreadable:
+                    claimed = true
+                }
             } else {
-                guard (try? input.seek(toOffset: input.offsetInFile + UInt64(payload))) != nil else { return false }
+                let next = input.offsetInFile + UInt64(payload)
+                if next > fileLen { break }
+                guard (try? input.seek(toOffset: next)) != nil else { break }
             }
         }
+        if !claimed { return false }
+        guard let length = videoLen else { return true }
+        if length == 0 || length >= fileLen { return false }
+        guard (try? input.seek(toOffset: fileLen - length)) != nil else { return false }
+        guard let header = try? input.read(upToCount: 8), header.count == 8 else { return false }
+        return Array([UInt8](header)[4..<8]) == Array("ftyp".utf8)
+    }
+
+    private enum MotionPacket {
+        case no
+        case off
+        case video(UInt64)
+        case unreadable
     }
 
     private static func nextJpegMarker(_ input: FileHandle) -> UInt8? {
@@ -76,12 +107,46 @@ public enum StillMotion {
         return nil
     }
 
-    private static func motionXmp(_ buf: [UInt8]) -> Bool {
+    private static func motionXmp(_ buf: [UInt8]) -> MotionPacket {
         let prefix: [UInt8] = Array("http://ns.adobe.com/xap/1.0/".utf8) + [0]
-        if buf.count < prefix.count || Array(buf.prefix(prefix.count)) != prefix { return false }
-        guard let text = String(bytes: buf, encoding: .utf8) else { return false }
-        return text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='")
+        if buf.count < prefix.count || Array(buf.prefix(prefix.count)) != prefix { return .no }
+        guard let text = String(bytes: buf, encoding: .utf8) else { return .no }
+        if motionPhotoOff(text) { return .off }
+        let named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='")
             || text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
+        if !named { return .no }
+        if let length = xmpAttr(text, "MicroVideoOffset") { return .video(length) }
+        let quoted = text.range(of: "Semantic=\"MotionPhoto\"")
+        let idx = quoted ?? text.range(of: "Semantic='MotionPhoto'")
+        guard let idx else { return .unreadable }
+        let start = text[..<idx.lowerBound].lastIndex(of: "<") ?? text.startIndex
+        guard let end = text[idx.lowerBound...].firstIndex(of: ">") else { return .unreadable }
+        let item = String(text[start..<end])
+        if let length = xmpAttr(item, "Length") { return .video(length) }
+        return .unreadable
+    }
+
+    /// `MotionPhoto="0"` and a negative value mark the file as a still.
+    private static func motionPhotoOff(_ text: String) -> Bool {
+        for quote in ["\"", "'"] {
+            guard let range = text.range(of: "MotionPhoto=\(quote)") else { continue }
+            var rest = text[range.upperBound...]
+            let neg = rest.first == "-"
+            if neg { rest = rest.dropFirst() }
+            let digits = rest.prefix { $0.isASCII && $0 >= "0" && $0 <= "9" }
+            guard !digits.isEmpty, let n = UInt64(digits) else { continue }
+            return neg || n == 0
+        }
+        return false
+    }
+
+    private static func xmpAttr(_ text: String, _ name: String) -> UInt64? {
+        for quote in ["\"", "'"] {
+            guard let range = text.range(of: "\(name)=\(quote)") else { continue }
+            let digits = text[range.upperBound...].prefix { $0.isASCII && $0 >= "0" && $0 <= "9" }
+            if let n = UInt64(digits), n > 0 { return n }
+        }
+        return nil
     }
 
     /// A PNG header. The file name is not the type.

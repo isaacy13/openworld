@@ -3,6 +3,7 @@ package app.openworld
 
 import java.io.File
 import java.io.InputStream
+import java.io.RandomAccessFile
 
 /**
  * An animated PNG or WebP is more than one frame. BitmapFactory keeps the first
@@ -44,51 +45,127 @@ object StillMotion {
     fun animatedWebp(file: File): Boolean = file.inputStream().use { animatedWebp(it) }
 
     /**
-     * A motion photo is a JPEG cover plus a video. BitmapFactory keeps the cover.
-     * The XMP packet names `MicroVideoOffset` or a MotionPhoto item.
+     * A motion photo is a JPEG cover plus a video at the end of the file.
+     * BitmapFactory keeps the cover. `MotionPhoto` of 0 or less is a still.
+     * A length that does not land on `ftyp` means the video was removed.
+     * A named photo whose length cannot be read is still a motion photo.
      */
-    fun motionPhoto(file: File): Boolean = file.inputStream().use { motionPhoto(it) }
-
-    private fun motionPhoto(input: InputStream): Boolean {
-        if (readByte(input) != 0xFF || readByte(input) != 0xD8) return false
-        while (true) {
-            val marker = nextJpegMarker(input) ?: return false
-            if (marker == 0xDA || marker == 0xD9) return false
-            if (marker == 0x00 || marker in 0xD0..0xD7) continue
-            val hi = readByte(input)
-            val lo = readByte(input)
-            if (hi < 0 || lo < 0) return false
-            val seglen = (hi shl 8) or lo
-            if (seglen < 2) return false
-            val payload = seglen - 2
-            if (marker == 0xE1 && payload <= 1_000_000) {
-                val buf = ByteArray(payload)
-                if (!readFully(input, buf)) return false
-                if (motionXmp(buf)) return true
-            } else if (!skipFully(input, payload.toLong())) {
-                return false
+    fun motionPhoto(file: File): Boolean {
+        RandomAccessFile(file, "r").use { input ->
+            if (input.length() < 2) return false
+            if (input.read() != 0xFF || input.read() != 0xD8) return false
+            val fileLen = input.length()
+            var claimed = false
+            var videoLen: Long? = null
+            while (true) {
+                val marker = nextJpegMarker(input) ?: break
+                if (marker == 0xDA || marker == 0xD9) break
+                if (marker == 0x00 || marker in 0xD0..0xD7) continue
+                val hi = input.read()
+                val lo = input.read()
+                if (hi < 0 || lo < 0) break
+                val seglen = (hi shl 8) or lo
+                if (seglen < 2) return false
+                val payload = seglen - 2
+                if (marker == 0xE1 && payload <= 1_000_000) {
+                    val buf = ByteArray(payload)
+                    if (!readFully(input, buf)) break
+                    when (val parsed = motionXmp(buf)) {
+                        MotionXmp.No -> Unit
+                        MotionXmp.Off -> return false
+                        is MotionXmp.Video -> {
+                            claimed = true
+                            if (videoLen == null) videoLen = parsed.length
+                        }
+                        MotionXmp.Unreadable -> claimed = true
+                    }
+                } else {
+                    val next = input.filePointer + payload
+                    if (next > fileLen) break
+                    input.seek(next)
+                }
             }
+            if (!claimed) return false
+            val length = videoLen ?: return true
+            if (length <= 0L || length >= fileLen) return false
+            input.seek(fileLen - length)
+            val header = ByteArray(8)
+            if (!readFully(input, header)) return false
+            return header.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))
         }
     }
 
-    private fun motionXmp(buf: ByteArray): Boolean {
-        val prefix = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()
-        if (buf.size < prefix.size || !buf.copyOf(prefix.size).contentEquals(prefix)) return false
-        val text = buf.toString(Charsets.UTF_8)
-        return text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='") ||
-            text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
+    private sealed class MotionXmp {
+        data object No : MotionXmp()
+        data object Off : MotionXmp()
+        data class Video(val length: Long) : MotionXmp()
+        data object Unreadable : MotionXmp()
     }
 
-    private fun nextJpegMarker(input: InputStream): Int? {
-        if (readByte(input) != 0xFF) return null
+    private fun motionXmp(buf: ByteArray): MotionXmp {
+        val prefix = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()
+        if (buf.size < prefix.size || !buf.copyOf(prefix.size).contentEquals(prefix)) return MotionXmp.No
+        val text = buf.toString(Charsets.UTF_8)
+        if (motionPhotoOff(text)) return MotionXmp.Off
+        val named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='") ||
+            text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
+        if (!named) return MotionXmp.No
+        xmpAttr(text, "MicroVideoOffset")?.let { return MotionXmp.Video(it) }
+        val quoted = text.indexOf("Semantic=\"MotionPhoto\"")
+        val idx = if (quoted >= 0) quoted else text.indexOf("Semantic='MotionPhoto'")
+        if (idx < 0) return MotionXmp.Unreadable
+        val start = text.lastIndexOf('<', idx).let { if (it >= 0) it else 0 }
+        val end = text.indexOf('>', idx)
+        if (end < 0) return MotionXmp.Unreadable
+        return xmpAttr(text.substring(start, end), "Length")?.let { MotionXmp.Video(it) } ?: MotionXmp.Unreadable
+    }
+
+    /** `MotionPhoto="0"` and a negative value mark the file as a still. */
+    private fun motionPhotoOff(text: String): Boolean {
+        for (quote in charArrayOf('"', '\'')) {
+            val key = "MotionPhoto=$quote"
+            val pos = text.indexOf(key)
+            if (pos < 0) continue
+            val rest = text.substring(pos + key.length)
+            val neg = rest.startsWith("-")
+            val digits = rest.drop(if (neg) 1 else 0).takeWhile { it.isDigit() }
+            if (digits.isEmpty()) continue
+            val n = digits.toLongOrNull() ?: continue
+            return neg || n == 0L
+        }
+        return false
+    }
+
+    private fun xmpAttr(text: String, name: String): Long? {
+        for (quote in charArrayOf('"', '\'')) {
+            val key = "$name=$quote"
+            val pos = text.indexOf(key)
+            if (pos < 0) continue
+            val digits = text.substring(pos + key.length).takeWhile { it.isDigit() }
+            val n = digits.toLongOrNull() ?: continue
+            if (n > 0L) return n
+        }
+        return null
+    }
+
+    private fun nextJpegMarker(input: RandomAccessFile): Int? {
+        if (input.read() != 0xFF) return null
         while (true) {
-            val byte = readByte(input)
+            val byte = input.read()
             if (byte < 0) return null
             if (byte != 0xFF) return byte
         }
     }
 
-    private fun readByte(input: InputStream): Int = input.read()
+    private fun readFully(input: RandomAccessFile, buf: ByteArray): Boolean {
+        var off = 0
+        while (off < buf.size) {
+            val n = input.read(buf, off, buf.size - off)
+            if (n < 0) return false
+            off += n
+        }
+        return true
+    }
 
     private fun readFully(input: InputStream, buf: ByteArray): Boolean {
         var off = 0

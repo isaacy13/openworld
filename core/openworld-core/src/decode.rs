@@ -107,7 +107,7 @@ fn is_tiff(path: &Path) -> bool {
 
 enum MotionVideo {
     None,
-    /// The XMP says this is a motion photo, and the video bytes are not a movie.
+    /// The XMP names a motion photo, and the video length cannot be read.
     Broken,
     Span { start: u64, end: u64 },
 }
@@ -211,20 +211,21 @@ fn motion_video(path: &Path) -> MotionVideo {
     if !claimed {
         return MotionVideo::None;
     }
-    // The packet says this is a motion photo. A missing length is not a still.
+    // The packet names a motion photo. A missing length is not a still.
+    // A length that does not land on a movie means the video was removed.
     let Some(video_len) = video_len else {
         return MotionVideo::Broken;
     };
-    if video_len == 0 || video_len >= len {
-        return MotionVideo::Broken;
+    if video_len >= len {
+        return MotionVideo::None;
     }
     let start = len - video_len;
     let mut header = [0u8; 8];
     if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut header).is_err() {
-        return MotionVideo::Broken;
+        return MotionVideo::None;
     }
     if &header[4..8] != b"ftyp" {
-        return MotionVideo::Broken;
+        return MotionVideo::None;
     }
     MotionVideo::Span { start, end: len }
 }
@@ -253,11 +254,15 @@ enum MotionXmp {
 
 /// `MicroVideoOffset` is the older length. A directory lists the cover first,
 /// with length 0, then the video item. The video length is on that item.
+/// `MotionPhoto` of 0 or less means the file is the still.
 fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
         return MotionXmp::No;
     }
     let text = String::from_utf8_lossy(buf);
+    if motion_photo_off(&text) {
+        return MotionXmp::No;
+    }
     let named = text.contains("MicroVideoOffset=\"")
         || text.contains("MicroVideoOffset='")
         || text.contains("Semantic=\"MotionPhoto\"")
@@ -280,6 +285,32 @@ fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
         Some(n) => MotionXmp::Video(n),
         None => MotionXmp::Unreadable,
     }
+}
+
+/// `MotionPhoto="0"` and a negative value mark the file as a still.
+/// `MotionPhotoVersion` and `MotionPhotoPresentationTimestampUs` are different attributes.
+fn motion_photo_off(text: &str) -> bool {
+    for quote in ['"', '\''] {
+        let key = format!("MotionPhoto={quote}");
+        let Some(pos) = text.find(&key) else {
+            continue;
+        };
+        let rest = &text[pos + key.len()..];
+        let bytes = rest.as_bytes();
+        let neg = bytes.first() == Some(&b'-');
+        let start = usize::from(neg);
+        let mut end = start;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+        if end == start {
+            continue;
+        }
+        if let Ok(n) = rest[start..end].parse::<u64>() {
+            return neg || n == 0;
+        }
+    }
+    false
 }
 
 fn xmp_attr_u64(text: &str, name: &str) -> Option<u64> {

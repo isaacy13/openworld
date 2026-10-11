@@ -1017,6 +1017,89 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aStrippedMotionPhotoIsTheStill() {
+        // Editors keep the motion-photo directory after the video is gone.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-stripped-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val still = File(root, "scene.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.absolutePath)
+        val stripped = File(root, "stripped.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description rdf:about=\"\" " +
+                "xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" " +
+                "xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" " +
+                "xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\">" +
+                "<Container:Directory><rdf:Seq>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>" +
+                "</rdf:li>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"20000\" Item:Padding=\"0\"/>" +
+                "</rdf:li></rdf:Seq></Container:Directory>" +
+                "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        stripped.writeBytes(jpegWithXmp(still.readBytes(), xmp, ByteArray(0)))
+        assertFalse(StillMotion.motionPhoto(stripped))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/stripped.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, stripped.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.estimateText.contains("not fully decoded"))
+    }
+
+    @Test
+    fun aMotionPhotoMarkedOffIsTheStill() {
+        // MotionPhoto 0 means the file is the still, even when a video is appended.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-off-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val still = File(root, "scene.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.absolutePath)
+        val video = File(root, "blank.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val off = File(root, "off.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description rdf:about=\"\" " +
+                "xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" " +
+                "xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" " +
+                "xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"0\">" +
+                "<Container:Directory><rdf:Seq>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>" +
+                "</rdf:li>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"${video.length()}\" Item:Padding=\"0\"/>" +
+                "</rdf:li></rdf:Seq></Container:Directory>" +
+                "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        off.writeBytes(jpegWithXmp(still.readBytes(), xmp, video.readBytes()))
+        assertFalse(StillMotion.motionPhoto(off))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/off.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, off.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.estimateText.contains("not fully decoded"))
+    }
+
+    @Test
     fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
         val apng = movingPicture("apng")
         assertTrue(StillMotion.animatedPng(apng))
@@ -3732,12 +3815,16 @@ private fun motionPhotoBytes(jpeg: ByteArray, video: ByteArray): ByteArray {
             "GCamera:MicroVideoOffset=\"${video.size}\"/>" +
             "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
         ).toByteArray(Charsets.UTF_8)
+    return jpegWithXmp(jpeg, xmp, video)
+}
+
+private fun jpegWithXmp(jpeg: ByteArray, xmp: ByteArray, trailer: ByteArray): ByteArray {
     val payload = "http://ns.adobe.com/xap/1.0/\u0000".toByteArray(Charsets.ISO_8859_1) + xmp
     val seglen = payload.size + 2
     return byteArrayOf(
         0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE1.toByte(),
         (seglen shr 8).toByte(), seglen.toByte(),
-    ) + payload + jpeg.copyOfRange(2, jpeg.size) + video
+    ) + payload + jpeg.copyOfRange(2, jpeg.size) + trailer
 }
 
 private fun headerFile(brand: String): File {
