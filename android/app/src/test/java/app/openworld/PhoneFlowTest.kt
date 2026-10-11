@@ -1205,6 +1205,27 @@ class PhoneScreenTest {
 
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h200dp")
+    fun aPinnedNoticeLeavesTheResultOnScreen() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.summary = "Possible candidate. Not an identification."
+        model.pickNotice = "The file could not be read. Refusing."
+        model.leaveNotice = "OpenWorld only opens an FBI page."
+        model.deleteNotice = "The result could not be deleted."
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("Possible candidate. Not an identification.").performScrollTo()
+        compose.waitForIdle()
+        val headline = compose.onNodeWithText("Possible candidate. Not an identification.").fetchSemanticsNode().boundsInRoot
+        val root = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .maxBy { it.boundsInRoot.height }.boundsInRoot
+        assertTrue(
+            "the result left the short screen: $headline root $root",
+            headline.height > 0f && headline.top >= 0f && headline.top < root.bottom,
+        )
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h200dp")
     fun theNextPageStartsAtTheTop() {
         val model = FlowModel()
         model.step = Step.Device

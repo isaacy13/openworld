@@ -11,10 +11,12 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -96,18 +98,37 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
         Scaffold(topBar = { TopAppBar(title = { Text("OpenWorld") }) }) { padding ->
             val scroll = rememberScrollState()
             LaunchedEffect(model.step, model.leaveNotice, model.deleteNotice, model.scanning) { scroll.scrollTo(0) }
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier
                     .padding(padding)
                     .padding(20.dp)
                     .fillMaxSize(),
+            ) {
+            val noticeLimit = maxHeight / 2
+            Column(
+                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                model.pickNotice?.let { Text(it, color = warningColor) }
-                if (model.step == Step.Results) {
-                    model.leaveNotice?.let { Text(it, color = warningColor) }
+                val hasNotice = model.pickNotice != null ||
+                    model.deleteNotice != null ||
+                    (model.step == Step.Results && model.leaveNotice != null)
+                if (hasNotice) {
+                    // A short warning stays put while the page scrolls. A stack of warnings
+                    // keeps the page reachable on a short screen.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = noticeLimit)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        model.pickNotice?.let { Text(it, color = warningColor) }
+                        if (model.step == Step.Results) {
+                            model.leaveNotice?.let { Text(it, color = warningColor) }
+                        }
+                        model.deleteNotice?.let { Text(it, color = warningColor) }
+                    }
                 }
-                model.deleteNotice?.let { Text(it, color = warningColor) }
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -419,6 +440,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     }
                 }
                 }
+            }
             }
         }
         val url = model.leavingUrl
