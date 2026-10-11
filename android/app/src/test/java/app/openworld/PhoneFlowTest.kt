@@ -27,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -1262,6 +1263,46 @@ class PhoneScreenTest {
         assertFalse(model.includeMissing)
         compose.onNodeWithText("Choose missing, wanted, or both.", substring = true).assertExists()
         compose.onNodeWithText("Analyze").assertIsNotEnabled()
+    }
+
+    @Test
+    fun draggingOnAChoiceNameStillScrollsThePage() {
+        val model = FlowModel()
+        model.step = Step.Bundle
+        model.bundleRows = List(24) { index ->
+            Triple("id$index", "Bundle $index\nBest for phones.", "Curve $index.")
+        }
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val name = compose.onNodeWithText("Bundle 0", substring = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Bundle 0 was not on screen: $name", name.height > 0f && name.width > 40f)
+        compose.onNodeWithText("Bundle 0", substring = true).performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        val moved = compose.onNodeWithText("Bundle 0", substring = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "dragging the bundle name left Bundle 0 at $moved, was $name",
+            moved.top < name.top - 20f || (moved.height == 0f && name.height > 0f),
+        )
+    }
+
+    @Test
+    fun draggingOnACropStillScrollsTheResult() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.summary = "Possible candidate. Not an identification."
+        model.strip = listOf(StripCrop("Not compared.", "/tmp/openworld-missing-crop.png", "Frame 1."))
+        model.detail = (0 until 40).joinToString("\n") { "Disclosure line $it." }
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val crop = compose.onNodeWithText("Not compared.").fetchSemanticsNode().boundsInRoot
+        assertTrue("the crop was not on screen: $crop", crop.height > 0f && crop.top < 800f)
+        compose.onNodeWithText("Not compared.").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        val moved = compose.onNodeWithText("Not compared.").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "dragging the crop left it at $moved, was $crop",
+            moved.top < crop.top - 20f || (moved.height == 0f && crop.height > 0f),
+        )
     }
 
     @Test
