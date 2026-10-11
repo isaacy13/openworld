@@ -811,13 +811,18 @@ public struct FlowView: View {
     }
 
     private var choose: some View {
+        // The title and the import hint grow with the text size. The page scrolls,
+        // so Choose File stays reachable on a short window.
+        ScrollView { chooseColumn }
+    }
+
+    private var chooseColumn: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Choose a photo or video")
                 .font(model.phone ? .largeTitle : .title)
             Text(Copy.importHint(phone: model.phone))
                 .foregroundStyle(.secondary)
             importControl
-            Spacer()
         }
         .padding()
     }

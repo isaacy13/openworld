@@ -364,6 +364,23 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testTheFirstPageScrollsSoChooseFileStaysReachable() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let after = view.components(separatedBy: "private var choose:").dropFirst().first ?? ""
+        let body = after.components(separatedBy: "private var device").first ?? ""
+        let scroll = body.range(of: "ScrollView")
+        let control = body.range(of: "importControl")
+        XCTAssertTrue(
+            scroll != nil && control != nil && scroll!.lowerBound < control!.lowerBound,
+            "Choose File sits under the title with nowhere to scroll: \(body.prefix(240))"
+        )
+    }
+
     func testALongAddressFitsTheColumn() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
