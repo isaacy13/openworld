@@ -1068,13 +1068,39 @@ public struct FlowView: View {
     @ViewBuilder
     private var results: some View {
         ScrollView { resultsColumn }
-        .confirmationDialog(Copy.leaving, isPresented: leavingPresented, titleVisibility: .visible) {
-            Button("Open") {
-                if let url = model.leavingURL { openURL(url) }
+            .sheet(isPresented: leavingPresented) {
+                leavingSheet
+                    .presentationDetents([.medium, .large])
             }
-            Button("Stay", role: .cancel) { model.leavingURL = nil }
-        } message: {
-            Text(PhonePreview.wrappingFileName(model.leavingURL?.absoluteString ?? ""))
+    }
+
+    /// The address scrolls inside a cap. Stay and Open stay on the screen.
+    private var leavingSheet: some View {
+        GeometryReader { geo in
+            let addressLimit = max(96, geo.size.height / 3)
+            VStack(alignment: .leading, spacing: 16) {
+                Text(Copy.leaving)
+                    .font(.headline)
+                ScrollView {
+                    Text(PhonePreview.wrappingFileName(model.leavingURL?.absoluteString ?? ""))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel(model.leavingURL?.absoluteString ?? "")
+                }
+                .frame(maxHeight: addressLimit)
+                HStack {
+                    Button("Stay") { model.leavingURL = nil }
+                    Spacer()
+                    Button("Open") {
+                        if let url = model.leavingURL {
+                            openURL(url)
+                            model.leavingURL = nil
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 

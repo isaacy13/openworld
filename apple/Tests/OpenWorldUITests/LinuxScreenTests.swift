@@ -491,6 +491,31 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    func testALongAddressScrollsAndLeavesTheButtonsOnScreen() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let sheet = view.components(separatedBy: "private var leavingSheet").dropFirst().first?
+            .components(separatedBy: "private var resultsColumn").first ?? ""
+        let scroll = sheet.range(of: "ScrollView")
+        let address = sheet.range(of: "wrappingFileName(model.leavingURL")
+        let cap = sheet.range(of: ".frame(maxHeight: addressLimit)")
+        let stay = sheet.range(of: "Button(\"Stay\")")
+        let open = sheet.range(of: "Button(\"Open\")")
+        XCTAssertTrue(
+            scroll != nil && address != nil && cap != nil && stay != nil && open != nil
+                && scroll!.lowerBound < address!.lowerBound
+                && address!.lowerBound < cap!.lowerBound
+                && cap!.lowerBound < stay!.lowerBound
+                && cap!.lowerBound < open!.lowerBound
+                && sheet.contains("max(96, geo.size.height / 3)"),
+            "a long address is not capped, so Stay and Open leave the screen: \(sheet.prefix(400))"
+        )
+    }
+
     func testALongAddressFitsTheColumn() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
