@@ -92,6 +92,59 @@ def main() -> None:
         app._show("results")
         app.primary.set_label("Scanning")
         app.primary.set_sensitive(False)
+        app.summary.set_text("No candidate is not a clearance.")
+        app._add_crop(
+            {
+                "kind": "face",
+                "crop": "crops/a.png",
+                "label": "Possible candidate. Not an identification.",
+                "frame_label": "Frame 1.",
+            }
+        )
+        app._add_crop(
+            {
+                "kind": "face",
+                "crop": "crops/a.png",
+                "label": "Not compared.",
+                "frame_label": "Frame 2.",
+            }
+        )
+        pump(context, 20)
+
+        def picture_of(box):
+            from gi.repository import Gtk
+
+            child = box.get_first_child()
+            while child is not None:
+                if not isinstance(child, Gtk.Label):
+                    return child
+                child = child.get_next_sibling()
+            return None
+
+        long_box = app.strip.get_first_child()
+        short_box = None if long_box is None else long_box.get_next_sibling()
+        long_pic = None if long_box is None else bounds(app.window, picture_of(long_box))
+        short_pic = None if short_box is None else bounds(app.window, picture_of(short_box))
+        long_frame = bounds(app.window, find_label(app.strip, "Frame 1."))
+        short_frame = bounds(app.window, find_label(app.strip, "Frame 2."))
+        lined_up = (
+            long_pic is not None
+            and short_pic is not None
+            and long_frame is not None
+            and short_frame is not None
+            and abs(long_pic[1] - short_pic[1]) <= 1
+            and abs(long_frame[1] - short_frame[1]) <= 1
+            and long_frame[1] + 1 >= long_pic[1] + long_pic[3]
+            and short_frame[1] + 1 >= short_pic[1] + short_pic[3]
+        )
+        if not lined_up:
+            raise SystemExit(
+                "a shorter caption dropped its thumbnail: "
+                f"long picture {long_pic}, short picture {short_pic}, "
+                f"Frame 1. {long_frame}, Frame 2. {short_frame}"
+            )
+        app._clear_strip()
+        app.summary.set_text("Scanning")
         for index in range(30):
             app._add_crop(
                 {

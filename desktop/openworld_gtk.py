@@ -87,7 +87,9 @@ def bounded_picture(path: str, width: int, height: int) -> Gtk.Picture:
     picture.set_hexpand(False)
     picture.set_vexpand(False)
     picture.set_halign(Gtk.Align.CENTER)
-    picture.set_valign(Gtk.Align.CENTER)
+    # The canvas already letterboxes the file. Centering the widget drops a
+    # thumbnail whose caption is shorter than the one beside it.
+    picture.set_valign(Gtk.Align.START)
     picture.set_can_shrink(False)
     picture.set_content_fit(Gtk.ContentFit.CONTAIN)
     return picture
