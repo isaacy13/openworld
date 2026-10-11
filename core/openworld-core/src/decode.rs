@@ -62,10 +62,12 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         }
         return probe_tiff_player(path);
     }
-    // A motion photo is a JPEG still plus a video. The still decoder keeps the
-    // blank cover and can clear a face that is only in the video.
+    // A motion photo is a JPEG still plus a video. The scan reads both. The
+    // cover is one more picture after the clip, so the clip's frame numbers stay.
     if let Some(clip) = motion_clip(path)? {
-        return probe_video(&clip.path);
+        let mut info = probe_video(&clip.path)?;
+        info.frames = info.frames.saturating_add(1);
+        return Ok(info);
     }
     if let Some(info) = probe_image(path) {
         return Ok(info);
@@ -82,7 +84,20 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
     }
     if let Some(clip) = motion_clip(path)? {
         let info = probe_video(&clip.path)?;
-        return decode_video(&clip.path, &info, &mut on_frame);
+        let mut stats = decode_video(&clip.path, &info, &mut on_frame)?;
+        // The cover is a picture in the file. A clip that does not show the face
+        // must not clear it. An aborted clip is not followed by another frame.
+        if stats.clean {
+            if let Ok(cover) = open_oriented(path) {
+                let keep = on_frame(stats.frames_decoded, &cover);
+                stats.frames_decoded = stats.frames_decoded.saturating_add(1);
+                stats.probe.frames = stats.probe.frames.saturating_add(1);
+                if !keep {
+                    stats.clean = false;
+                }
+            }
+        }
+        return Ok(stats);
     }
     let info = probe(path)?;
     if !info.video {
