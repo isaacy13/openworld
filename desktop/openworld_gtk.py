@@ -1201,7 +1201,12 @@ class OpenWorld(Gtk.Application):
         )
         dialog.add_button("Stay", Gtk.ResponseType.CANCEL)
         dialog.add_button("Open", Gtk.ResponseType.ACCEPT)
-        dialog.format_secondary_text(allowed)
+        # GTK 4 dropped format_secondary_text. A URL has no spaces, so the
+        # address wraps by character and stays inside the dialog.
+        address = Gtk.Label(label=allowed, wrap=True, xalign=0, selectable=True)
+        address.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        address.set_max_width_chars(42)
+        dialog.get_message_area().append(address)
         dialog.connect("response", self._leave_response, allowed)
         dialog.present()
 
