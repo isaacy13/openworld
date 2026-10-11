@@ -4035,3 +4035,62 @@ fn a_fractional_sample_aspect_is_scanned() {
     assert_eq!(report.status, "complete", "{}", report.message);
     assert!(report.frames_decoded > 0, "{}", report.message);
 }
+
+#[test]
+fn a_cropped_frame_is_scanned() {
+    // The header crop is a few pixels smaller than the picture this decoder
+    // writes. Allocating that header size used to refuse a frame a player shows.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let stored = dir.path().join("stored.mp4");
+    let movie = dir.path().join("cropped.mp4");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "4", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&stored)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let cropped = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&stored)
+        .args([
+            "-an",
+            "-c",
+            "copy",
+            "-bsf:v",
+            "h264_metadata=crop_left=8:crop_right=8:crop_top=8:crop_bottom=8",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(cropped.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: movie,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+    assert!(!report.candidates.is_empty());
+    assert!(report.frames_decoded > 0, "{}", report.message);
+}

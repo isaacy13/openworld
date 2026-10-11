@@ -1186,7 +1186,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-read_intervals",
             "%+#1",
             "-show_entries",
-            "frame_side_data=rotation",
+            "frame=width,height:frame_side_data=rotation",
             "-of",
             "json",
         ])
@@ -1198,8 +1198,17 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     }
     let value: Value = serde_json::from_slice(&output.stdout).map_err(|_| MediaError::BadCodec)?;
     let stream = value.get("streams").and_then(|s| s.get(0)).ok_or(MediaError::BadCodec)?;
-    let width = json_u32(stream.get("width")).ok_or(MediaError::BadCodec)?;
-    let height = json_u32(stream.get("height")).ok_or(MediaError::BadCodec)?;
+    let header_width = json_u32(stream.get("width")).ok_or(MediaError::BadCodec)?;
+    let header_height = json_u32(stream.get("height")).ok_or(MediaError::BadCodec)?;
+    // The header crop can be a few pixels smaller than the picture this decoder
+    // writes. The first frame is that picture. Allocating the header size asks
+    // for a short buffer and refuses a file a player shows.
+    let width = json_u32(value.pointer("/frames/0/width"))
+        .filter(|n| *n > 0)
+        .unwrap_or(header_width);
+    let height = json_u32(value.pointer("/frames/0/height"))
+        .filter(|n| *n > 0)
+        .unwrap_or(header_height);
     // The average is the rate a player uses. Theora and IVF leave it at 0/0
     // and put the real rate on r_frame_rate. A timebase is not that rate.
     let fps = stream_frame_rate(stream);
