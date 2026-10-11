@@ -253,8 +253,8 @@ enum MotionXmp {
 }
 
 /// `MicroVideoOffset` is the older length. A directory lists the cover first,
-/// with length 0, then the video item. The video length is on that item.
-/// `MotionPhoto` of 0 or less means the file is the still.
+/// with length 0, then the video item. That item's length locates the video,
+/// and a leftover offset is ignored. Only `MotionPhoto` 1 is a motion photo.
 fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
         return MotionXmp::No;
@@ -263,31 +263,32 @@ fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     if motion_photo_off(&text) {
         return MotionXmp::No;
     }
-    let named = text.contains("MicroVideoOffset=\"")
-        || text.contains("MicroVideoOffset='")
-        || text.contains("Semantic=\"MotionPhoto\"")
-        || text.contains("Semantic='MotionPhoto'");
-    if !named {
-        return MotionXmp::No;
+    if let Some(n) = motion_item_length(&text) {
+        return MotionXmp::Video(n);
     }
     if let Some(n) = xmp_attr_u64(&text, "MicroVideoOffset") {
         return MotionXmp::Video(n);
     }
-    let Some(idx) = text.find("Semantic=\"MotionPhoto\"").or_else(|| text.find("Semantic='MotionPhoto'")) else {
-        return MotionXmp::Unreadable;
-    };
-    // The length belongs to this item. The cover item's length, 0, is a different item.
-    let start = text[..idx].rfind('<').unwrap_or(0);
-    let Some(end_rel) = text[idx..].find('>') else {
-        return MotionXmp::Unreadable;
-    };
-    match xmp_attr_u64(&text[start..idx + end_rel], "Length") {
-        Some(n) => MotionXmp::Video(n),
-        None => MotionXmp::Unreadable,
+    let named = text.contains("MicroVideoOffset=\"")
+        || text.contains("MicroVideoOffset='")
+        || text.contains("Semantic=\"MotionPhoto\"")
+        || text.contains("Semantic='MotionPhoto'");
+    if named {
+        MotionXmp::Unreadable
+    } else {
+        MotionXmp::No
     }
 }
 
-/// `MotionPhoto="0"` and a negative value mark the file as a still.
+/// The length belongs to the MotionPhoto item. The cover item's length, 0, is a different item.
+fn motion_item_length(text: &str) -> Option<u64> {
+    let idx = text.find("Semantic=\"MotionPhoto\"").or_else(|| text.find("Semantic='MotionPhoto'"))?;
+    let start = text[..idx].rfind('<').unwrap_or(0);
+    let end_rel = text[idx..].find('>')?;
+    xmp_attr_u64(&text[start..idx + end_rel], "Length")
+}
+
+/// A present `MotionPhoto` value other than 1 marks the file as a still.
 /// `MotionPhotoVersion` and `MotionPhotoPresentationTimestampUs` are different attributes.
 fn motion_photo_off(text: &str) -> bool {
     for quote in ['"', '\''] {
@@ -304,11 +305,12 @@ fn motion_photo_off(text: &str) -> bool {
             end += 1;
         }
         if end == start {
-            continue;
+            return true;
         }
-        if let Ok(n) = rest[start..end].parse::<u64>() {
-            return neg || n == 0;
-        }
+        return match rest[start..end].parse::<u64>() {
+            Ok(1) if !neg => false,
+            _ => true,
+        };
     }
     false
 }

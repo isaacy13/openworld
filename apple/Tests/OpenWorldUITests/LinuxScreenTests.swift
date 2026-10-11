@@ -1749,6 +1749,91 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAMotionPhotoFlagOtherThanOneIsTheStill() throws {
+        // Any MotionPhoto value other than 1 is the same as 0.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-flag-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let still = root.appendingPathComponent("scene.jpg")
+        let video = root.appendingPathComponent("blank.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.path])
+        try ffmpeg([
+            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.path,
+        ])
+        let clip = try Data(contentsOf: video)
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description rdf:about="" \
+        xmlns:Container="http://ns.google.com/photos/1.0/container/" \
+        xmlns:Item="http://ns.google.com/photos/1.0/container/item/" \
+        xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="2" GCamera:MotionPhotoVersion="1">\
+        <Container:Directory><rdf:Seq>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="0"/>\
+        </rdf:li>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto" Item:Length="\(clip.count)" Item:Padding="0"/>\
+        </rdf:li></rdf:Seq></Container:Directory>\
+        </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        let other = root.appendingPathComponent("other.jpg")
+        try jpegWithXmp(still: try Data(contentsOf: still), xmp: Data(xmp.utf8), trailer: clip).write(to: other)
+        XCTAssertFalse(StillMotion.motionPhoto(other))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(other)
+            model.loadEstimate()
+            XCTAssertFalse(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
+    func testAMotionPhotoDirectoryWinsOverAStaleOffset() throws {
+        // The directory length locates the video. A leftover offset is ignored.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-dir-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let still = root.appendingPathComponent("scene.jpg")
+        let video = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.path])
+        try ffmpeg([
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.path,
+        ])
+        let clip = try Data(contentsOf: video)
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description rdf:about="" \
+        xmlns:Container="http://ns.google.com/photos/1.0/container/" \
+        xmlns:Item="http://ns.google.com/photos/1.0/container/item/" \
+        xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="1" GCamera:MicroVideo="1" GCamera:MicroVideoOffset="100">\
+        <Container:Directory><rdf:Seq>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="0"/>\
+        </rdf:li>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto" Item:Length="\(clip.count)" Item:Padding="0"/>\
+        </rdf:li></rdf:Seq></Container:Directory>\
+        </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        let motion = root.appendingPathComponent("motion.jpg")
+        try jpegWithXmp(still: try Data(contentsOf: still), xmp: Data(xmp.utf8), trailer: clip).write(to: motion)
+        XCTAssertTrue(StillMotion.motionPhoto(motion))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(motion)
+            model.loadEstimate()
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
     func testAnAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() throws {
         let apng = try movingPicture("apng")
         XCTAssertTrue(StillMotion.animatedPng(apng))

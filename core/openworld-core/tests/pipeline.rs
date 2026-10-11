@@ -2410,6 +2410,158 @@ fn a_motion_photo_marked_off_keeps_the_face_on_the_still() {
     assert!(report.candidates.iter().any(|c| c.kind == "face"));
 }
 
+#[test]
+fn a_motion_photo_flag_other_than_one_keeps_the_face_on_the_still() {
+    // Any MotionPhoto value other than 1 is the same as 0. The still has the face.
+    // The appended video is blank.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let still = dir.path().join("scene.jpg");
+    let movie = dir.path().join("blank.mp4");
+    let photo = dir.path().join("other.jpg");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "1"])
+        .arg(&still)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let blank = Command::new("ffmpeg")
+        .args([
+            "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=0.2", "-an", "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+        ])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank.success());
+    let jpg = fs::read(&still).unwrap();
+    let mp4 = fs::read(&movie).unwrap();
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description rdf:about=\"\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"2\" GCamera:MotionPhotoVersion=\"1\">\
+         <Container:Directory><rdf:Seq>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>\
+         </rdf:li>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"{}\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        mp4.len()
+    );
+    write_jpeg_xmp(&jpg, xmp.as_bytes(), &mp4, &photo);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: photo,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 1);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+#[test]
+fn a_motion_photo_directory_wins_over_a_stale_offset() {
+    // The directory length locates the video. A leftover MicroVideoOffset that
+    // does not land on that movie is ignored. The cover is blank. The video has the face.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let blank = dir.path().join("blank.jpg");
+    let movie = dir.path().join("scene.mp4");
+    let motion = dir.path().join("motion.jpg");
+    let blank_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1"])
+        .arg(&blank)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank_ok.success());
+    let scene_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(scene_ok.success());
+    let jpg = fs::read(&blank).unwrap();
+    let mp4 = fs::read(&movie).unwrap();
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description rdf:about=\"\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\" \
+         GCamera:MicroVideo=\"1\" GCamera:MicroVideoOffset=\"100\">\
+         <Container:Directory><rdf:Seq>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>\
+         </rdf:li>\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"{}\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        mp4.len()
+    );
+    write_jpeg_xmp(&jpg, xmp.as_bytes(), &mp4, &motion);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: motion,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 8);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
 fn write_jpeg_xmp(jpg: &[u8], xmp: &[u8], trailer: &[u8], out: &std::path::Path) {
     assert_eq!(&jpg[..2], b"\xff\xd8");
     let mut payload = b"http://ns.adobe.com/xap/1.0/\0".to_vec();

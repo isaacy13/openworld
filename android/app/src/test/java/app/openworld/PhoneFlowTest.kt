@@ -1100,6 +1100,95 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aMotionPhotoFlagOtherThanOneIsTheStill() {
+        // Any MotionPhoto value other than 1 is the same as 0.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-flag-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val still = File(root, "scene.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.absolutePath)
+        val video = File(root, "blank.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val other = File(root, "other.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description rdf:about=\"\" " +
+                "xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" " +
+                "xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" " +
+                "xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"2\" GCamera:MotionPhotoVersion=\"1\">" +
+                "<Container:Directory><rdf:Seq>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>" +
+                "</rdf:li>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"${video.length()}\" Item:Padding=\"0\"/>" +
+                "</rdf:li></rdf:Seq></Container:Directory>" +
+                "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        other.writeBytes(jpegWithXmp(still.readBytes(), xmp, video.readBytes()))
+        assertFalse(StillMotion.motionPhoto(other))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/other.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, other.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.estimateText.contains("not fully decoded"))
+    }
+
+    @Test
+    fun aMotionPhotoDirectoryWinsOverAStaleOffset() {
+        // The directory length locates the video. A leftover offset is ignored.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-dir-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val still = File(root, "scene.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", still.absolutePath)
+        val video = File(root, "clip.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val motion = File(root, "motion.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description rdf:about=\"\" " +
+                "xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" " +
+                "xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" " +
+                "xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"1\" GCamera:MicroVideo=\"1\" GCamera:MicroVideoOffset=\"100\">" +
+                "<Container:Directory><rdf:Seq>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"image/jpeg\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"0\"/>" +
+                "</rdf:li>" +
+                "<rdf:li rdf:parseType=\"Resource\">" +
+                "<Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"${video.length()}\" Item:Padding=\"0\"/>" +
+                "</rdf:li></rdf:Seq></Container:Directory>" +
+                "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        motion.writeBytes(jpegWithXmp(still.readBytes(), xmp, video.readBytes()))
+        assertTrue(StillMotion.motionPhoto(motion))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/stale.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, motion.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+    }
+
+    @Test
     fun anAnimatedPngIsRefusedInsteadOfClearingTheFirstFrame() {
         val apng = movingPicture("apng")
         assertTrue(StillMotion.animatedPng(apng))

@@ -45,7 +45,7 @@ public enum StillMotion {
     }
 
     /// A motion photo is a JPEG cover plus a video at the end of the file.
-    /// The still decoder keeps the cover. `MotionPhoto` of 0 or less is a still.
+    /// The still decoder keeps the cover. A `MotionPhoto` value other than 1 is a still.
     /// A length that does not land on `ftyp` means the video was removed.
     /// A named photo whose length cannot be read is still a motion photo.
     public static func motionPhoto(_ url: URL) -> Bool {
@@ -112,21 +112,23 @@ public enum StillMotion {
         if buf.count < prefix.count || Array(buf.prefix(prefix.count)) != prefix { return .no }
         guard let text = String(bytes: buf, encoding: .utf8) else { return .no }
         if motionPhotoOff(text) { return .off }
+        if let length = motionItemLength(text) { return .video(length) }
+        if let length = xmpAttr(text, "MicroVideoOffset") { return .video(length) }
         let named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='")
             || text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
-        if !named { return .no }
-        if let length = xmpAttr(text, "MicroVideoOffset") { return .video(length) }
-        let quoted = text.range(of: "Semantic=\"MotionPhoto\"")
-        let idx = quoted ?? text.range(of: "Semantic='MotionPhoto'")
-        guard let idx else { return .unreadable }
-        let start = text[..<idx.lowerBound].lastIndex(of: "<") ?? text.startIndex
-        guard let end = text[idx.lowerBound...].firstIndex(of: ">") else { return .unreadable }
-        let item = String(text[start..<end])
-        if let length = xmpAttr(item, "Length") { return .video(length) }
-        return .unreadable
+        return named ? .unreadable : .no
     }
 
-    /// `MotionPhoto="0"` and a negative value mark the file as a still.
+    /// The length belongs to the MotionPhoto item. The cover item's length, 0, is a different item.
+    private static func motionItemLength(_ text: String) -> UInt64? {
+        let quoted = text.range(of: "Semantic=\"MotionPhoto\"")
+        guard let idx = quoted ?? text.range(of: "Semantic='MotionPhoto'") else { return nil }
+        let start = text[..<idx.lowerBound].lastIndex(of: "<") ?? text.startIndex
+        guard let end = text[idx.lowerBound...].firstIndex(of: ">") else { return nil }
+        return xmpAttr(String(text[start..<end]), "Length")
+    }
+
+    /// A present `MotionPhoto` value other than 1 marks the file as a still.
     private static func motionPhotoOff(_ text: String) -> Bool {
         for quote in ["\"", "'"] {
             guard let range = text.range(of: "MotionPhoto=\(quote)") else { continue }
@@ -134,8 +136,8 @@ public enum StillMotion {
             let neg = rest.first == "-"
             if neg { rest = rest.dropFirst() }
             let digits = rest.prefix { $0.isASCII && $0 >= "0" && $0 <= "9" }
-            guard !digits.isEmpty, let n = UInt64(digits) else { continue }
-            return neg || n == 0
+            guard !digits.isEmpty, let n = UInt64(digits) else { return true }
+            return neg || n != 1
         }
         return false
     }

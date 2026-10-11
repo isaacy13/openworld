@@ -46,7 +46,7 @@ object StillMotion {
 
     /**
      * A motion photo is a JPEG cover plus a video at the end of the file.
-     * BitmapFactory keeps the cover. `MotionPhoto` of 0 or less is a still.
+     * BitmapFactory keeps the cover. A `MotionPhoto` value other than 1 is a still.
      * A length that does not land on `ftyp` means the video was removed.
      * A named photo whose length cannot be read is still a motion photo.
      */
@@ -107,20 +107,25 @@ object StillMotion {
         if (buf.size < prefix.size || !buf.copyOf(prefix.size).contentEquals(prefix)) return MotionXmp.No
         val text = buf.toString(Charsets.UTF_8)
         if (motionPhotoOff(text)) return MotionXmp.Off
+        motionItemLength(text)?.let { return MotionXmp.Video(it) }
+        xmpAttr(text, "MicroVideoOffset")?.let { return MotionXmp.Video(it) }
         val named = text.contains("MicroVideoOffset=\"") || text.contains("MicroVideoOffset='") ||
             text.contains("Semantic=\"MotionPhoto\"") || text.contains("Semantic='MotionPhoto'")
-        if (!named) return MotionXmp.No
-        xmpAttr(text, "MicroVideoOffset")?.let { return MotionXmp.Video(it) }
-        val quoted = text.indexOf("Semantic=\"MotionPhoto\"")
-        val idx = if (quoted >= 0) quoted else text.indexOf("Semantic='MotionPhoto'")
-        if (idx < 0) return MotionXmp.Unreadable
-        val start = text.lastIndexOf('<', idx).let { if (it >= 0) it else 0 }
-        val end = text.indexOf('>', idx)
-        if (end < 0) return MotionXmp.Unreadable
-        return xmpAttr(text.substring(start, end), "Length")?.let { MotionXmp.Video(it) } ?: MotionXmp.Unreadable
+        return if (named) MotionXmp.Unreadable else MotionXmp.No
     }
 
-    /** `MotionPhoto="0"` and a negative value mark the file as a still. */
+    /** The length belongs to the MotionPhoto item. The cover item's length, 0, is a different item. */
+    private fun motionItemLength(text: String): Long? {
+        val quoted = text.indexOf("Semantic=\"MotionPhoto\"")
+        val idx = if (quoted >= 0) quoted else text.indexOf("Semantic='MotionPhoto'")
+        if (idx < 0) return null
+        val start = text.lastIndexOf('<', idx).let { if (it >= 0) it else 0 }
+        val end = text.indexOf('>', idx)
+        if (end < 0) return null
+        return xmpAttr(text.substring(start, end), "Length")
+    }
+
+    /** A present `MotionPhoto` value other than 1 marks the file as a still. */
     private fun motionPhotoOff(text: String): Boolean {
         for (quote in charArrayOf('"', '\'')) {
             val key = "MotionPhoto=$quote"
@@ -129,9 +134,9 @@ object StillMotion {
             val rest = text.substring(pos + key.length)
             val neg = rest.startsWith("-")
             val digits = rest.drop(if (neg) 1 else 0).takeWhile { it.isDigit() }
-            if (digits.isEmpty()) continue
-            val n = digits.toLongOrNull() ?: continue
-            return neg || n == 0L
+            if (digits.isEmpty()) return true
+            val n = digits.toLongOrNull() ?: return true
+            return neg || n != 1L
         }
         return false
     }
