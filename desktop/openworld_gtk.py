@@ -1258,6 +1258,7 @@ class OpenWorld(Gtk.Application):
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(address)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_propagate_natural_width(True)
         scroll.set_propagate_natural_height(True)
         scroll.set_max_content_height(self._leave_address_height())
         scroll.set_overlay_scrolling(False)

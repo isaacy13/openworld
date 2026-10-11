@@ -93,7 +93,7 @@ def main() -> None:
         inside = (
             address is not None
             and box is not None
-            and box[2] > 0
+            and box[2] >= 280
             and box[3] > 0
             and box[0] >= -1
             and box[1] >= -1
