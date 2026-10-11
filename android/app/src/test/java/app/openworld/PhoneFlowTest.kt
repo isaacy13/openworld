@@ -8,7 +8,9 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.media.MediaFormat
 import android.os.ParcelFileDescriptor
+import java.nio.ByteBuffer
 import org.robolectric.fakes.RoboCursor
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -830,6 +832,25 @@ class PhoneFlowTest {
         assertFalse(model.canAnalyze)
         assertTrue(model.estimateText.contains("not fully decoded"))
         assertTrue(model.estimateText.contains("Refusing"))
+    }
+
+    @Test
+    fun aVideoPlaneStartsAtTheBufferPositionAndStudioBlackIsBlack() {
+        val plane = ByteBuffer.allocate(8)
+        plane.put(0, 9)
+        plane.put(1, 9)
+        plane.put(2, 16)
+        plane.put(3, 235.toByte())
+        plane.position(2)
+        assertEquals(16, planeSample(plane, 0))
+        assertEquals(235, planeSample(plane, 1))
+        assertEquals(0xFF000000.toInt(), yuvToRgb(16, 128, 128, fullRange = false))
+        assertEquals(0xFFFFFFFF.toInt(), yuvToRgb(235, 128, 128, fullRange = false))
+        assertEquals(0xFFF34680.toInt(), yuvToRgb(126, 128, 200, fullRange = false))
+        assertEquals(0xFF101010.toInt(), yuvToRgb(16, 128, 128, fullRange = true))
+        assertFalse(videoIsFullRange(null))
+        assertFalse(videoIsFullRange(MediaFormat.COLOR_RANGE_LIMITED))
+        assertTrue(videoIsFullRange(MediaFormat.COLOR_RANGE_FULL))
     }
 
     @Test

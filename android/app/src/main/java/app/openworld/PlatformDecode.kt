@@ -119,6 +119,12 @@ object PlatformDecode {
         val info = MediaCodec.BufferInfo()
         var inputDone = false
         var written = 0
+        val range = if (format.containsKey(MediaFormat.KEY_COLOR_RANGE)) {
+            format.getInteger(MediaFormat.KEY_COLOR_RANGE)
+        } else {
+            null
+        }
+        val fullRange = videoIsFullRange(range)
         try {
             while (true) {
                 if (stopped()) throw DecodeStopped()
@@ -140,7 +146,7 @@ object PlatformDecode {
                 if (outIndex >= 0) {
                     val image = codec.getOutputImage(outIndex)
                     if (image != null && info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
-                        val bitmap = imageToBitmap(image)
+                        val bitmap = imageToBitmap(image, fullRange)
                         image.close()
                         val aspect = pixelAspect(format)
                         val tag = JpegOrientation.tagForClockwise(rotationDegrees(format))
@@ -325,7 +331,7 @@ object PlatformDecode {
         return null
     }
 
-    private fun imageToBitmap(image: Image): Bitmap {
+    private fun imageToBitmap(image: Image, fullRange: Boolean): Bitmap {
         if (image.format != ImageFormat.YUV_420_888) {
             throw IOException("Bad codec or unreadable file. Refusing.")
         }
@@ -345,15 +351,48 @@ object PlatformDecode {
                 val uvCol = col / 2
                 val uIndex = uvRow * uPlane.rowStride + uvCol * uPlane.pixelStride
                 val vIndex = uvRow * vPlane.rowStride + uvCol * vPlane.pixelStride
-                val yVal = yBuf.get(yIndex).toInt() and 0xFF
-                val uVal = (uBuf.get(uIndex).toInt() and 0xFF) - 128
-                val vVal = (vBuf.get(vIndex).toInt() and 0xFF) - 128
-                val r = (yVal + 1.402 * vVal).roundToInt().coerceIn(0, 255)
-                val g = (yVal - 0.344136 * uVal - 0.714136 * vVal).roundToInt().coerceIn(0, 255)
-                val b = (yVal + 1.772 * uVal).roundToInt().coerceIn(0, 255)
-                argb[row * width + col] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                val yVal = planeSample(yBuf, yIndex)
+                val uVal = planeSample(uBuf, uIndex)
+                val vVal = planeSample(vBuf, vIndex)
+                argb[row * width + col] = yuvToRgb(yVal, uVal, vVal, fullRange)
             }
         }
         return Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
     }
+}
+
+/** A plane buffer's position is the first sample. An absolute read from zero takes the padding before it. */
+internal fun planeSample(buffer: java.nio.ByteBuffer, index: Int): Int {
+    return buffer.get(buffer.position() + index).toInt() and 0xFF
+}
+
+/**
+ * Camera video is studio range: Y 16 is black. A full-range recording says so on the track.
+ * Absent means limited, which is the default for a video bitstream.
+ */
+internal fun videoIsFullRange(range: Int?): Boolean {
+    return range == MediaFormat.COLOR_RANGE_FULL
+}
+
+internal fun yuvToRgb(y: Int, u: Int, v: Int, fullRange: Boolean): Int {
+    val (r, g, b) = if (fullRange) {
+        val cb = u - 128
+        val cr = v - 128
+        Triple(
+            (y + 1.402 * cr).roundToInt(),
+            (y - 0.344136 * cb - 0.714136 * cr).roundToInt(),
+            (y + 1.772 * cb).roundToInt(),
+        )
+    } else {
+        // Studio-range BT.601. Y 16 is black and Y 235 is white.
+        val yy = y - 16
+        val cb = u - 128
+        val cr = v - 128
+        Triple(
+            (298 * yy + 409 * cr + 128) / 256,
+            (298 * yy - 100 * cb - 208 * cr + 128) / 256,
+            (298 * yy + 516 * cb + 128) / 256,
+        )
+    }
+    return (0xFF shl 24) or (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
 }
