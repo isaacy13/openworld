@@ -83,6 +83,7 @@ def desktop() -> None:
         run([sys.executable, str(ROOT / "tests/desktop_title.py")])
         run([sys.executable, str(ROOT / "tests/desktop_short.py")])
         run([sys.executable, str(ROOT / "tests/desktop_thumb.py")])
+        run([sys.executable, str(ROOT / "tests/desktop_card.py")])
         print("+ desktop window", flush=True)
         subprocess.run([sys.executable, str(ROOT / "desktop/openworld_gtk.py")], cwd=ROOT, env=env, check=True)
         payload = json.loads(status.read_text())

@@ -448,6 +448,9 @@ class OpenWorld(Gtk.Application):
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_overlay_scrolling(False)
         scroll.set_vexpand(True)
+        # Crop and frame are 160 px, with a gap and the card padding. The
+        # scrollbar takes the right edge, so this width keeps both photos beside it.
+        scroll.set_size_request(370, -1)
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
         inner.append(self.reason)
