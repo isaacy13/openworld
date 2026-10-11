@@ -331,6 +331,7 @@ class OpenWorld(Gtk.Application):
         ):
             button = Gtk.CheckButton(label=label)
             button.base_label = label
+            self._wrap_choice(button)
             if group is None:
                 group = button
             else:
@@ -347,8 +348,10 @@ class OpenWorld(Gtk.Application):
         box.append(cover)
         self.complete_button = Gtk.CheckButton(label="Complete. Every decoded frame.")
         self.complete_button.base_label = "Complete. Every decoded frame."
+        self._wrap_choice(self.complete_button)
         self.measured_button = Gtk.CheckButton(label="Measured. 5 frames a second, plus the tracker.")
         self.measured_button.base_label = "Measured. 5 frames a second, plus the tracker."
+        self._wrap_choice(self.measured_button)
         self.measured_button.set_group(self.complete_button)
         self.complete_button.set_active(True)
         self.complete_button.connect("toggled", self._on_coverage, "complete")
@@ -706,13 +709,28 @@ class OpenWorld(Gtk.Application):
             return f"{label} Selected."
         return f"{label}. Selected."
 
+    def _wrap_choice(self, button: Gtk.CheckButton) -> None:
+        """A long choice uses the width it is given."""
+        child = button.get_first_child()
+        while child is not None:
+            if isinstance(child, Gtk.Label):
+                child.set_wrap(True)
+                child.set_wrap_mode(Pango.WrapMode.WORD)
+                child.set_xalign(0)
+                child.set_hexpand(True)
+            child = child.get_next_sibling()
+
+    def _set_choice_text(self, button: Gtk.CheckButton, text: str) -> None:
+        button.set_label(text)
+        self._wrap_choice(button)
+
     def _mark_sizes(self) -> None:
         for button in self.size_buttons.values():
-            button.set_label(self._selected_label(button.base_label, button.get_active()))
+            self._set_choice_text(button, self._selected_label(button.base_label, button.get_active()))
 
     def _mark_coverage(self) -> None:
         for button in (self.complete_button, self.measured_button):
-            button.set_label(self._selected_label(button.base_label, button.get_active()))
+            self._set_choice_text(button, self._selected_label(button.base_label, button.get_active()))
 
     def _on_size(self, button: Gtk.CheckButton, value: str) -> None:
         if button.get_active():

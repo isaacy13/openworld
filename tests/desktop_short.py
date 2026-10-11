@@ -97,6 +97,37 @@ def main() -> None:
                 "the size page left a short window: "
                 f"window {app.window.get_width()}x{height}, brief {box}"
             )
+        app.window.set_default_size(760, 700)
+        pump(context, 12)
+        width = app.window.get_width()
+        choice = None
+
+        def find_choice(widget):
+            nonlocal choice
+            if isinstance(widget, Gtk.Label) and widget.get_text().startswith("Measured. 5 frames"):
+                choice = widget
+            child = widget.get_first_child()
+            while child is not None:
+                find_choice(child)
+                child = child.get_next_sibling()
+
+        find_choice(app.page_size)
+        choice_box = None if choice is None else bounds(app.window, choice)
+        choice_lines = 0 if choice is None or choice.get_layout() is None else choice.get_layout().get_line_count()
+        wrapped = (
+            choice is not None
+            and choice_box is not None
+            and width <= 780
+            and choice_box[0] >= -1
+            and choice_box[0] + choice_box[2] <= width + 1
+            and choice_lines >= 2
+            and not choice.get_layout().is_ellipsized()
+        )
+        if not wrapped:
+            raise SystemExit(
+                "the coverage choice left a narrow window: "
+                f"window {width}x{app.window.get_height()}, choice {choice_box}, lines {choice_lines}"
+            )
         app._go("device")
         app.window.set_default_size(900, 640)
         pump(context, 12)
