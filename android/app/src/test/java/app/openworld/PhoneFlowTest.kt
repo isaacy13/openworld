@@ -2609,6 +2609,41 @@ class PhoneScreenTest {
         compose.onNodeWithText("Crops from this file.").assertExists()
     }
 
+    @Test
+    fun aLongChoiceStaysInsideTheScreen() {
+        val model = FlowModel()
+        model.step = Step.Size
+        model.coverage = "measured"
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val measured = compose.onNodeWithText(
+            "Measured. 5 frames a second, plus the tracker. Selected.",
+            useUnmergedTree = true,
+        ).fetchSemanticsNode().boundsInRoot
+        // The sentence is wider than this phone at a normal font. It has to be given the row,
+        // so the words wrap inside the screen instead of running off the edge.
+        assertTrue(
+            "the coverage choice was not given the row: $measured root $root",
+            measured.left >= 0f &&
+                measured.right <= root.right + 1f &&
+                measured.width > 200f,
+        )
+        model.step = Step.Bundle
+        model.bundleId = "fast"
+        model.bundleRows = listOf(
+            Triple("fast", "Fast\nPhones and long video.", "Fixture curve measured. Real FBI photos stay off."),
+        )
+        compose.waitForIdle()
+        val curve = compose.onNodeWithText(
+            "Fixture curve measured. Real FBI photos stay off.",
+            useUnmergedTree = true,
+        ).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the bundle line was not given the row: $curve root $root",
+            curve.left >= 0f && curve.right <= root.right + 1f && curve.width > 200f,
+        )
+    }
+
     private fun shownTexts(): List<String> =
         compose.onAllNodes(SemanticsMatcher("has text") {
             it.config.getOrNull(SemanticsProperties.Text) != null

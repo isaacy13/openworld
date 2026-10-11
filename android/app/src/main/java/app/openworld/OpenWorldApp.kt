@@ -166,10 +166,14 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                     ),
                             ) {
                                 RadioButton(selected = model.bundleId == id, onClick = null)
-                                Column {
-                                    Text(markedChoice(name, model.bundleId == id), style = MaterialTheme.typography.titleMedium)
-                                    if (best.isNotBlank()) Text(best)
-                                    Text(curve)
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        markedChoice(name, model.bundleId == id),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    if (best.isNotBlank()) Text(best, modifier = Modifier.fillMaxWidth())
+                                    Text(curve, modifier = Modifier.fillMaxWidth())
                                 }
                             }
                         }
@@ -189,7 +193,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                     ),
                             ) {
                                 RadioButton(selected = model.longSide == value, onClick = null)
-                                Text(markedChoice(label, model.longSide == value), modifier = Modifier.padding(top = 12.dp))
+                                Text(
+                                    markedChoice(label, model.longSide == value),
+                                    modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                )
                             }
                         }
                         Text("Coverage", style = MaterialTheme.typography.titleMedium)
@@ -203,7 +210,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 ),
                         ) {
                             RadioButton(selected = model.coverage == "complete", onClick = null)
-                            Text(markedChoice("Complete. Every decoded frame.", model.coverage == "complete"), modifier = Modifier.padding(top = 12.dp))
+                            Text(
+                                markedChoice("Complete. Every decoded frame.", model.coverage == "complete"),
+                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                            )
                         }
                         Row(
                             modifier = Modifier
@@ -215,7 +225,10 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                                 ),
                         ) {
                             RadioButton(selected = model.coverage == "measured", onClick = null)
-                            Text(markedChoice("Measured. 5 frames a second, plus the tracker.", model.coverage == "measured"), modifier = Modifier.padding(top = 12.dp))
+                            Text(
+                                markedChoice("Measured. 5 frames a second, plus the tracker.", model.coverage == "measured"),
+                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                            )
                         }
                         if (model.coverage == "measured") Text("A brief face can be missed.")
                         Button(onClick = model::continueFromSize) { Text("Continue") }
