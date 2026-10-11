@@ -1609,6 +1609,40 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aCropThatArrivesComesOntoTheScreen() {
+        val picture = File.createTempFile("openworld-crop", ".png")
+        picture.deleteOnExit()
+        picture.outputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val model = FlowModel()
+        model.step = Step.Estimate
+        model.scanning = true
+        val path = picture.absolutePath
+        model.liveCrops = listOf(LiveCrop("Not compared.", path, "Frame 1."))
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.waitForIdle()
+        val first = compose.onNodeWithText("Frame 1.").fetchSemanticsNode().boundsInRoot
+        assertTrue("the first crop was not on screen: $first", first.height > 0f && first.left >= 0f && first.left < 360f)
+        val scanning = compose.onAllNodesWithText("Scanning").fetchSemanticsNodes().map { it.boundsInRoot }
+        assertTrue("Scanning was not on screen: $scanning", scanning.any { it.height > 0f && it.top >= 0f && it.top < 800f })
+        compose.runOnUiThread {
+            model.liveCrops = (1..5).map { index ->
+                LiveCrop("Not compared.", path, "Frame $index.")
+            }
+        }
+        compose.waitForIdle()
+        val arrived = compose.onNodeWithText("Frame 5.").fetchSemanticsNode().boundsInRoot
+        val stillScanning = compose.onAllNodesWithText("Scanning").fetchSemanticsNodes().map { it.boundsInRoot }
+        assertTrue(
+            "the crop that arrived left the screen: $arrived, Scanning was $stillScanning",
+            arrived.height > 0f && arrived.left >= 0f && arrived.right <= 360f && arrived.top >= 0f && arrived.top < 800f &&
+                stillScanning.any { it.height > 0f && it.top >= 0f && it.top < 800f },
+        )
+    }
+
+    @Test
     fun aLongFileNameBreaksBetweenCharacters() {
         val model = FlowModel()
         model.step = Step.Device

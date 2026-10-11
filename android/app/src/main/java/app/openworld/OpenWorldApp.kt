@@ -225,9 +225,13 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             Text(if (model.scanning) "Scanning" else "Estimate", style = MaterialTheme.typography.headlineMedium)
                         }
                         if (model.scanning && model.liveCrops.isNotEmpty()) {
+                            val stripScroll = rememberScrollState()
+                            LaunchedEffect(model.liveCrops.size, stripScroll.maxValue) {
+                                stripScroll.scrollTo(stripScroll.maxValue)
+                            }
                             Text("Crops from this file.", style = MaterialTheme.typography.titleMedium)
                             Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                modifier = Modifier.horizontalScroll(stripScroll),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 model.liveCrops.forEach { crop ->

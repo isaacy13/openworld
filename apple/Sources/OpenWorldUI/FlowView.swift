@@ -918,15 +918,23 @@ public struct FlowView: View {
             if model.scanning, !model.liveCrops.isEmpty {
                 Text("Crops from this file.")
                     .font(model.phone ? .title3 : .headline)
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(model.liveCrops) { crop in
-                            VStack(spacing: 4) {
-                                liveImage(crop.path)
-                                Text(crop.frameLabel).multilineTextAlignment(.center)
-                                Text(crop.label).multilineTextAlignment(.center)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(model.liveCrops) { crop in
+                                VStack(spacing: 4) {
+                                    liveImage(crop.path)
+                                    Text(crop.frameLabel).multilineTextAlignment(.center)
+                                    Text(crop.label).multilineTextAlignment(.center)
+                                }
+                                .frame(width: 140)
+                                .id(crop.id)
                             }
-                            .frame(width: 140)
+                        }
+                    }
+                    .onChange(of: model.liveCrops.count, initial: true) { _, _ in
+                        if let last = model.liveCrops.last {
+                            proxy.scrollTo(last.id, anchor: .trailing)
                         }
                     }
                 }
