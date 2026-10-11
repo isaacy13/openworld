@@ -467,6 +467,24 @@ class OpenWorld(Gtk.Application):
         # Crop and frame are 160 px, with a gap and the card padding. The
         # scrollbar takes the right edge, so this width keeps both photos beside it.
         scroll.set_size_request(370, -1)
+        # Delete stays under the scroll. A short window must still leave a full
+        # line of the headline, or that line is only a slice.
+        last_line = {"value": -1}
+
+        def watch_headline(_widget, _clock):
+            if self.closed:
+                return False
+            layout = self.summary.get_layout()
+            line = 0
+            if layout is not None and layout.get_line_count() > 0:
+                _ink, logical = layout.get_line(0).get_pixel_extents()
+                line = logical.height
+            if line > 1 and line != last_line["value"]:
+                last_line["value"] = line
+                scroll.set_min_content_height(max(scroll.get_min_content_height(), line))
+            return True
+
+        scroll.add_tick_callback(watch_headline)
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         inner.append(self.summary)
         inner.append(self.reason)
