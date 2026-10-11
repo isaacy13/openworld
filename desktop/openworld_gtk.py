@@ -360,9 +360,13 @@ class OpenWorld(Gtk.Application):
         self.strip_heading = Gtk.Label(label="Crops from this file.", xalign=0)
         self.strip_heading.add_css_class("section")
         self.strip_heading.set_visible(False)
-        self.strip = Gtk.FlowBox()
-        self.strip.set_max_children_per_line(6)
-        self.strip.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.strip_scroll = Gtk.ScrolledWindow()
+        self.strip_scroll.set_child(self.strip)
+        self.strip_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        self.strip_scroll.set_propagate_natural_height(True)
+        self.strip_scroll.set_overlay_scrolling(False)
+        self.strip_scroll.set_hexpand(True)
         self.detail = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         scroll = Gtk.ScrolledWindow()
         self.results_scroll = scroll
@@ -376,7 +380,7 @@ class OpenWorld(Gtk.Application):
         inner.append(self.warning_note)
         inner.append(self.detail)
         inner.append(self.strip_heading)
-        inner.append(self.strip)
+        inner.append(self.strip_scroll)
         inner.append(self.result_note)
         scroll.set_child(inner)
         outer.append(scroll)
@@ -922,6 +926,7 @@ class OpenWorld(Gtk.Application):
         box.append(caption)
         self.strip.append(box)
         self.strip_heading.set_visible(True)
+        self._reveal_latest_crop(self.strip_scroll.get_hadjustment())
         return False
 
     def _refusal_disclosure(self) -> list[str]:
@@ -995,6 +1000,10 @@ class OpenWorld(Gtk.Application):
         self._set_line(self.result_note, "\n".join(report.get("disclosure") or []))
         self.results_scroll.get_vadjustment().set_value(0)
         self._fill_strip(report)
+        self.strip_scroll.get_hadjustment().set_value(0)
+        strip_parent = self.strip.get_parent()
+        if strip_parent is not None:
+            strip_parent.queue_allocate()
         for candidate in report.get("candidates") or []:
             self.detail.append(self._candidate_card(candidate))
         self.primary.set_sensitive(True)
@@ -1005,8 +1014,39 @@ class OpenWorld(Gtk.Application):
         self._exercise_report = report
         return False
 
+    def _reveal_latest_crop(self, _adjustment=None) -> None:
+        """The crop that just arrived stays on screen. Scanning stays where it is."""
+        if self.summary.get_text() != "Scanning":
+            return
+        self._strip_reveal_tries = 0
+        GLib.idle_add(self._scroll_strip_to_latest)
+
+    def _scroll_strip_to_latest(self) -> bool:
+        if self.closed or self.summary.get_text() != "Scanning":
+            return False
+        adjustment = self.strip_scroll.get_hadjustment()
+        page = adjustment.get_page_size()
+        if page <= 1:
+            self._strip_reveal_tries += 1
+            return self._strip_reveal_tries < 8
+        target = max(0.0, adjustment.get_upper() - page)
+        # A value set while the row is being allocated does not move it.
+        adjustment.set_value(0)
+        adjustment.set_value(target)
+        parent = self.strip.get_parent()
+        if parent is not None:
+            parent.queue_allocate()
+        return False
+
+    def _clear_strip(self) -> None:
+        child = self.strip.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self.strip.remove(child)
+            child = nxt
+
     def _fill_strip(self, report: dict) -> None:
-        self.strip.remove_all()
+        self._clear_strip()
         self.strip_heading.set_visible(False)
         if self.out_dir is None:
             return
@@ -1056,8 +1096,7 @@ class OpenWorld(Gtk.Application):
         labels: list[str] = []
         child = self.strip.get_first_child()
         while child is not None:
-            inner = child.get_child()
-            widget = inner.get_first_child() if inner is not None else None
+            widget = child.get_first_child()
             while widget is not None:
                 if isinstance(widget, Gtk.Label):
                     labels.append(widget.get_text())
@@ -1262,7 +1301,7 @@ class OpenWorld(Gtk.Application):
         Gtk.Application.do_shutdown(self)
 
     def _clear_results(self) -> None:
-        self.strip.remove_all()
+        self._clear_strip()
         self.strip_heading.set_visible(False)
         child = self.detail.get_first_child()
         while child is not None:
@@ -2133,7 +2172,7 @@ class OpenWorld(Gtk.Application):
         ):
             self._exercise_fail(f"a plate or a vehicle stayed off the running scan: {live}")
             return False
-        self.strip.remove_all()
+        self._clear_strip()
         self.strip_heading.set_visible(False)
         GLib.timeout_add(200, self._exercise_wait, 0)
         return False

@@ -78,6 +78,7 @@ def desktop() -> None:
         run([sys.executable, str(ROOT / "tests/desktop_close.py")])
         run([sys.executable, str(ROOT / "tests/desktop_remote.py")])
         run([sys.executable, str(ROOT / "tests/desktop_bundle.py")])
+        run([sys.executable, str(ROOT / "tests/desktop_crops.py")])
         print("+ desktop window", flush=True)
         subprocess.run([sys.executable, str(ROOT / "desktop/openworld_gtk.py")], cwd=ROOT, env=env, check=True)
         payload = json.loads(status.read_text())
