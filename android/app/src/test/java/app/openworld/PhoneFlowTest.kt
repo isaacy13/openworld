@@ -522,6 +522,41 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aDateFromBefore2001StillCountsAsOld() {
+        // 1995-01-01T00:00:00Z. last_modified and datetaken are milliseconds.
+        // date_modified is seconds. Both sit under the old one-billion cutoff.
+        val millis = 788_918_400_000L
+        val seconds = 788_918_400L
+        assertTrue(chooseDated("content://app.openworld/old-doc.png", "last_modified", millis).oldFile)
+        assertTrue(chooseDated("content://app.openworld/old-store.png", "date_modified", seconds).oldFile)
+        assertTrue(chooseDated("content://app.openworld/old-taken.png", "datetaken", millis).oldFile)
+        val fresh = chooseDated(
+            "content://app.openworld/fresh-store.png",
+            "date_modified",
+            System.currentTimeMillis() / 1000,
+        )
+        assertFalse(fresh.oldFile)
+    }
+
+    private fun chooseDated(address: String, column: String, value: Long): FlowModel {
+        val model = FlowModel()
+        val uri = Uri.parse(address)
+        val file = still("blank")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        val cursor = object : RoboCursor() {
+            override fun close() {
+                moveToPosition(-1)
+            }
+        }
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME, column))
+        cursor.setResults(arrayOf(arrayOf<Any>("photo.png", value)))
+        shadowOf(resolver).setCursor(uri, cursor)
+        shadowOf(resolver).registerInputStream(uri, file.inputStream())
+        model.choose(uri, resolver)
+        return model
+    }
+
+    @Test
     fun aBlankDisplayNameUsesTheNameInTheAddress() {
         val file = still("blank")
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver

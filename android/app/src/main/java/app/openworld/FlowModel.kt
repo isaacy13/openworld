@@ -671,13 +671,16 @@ class FlowModel : ViewModel() {
         } ?: return null
         cursor.use {
             if (!it.moveToFirst()) return null
+            // last_modified and datetaken are milliseconds. date_modified is seconds.
+            // A cutoff at one billion treated a 1990s millisecond time as seconds,
+            // and it skipped a seconds time from before September 2001.
             for (name in listOf("last_modified", "date_modified", "datetaken")) {
                 val index = it.getColumnIndex(name)
-                if (index >= 0 && !it.isNull(index)) {
-                    val value = it.getLong(index)
-                    if (value > 1_000_000_000_000L) return value
-                    if (value > 1_000_000_000L) return value * 1000
-                }
+                if (index < 0 || it.isNull(index)) continue
+                val value = it.getLong(index)
+                if (value <= 0L) continue
+                val millis = name == "last_modified" || name == "datetaken"
+                return if (millis) value else value * 1000
             }
         }
         return null
