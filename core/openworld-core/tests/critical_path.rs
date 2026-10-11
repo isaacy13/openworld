@@ -346,6 +346,62 @@ fn several_frames_without_a_frame_rate_refuse() {
 }
 
 #[test]
+fn a_frame_rate_that_is_not_a_number_refuses() {
+    // NaN is not <= 0. Measured coverage then keeps no frame and can clear the file.
+    let dir = tempfile::tempdir().unwrap();
+    let posters = pack(dir.path());
+    let frames = dir.path().join("frames");
+    fs::create_dir_all(&frames).unwrap();
+    let face = save_face(&frames, 7, 16, 16, 16);
+    fs::rename(&face, frames.join("frame_000000.png")).unwrap();
+    blank(64, 64).save(frames.join("frame_000001.png")).unwrap();
+    let input = dir.path().join("clip.png");
+    fs::write(&input, b"x").unwrap();
+    for fps in [f64::NAN, f64::INFINITY] {
+        let mut extra = RequestExtra::default();
+        extra.coverage = Coverage::Measured;
+        extra.frames = Some(frames.clone());
+        extra.media = Some(MediaFacts {
+            width: 400,
+            height: 320,
+            fps,
+            frames: 2,
+            duration_sec: 1.0,
+            video: true,
+            container_unix: None,
+        });
+        let report = scan_path(
+            &request(dir.path(), input.clone(), "fast", posters.clone(), extra),
+            &mut |_| {},
+        );
+        assert_eq!(report.refusal.as_deref(), Some("bad_codec"), "fps {fps}");
+        assert!(report.message.contains("frame rate"), "{}", report.message);
+        assert_ne!(report.summary, NO_CLEARANCE);
+        let mut estimate_extra = RequestExtra::default();
+        estimate_extra.coverage = Coverage::Measured;
+        estimate_extra.media = Some(MediaFacts {
+            width: 400,
+            height: 320,
+            fps,
+            frames: 2,
+            duration_sec: 1.0,
+            video: true,
+            container_unix: None,
+        });
+        let estimate = estimate_for(&request(
+            dir.path(),
+            input.clone(),
+            "fast",
+            posters.clone(),
+            estimate_extra,
+        ))
+        .unwrap_err();
+        assert_eq!(estimate.refusal.as_deref(), Some("bad_codec"), "estimate {fps}");
+        assert!(estimate.message.contains("frame rate"), "{}", estimate.message);
+    }
+}
+
+#[test]
 fn measured_coverage_names_the_brief_face_banner() {
     let dir = tempfile::tempdir().unwrap();
     let posters = pack(dir.path());

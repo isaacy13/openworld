@@ -365,7 +365,8 @@ fn scan_decoded_dir(
         }
     };
     let fps = req.media.as_ref().map(|media| media.fps).unwrap_or(0.0);
-    if frames.len() > 1 && fps <= 0.0 {
+    // NaN is not <= 0. A measured scan would then keep no frame and could clear the file.
+    if !fps.is_finite() || (frames.len() > 1 && fps <= 0.0) {
         return refused("bad_codec", "The decoder did not report a frame rate. Refusing.");
     }
     let mtime = fs::metadata(&req.input).and_then(|meta| meta.modified()).ok();
@@ -1175,6 +1176,9 @@ fn zero_platform_media(media: &MediaFacts) -> bool {
 pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, ScanReport> {
     if req.media.as_ref().is_some_and(zero_platform_media) {
         return Err(refused("bad_codec", "Bad codec or unreadable file. Refusing."));
+    }
+    if req.media.as_ref().is_some_and(|media| !media.fps.is_finite() || (media.frames > 1 && media.fps <= 0.0)) {
+        return Err(refused("bad_codec", "The decoder did not report a frame rate. Refusing."));
     }
     if req.media.is_none() && !input_readable(&req.input) {
         return Err(refused("unreadable", "The file could not be read. Refusing."));
