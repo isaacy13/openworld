@@ -1185,6 +1185,11 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
         };
         (probed.frames.max(1), probed.fps, duration, probed.width.max(probed.height))
     };
+    // A GIF frame that stays up is one picture, however many average-rate slots it covers.
+    let (frames, fps) = match on_screen_frames(req.coverage, fps, frames, decode::gif_delays(&req.input)) {
+        Some(keep) if !keep.is_empty() => (keep.len() as u64, 1.0),
+        _ => (frames, fps),
+    };
     Ok(crate::estimate::estimate(&crate::estimate::EstimateInput {
         frames: frames.max(1),
         fps,

@@ -1108,6 +1108,87 @@ fn a_container_clock_from_before_1970_still_disagrees() {
 }
 
 #[test]
+fn a_held_gif_estimate_counts_the_frames_on_screen() {
+    // Full resolution of a wide frame is slow enough that the average rate and
+    // the on-screen frames are different sentences.
+    let dir = tempfile::tempdir().unwrap();
+    let still = dir.path().join("frame.png");
+    let status = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=3840x8",
+            "-frames:v",
+            "1",
+        ])
+        .arg(&still)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+    let mut script = String::from("ffconcat version 1.0\n");
+    for index in 0..20 {
+        let delay = if index == 9 { 1.0 } else { 0.04 };
+        script.push_str(&format!("file '{}'\nduration {delay}\n", still.display()));
+    }
+    script.push_str(&format!("file '{}'\n", still.display()));
+    let list = dir.path().join("list.txt");
+    fs::write(&list, script).unwrap();
+    let gif = dir.path().join("hold.gif");
+    let encoded = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+        ])
+        .arg(&list)
+        .args(["-frames:v", "20", "-loop", "0"])
+        .arg(&gif)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let delays = openworld_core::decode::gif_delays(&gif).expect("delays");
+    let on_screen = openworld_core::geom::frames_on_screen(&delays);
+    let probed = openworld_core::decode::probe(&gif).unwrap();
+    let by_rate = openworld_core::geom::sample_indices(probed.frames, probed.fps, true);
+    assert_ne!(on_screen, by_rate, "rate {by_rate:?} on screen {on_screen:?}");
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let request = ScanRequest {
+        input: gif,
+        bundles_dir: repo().join("bundles"),
+        bundle_id: "fast".into(),
+        posters_dir: pack,
+        out_dir: dir.path().join("out"),
+        detection: DetectionSize::Full,
+        coverage: Coverage::Measured,
+        form_factor: FormFactor::Computer,
+        execution: Execution::Cpu,
+        missing: true,
+        wanted: true,
+        abort_after_frames: None,
+        frames_dir: None,
+        media: None,
+        now: now(),
+    };
+    let estimate = openworld_core::scan::estimate_for(&request).expect("estimate");
+    assert_eq!(
+        estimate.frames_analyzed, on_screen.len() as u64,
+        "estimate counted {} from the average rate {by_rate:?}, on screen {on_screen:?}",
+        estimate.frames_analyzed
+    );
+    assert_ne!(estimate.human, "Less than a second");
+}
+
+#[test]
 fn a_pinned_onnx_bundle_that_does_not_load_refuses_instead_of_clearing() {
     let dir = tempfile::tempdir().unwrap();
     let bundle_dir = dir.path().join("bundles/custom");
