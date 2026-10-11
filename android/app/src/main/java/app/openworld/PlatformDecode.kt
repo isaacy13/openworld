@@ -395,13 +395,15 @@ object PlatformDecode {
         }
         val width = image.width
         val height = image.height
+        val pixels = yuvPixelCount(width, height)
+            ?: throw IOException("Bad codec or unreadable file. Refusing.")
         val yPlane = image.planes[0]
         val uPlane = image.planes[1]
         val vPlane = image.planes[2]
         val yBuf = yPlane.buffer
         val uBuf = uPlane.buffer
         val vBuf = vPlane.buffer
-        val argb = IntArray(width * height)
+        val argb = IntArray(pixels)
         for (row in 0 until height) {
             for (col in 0 until width) {
                 val yIndex = row * yPlane.rowStride + col * yPlane.pixelStride
@@ -520,6 +522,18 @@ internal fun videoFrameCount(durationSec: Double, fps: Double): Long {
     val pictures = durationSec * fps
     if (!pictures.isFinite() || pictures >= Long.MAX_VALUE.toDouble()) return 0L
     return maxOf(1L, pictures.roundToLong())
+}
+
+/**
+ * How many ARGB samples one frame needs. Null when that count does not fit in a
+ * 32-bit array. A wrapped product is negative or tiny, and allocating it crashes
+ * the scan instead of refusing the file.
+ */
+internal fun yuvPixelCount(width: Int, height: Int): Int? {
+    if (width <= 0 || height <= 0) return null
+    val pixels = width.toLong() * height.toLong()
+    if (pixels > Int.MAX_VALUE.toLong()) return null
+    return pixels.toInt()
 }
 
 /** A plane buffer's position is the first sample. An absolute read from zero takes the padding before it. */

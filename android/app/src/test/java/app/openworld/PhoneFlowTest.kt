@@ -1366,6 +1366,16 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aFrameWhosePixelsDoNotFitIsNotABuffer() {
+        // 50_000 * 50_000 does not fit in a signed 32-bit count. The wrapped product
+        // is negative, and allocating that array crashes the scan.
+        assertNull(yuvPixelCount(50_000, 50_000))
+        // 46_341 * 46_341 wraps to a small positive count, then the write walks off it.
+        assertNull(yuvPixelCount(46_341, 46_341))
+        assertEquals(4, yuvPixelCount(2, 2))
+    }
+
+    @Test
     fun aJpegOrientationTagIsReadWithoutAnExtension() {
         val file = File.createTempFile("ow-orient", "")
         file.writeBytes(jpegWithOrientation(6))
