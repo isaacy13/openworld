@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
@@ -448,7 +449,20 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
             AlertDialog(
                 onDismissRequest = { model.leavingUrl = null },
                 title = { Text(ProductCopy.leaving) },
-                text = { Text(url) },
+                text = {
+                    // A URL has no spaces. Breaks between characters keep the
+                    // address inside the dialog, and a long address scrolls.
+                    val addressLimit = maxOf(96.dp, LocalConfiguration.current.screenHeightDp.dp / 3)
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = addressLimit)
+                            .verticalScroll(rememberScrollState())
+                            .clearAndSetSemantics { text = AnnotatedString(url) },
+                    ) {
+                        Text(wrappingFileName(url), modifier = Modifier.fillMaxWidth())
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = {
                         onOpen(url)

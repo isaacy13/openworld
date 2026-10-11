@@ -1743,6 +1743,39 @@ class PhoneScreenTest {
     }
 
     @Test
+    fun aLongAddressBreaksBetweenCharacters() {
+        val model = FlowModel()
+        model.step = Step.Results
+        model.status = "complete"
+        model.summary = "Possible candidate. Not an identification."
+        val url = "https://www.fbi.gov/wanted/" + "person-".repeat(40)
+        model.leavingUrl = url
+        compose.setContent { OpenWorldApp(model = model, onChoose = {}, onOpen = {}) }
+        compose.onNodeWithText("You are leaving OpenWorld.").assertExists()
+        compose.onNodeWithText(url).assertExists()
+        val shown = shownTexts().single { it.replace("\u200B", "") == url && it.contains('\u200B') }
+        assertEquals(url.map { it.toString() }, shown.split('\u200B'))
+        val address = compose.onNodeWithText(url).fetchSemanticsNode().boundsInRoot
+        val stayNode = compose.onNodeWithText("Stay").fetchSemanticsNode()
+        val stay = stayNode.boundsInRoot
+        val open = compose.onNodeWithText("Open").fetchSemanticsNode().boundsInRoot
+        var rootNode = stayNode
+        while (rootNode.parent != null) rootNode = rootNode.parent!!
+        val root = rootNode.boundsInRoot
+        assertTrue(
+            "the FBI address left the dialog: address $address stay $stay open $open root $root",
+            address.left >= root.left - 1f &&
+                address.right <= root.right + 1f &&
+                address.top >= root.top - 1f &&
+                address.bottom <= root.bottom + 1f &&
+                stay.top >= root.top &&
+                open.top >= root.top &&
+                stay.bottom <= root.bottom + 1f &&
+                open.bottom <= root.bottom + 1f,
+        )
+    }
+
+    @Test
     fun aBlankFileNameLeavesNoLineUnderTheDeviceHeadline() {
         val model = FlowModel()
         val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
