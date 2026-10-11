@@ -1107,6 +1107,36 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun anAvifMotionPhotoIsRefusedInsteadOfClearingTheStill() {
+        // The still is an AVIF. The clip is an mpvd box, so it is not a JPEG trailer.
+        // BitmapFactory keeps the blank cover and clears a face that is only in the clip.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-avif-motion-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val clip = tinyMovie()
+        val motion = File(root, "motion.avif")
+        motion.writeBytes(avifMotionPhoto(clip, "1"))
+        val still = File(root, "still.avif")
+        still.writeBytes(avifStill())
+        val off = File(root, "off.avif")
+        off.writeBytes(avifMotionPhoto(clip, "0"))
+        assertTrue(StillMotion.motionPhoto(motion))
+        assertFalse(StillMotion.motionPhoto(still))
+        assertFalse(StillMotion.motionPhoto(off))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/motion.avif")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, motion.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertFalse(model.estimateText.contains("Bad codec"))
+    }
+
+    @Test
     fun aStrippedMotionPhotoIsTheStill() {
         // Editors keep the motion-photo directory after the video is gone.
         val root = File(System.getProperty("java.io.tmpdir"), "ow-stripped-" + System.nanoTime())
@@ -4058,6 +4088,61 @@ private fun waitForScan(compose: androidx.compose.ui.test.junit4.ComposeContentT
     }
     assertEquals(Step.Results, model.step)
     assertFalse(model.scanning)
+}
+
+/** An AVIF still: one `ftyp` box, no motion-photo packet. */
+private fun avifStill(): ByteArray {
+    return byteArrayOf(
+        0, 0, 0, 0x14,
+        'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+        'a'.code.toByte(), 'v'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(),
+        0, 0, 0, 0,
+        'a'.code.toByte(), 'v'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(),
+    )
+}
+
+/** A movie header. The bytes at the end of a motion photo have to start with `ftyp`. */
+private fun tinyMovie(): ByteArray {
+    return byteArrayOf(
+        0, 0, 0, 0x14,
+        'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+        'i'.code.toByte(), 's'.code.toByte(), 'o'.code.toByte(), 'm'.code.toByte(),
+        0, 0, 0, 0,
+        'i'.code.toByte(), 's'.code.toByte(), 'o'.code.toByte(), 'm'.code.toByte(),
+    )
+}
+
+/** An AVIF motion photo: the still, an XMP `uuid` box, then the clip in an `mpvd` box. */
+private fun avifMotionPhoto(video: ByteArray, flag: String): ByteArray {
+    val xmp = (
+        "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+            "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+            "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+            "xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" " +
+            "xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" " +
+            "GCamera:MotionPhoto=\"$flag\" GCamera:MotionPhotoVersion=\"1\">" +
+            "<Container:Directory><rdf:Seq>" +
+            "<rdf:li rdf:parseType=\"Resource\">" +
+            "<Container:Item Item:Mime=\"image/avif\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"8\"/>" +
+            "</rdf:li>" +
+            "<rdf:li rdf:parseType=\"Resource\">" +
+            "<Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"${video.size}\" Item:Padding=\"0\"/>" +
+            "</rdf:li></rdf:Seq></Container:Directory>" +
+            "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+        ).toByteArray(Charsets.UTF_8)
+    val uuid = byteArrayOf(
+        0xBE.toByte(), 0x7A, 0xCF.toByte(), 0xCB.toByte(), 0x97.toByte(), 0xA9.toByte(), 0x42, 0xE8.toByte(),
+        0x9C.toByte(), 0x71, 0x99.toByte(), 0x94.toByte(), 0x91.toByte(), 0xE3.toByte(), 0xAF.toByte(), 0xAC.toByte(),
+    )
+    val xmpSize = 8 + uuid.size + xmp.size
+    val xmpBox = be32Bytes(xmpSize) + "uuid".toByteArray(Charsets.US_ASCII) + uuid + xmp
+    val mpvd = be32Bytes(8 + video.size) + "mpvd".toByteArray(Charsets.US_ASCII) + video
+    return avifStill() + xmpBox + mpvd
+}
+
+private fun be32Bytes(n: Int): ByteArray {
+    return byteArrayOf((n shr 24).toByte(), (n shr 16).toByte(), (n shr 8).toByte(), n.toByte())
 }
 
 private fun motionPhotoBytes(jpeg: ByteArray, video: ByteArray): ByteArray {

@@ -44,15 +44,20 @@ public enum StillMotion {
         return false
     }
 
-    /// A motion photo is a JPEG cover plus a video at the end of the file.
-    /// The still decoder keeps the cover. A `MotionPhoto` value other than 1 is a still.
-    /// A length that does not land on `ftyp` means the video was removed.
+    /// A motion photo is a still plus a video. The still decoder keeps the cover.
+    /// A JPEG stores the length in an XMP marker. An AVIF or HEIF stores it in a
+    /// `uuid` box, and the clip is an `mpvd` box. A `MotionPhoto` value other than 1
+    /// is a still. A length that does not land on `ftyp` means the video was removed.
     /// A named photo whose length cannot be read is still a motion photo.
     public static func motionPhoto(_ url: URL) -> Bool {
         guard let input = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? input.close() }
-        guard let soi = try? input.read(upToCount: 2), [UInt8](soi) == [0xFF, 0xD8] else { return false }
-        guard let fileLen = try? input.seekToEnd() else { return false }
+        guard let fileLen = try? input.seekToEnd(), fileLen >= 2 else { return false }
+        guard (try? input.seek(toOffset: 0)) != nil,
+              let soi = try? input.read(upToCount: 2), soi.count == 2 else { return false }
+        if [UInt8](soi) != [0xFF, 0xD8] {
+            return containerMotionPhoto(input, fileLen)
+        }
         guard (try? input.seek(toOffset: 2)) != nil else { return false }
         var claimed = false
         var videoLen: UInt64?
@@ -94,6 +99,120 @@ public enum StillMotion {
         if samsungVideo(input, fileLen) { return true }
         if !claimed { return false }
         return videoLen == nil
+    }
+
+    private struct MotionClaim {
+        var claimed = false
+        var turnedOff = false
+        var videoLen: UInt64?
+    }
+
+    /// An AVIF or HEIF still. The packet is a `uuid` box. The clip is the last
+    /// bytes of the file, which is the movie inside an `mpvd` box.
+    private static func containerMotionPhoto(_ input: FileHandle, _ fileLen: UInt64) -> Bool {
+        if fileLen < 12 { return false }
+        guard (try? input.seek(toOffset: 0)) != nil,
+              let head = readExactly(input, 12) else { return false }
+        if Array(head[4..<8]) != Array("ftyp".utf8) { return false }
+        let brand = String(bytes: head[8..<12], encoding: .ascii) ?? ""
+        let still: Set<String> = ["heic", "heix", "hevc", "heif", "mif1", "msf1", "avif", "avis"]
+        if !still.contains(brand) { return false }
+        var claim = MotionClaim()
+        walkMotionBoxes(input, 0, fileLen, 0, &claim)
+        if claim.turnedOff { return false }
+        if let length = claim.videoLen, length > 0, length < fileLen,
+           (try? input.seek(toOffset: fileLen - length)) != nil,
+           let header = readExactly(input, 8),
+           Array(header[4..<8]) == Array("ftyp".utf8) {
+            return true
+        }
+        if !claim.claimed { return false }
+        return claim.videoLen == nil
+    }
+
+    private static func walkMotionBoxes(_ input: FileHandle, _ start: UInt64, _ end: UInt64, _ depth: Int, _ claim: inout MotionClaim) {
+        if depth > 6 { return }
+        var pos = start
+        while pos + 8 <= end {
+            guard (try? input.seek(toOffset: pos)) != nil, let hdr = readExactly(input, 8) else { return }
+            var size = be32(hdr, 0)
+            let typ = Array(hdr[4..<8])
+            var header: UInt64 = 8
+            if size == 1 {
+                if pos + 16 > end { return }
+                guard let ext = readExactly(input, 8) else { return }
+                size = be64(ext)
+                header = 16
+            }
+            let boxEnd: UInt64
+            if size == 0 {
+                boxEnd = end
+            } else {
+                if size < header { return }
+                let next = pos + size
+                if next > end { return }
+                boxEnd = next
+            }
+            if typ == Array("uuid".utf8), boxEnd >= pos + header + 16 {
+                guard (try? input.seek(toOffset: pos + header)) != nil, let uuid = readExactly(input, 16) else { return }
+                if uuid == xmpUuid {
+                    let payloadAt = pos + header + 16
+                    let payloadLen = min(boxEnd - payloadAt, UInt64(1_000_000))
+                    if payloadLen > 0, let buf = readExactly(input, Int(payloadLen)) {
+                        noteMotionXmp(&claim, motionXmpText(buf))
+                    }
+                }
+            } else if typ == Array("xml ".utf8), boxEnd > pos + header {
+                let payloadLen = min(boxEnd - (pos + header), UInt64(1_000_000))
+                if payloadLen > 0, (try? input.seek(toOffset: pos + header)) != nil, let buf = readExactly(input, Int(payloadLen)) {
+                    noteMotionXmp(&claim, motionXmpText(buf))
+                }
+            } else if typ == Array("meta".utf8), depth < 4, boxEnd >= pos + header + 4 {
+                walkMotionBoxes(input, pos + header + 4, boxEnd, depth + 1, &claim)
+            }
+            if size == 0 { return }
+            pos = boxEnd
+        }
+    }
+
+    private static func noteMotionXmp(_ claim: inout MotionClaim, _ parsed: MotionPacket) {
+        switch parsed {
+        case .no:
+            break
+        case .off:
+            claim.turnedOff = true
+        case .video(let length):
+            claim.claimed = true
+            if claim.videoLen == nil { claim.videoLen = length }
+        case .unreadable:
+            claim.claimed = true
+        }
+    }
+
+    private static let xmpUuid: [UInt8] = [
+        0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC,
+    ]
+
+    private static func readExactly(_ input: FileHandle, _ count: Int) -> [UInt8]? {
+        var out: [UInt8] = []
+        out.reserveCapacity(count)
+        while out.count < count {
+            guard let chunk = try? input.read(upToCount: count - out.count), !chunk.isEmpty else { return nil }
+            out.append(contentsOf: chunk)
+        }
+        return out
+    }
+
+    private static func be32(_ bytes: [UInt8], _ at: Int) -> UInt64 {
+        (UInt64(bytes[at]) << 24) | (UInt64(bytes[at + 1]) << 16) | (UInt64(bytes[at + 2]) << 8) | UInt64(bytes[at + 3])
+    }
+
+    private static func be64(_ bytes: [UInt8]) -> UInt64 {
+        var n: UInt64 = 0
+        for byte in bytes.prefix(8) {
+            n = (n << 8) | UInt64(byte)
+        }
+        return n
     }
 
     /// The mp4 embedded in a Samsung trailer. The trailer ends with `SEFT`.
@@ -167,6 +286,11 @@ public enum StillMotion {
     private static func motionXmp(_ buf: [UInt8]) -> MotionPacket {
         let prefix: [UInt8] = Array("http://ns.adobe.com/xap/1.0/".utf8) + [0]
         if buf.count < prefix.count || Array(buf.prefix(prefix.count)) != prefix { return .no }
+        return motionXmpText(Array(buf.dropFirst(prefix.count)))
+    }
+
+    /// The packet body, without the JPEG APP1 prefix. A `uuid` box stores it that way.
+    private static func motionXmpText(_ buf: [UInt8]) -> MotionPacket {
         guard let text = String(bytes: buf, encoding: .utf8) else { return .no }
         if motionPhotoOff(text) { return .off }
         if let length = motionItemLength(text) { return .video(length) }

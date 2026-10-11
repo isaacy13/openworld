@@ -45,16 +45,21 @@ object StillMotion {
     fun animatedWebp(file: File): Boolean = file.inputStream().use { animatedWebp(it) }
 
     /**
-     * A motion photo is a JPEG cover plus a video at the end of the file.
-     * BitmapFactory keeps the cover. A `MotionPhoto` value other than 1 is a still.
-     * A length that does not land on `ftyp` means the video was removed.
+     * A motion photo is a still plus a video. BitmapFactory keeps the cover.
+     * A JPEG stores the length in an XMP marker. An AVIF or HEIF stores it in a
+     * `uuid` box, and the clip is an `mpvd` box. A `MotionPhoto` value other than 1
+     * is a still. A length that does not land on `ftyp` means the video was removed.
      * A named photo whose length cannot be read is still a motion photo.
      */
     fun motionPhoto(file: File): Boolean {
         RandomAccessFile(file, "r").use { input ->
             if (input.length() < 2) return false
-            if (input.read() != 0xFF || input.read() != 0xD8) return false
             val fileLen = input.length()
+            val first = input.read()
+            val second = input.read()
+            if (first != 0xFF || second != 0xD8) {
+                return containerMotionPhoto(input, fileLen)
+            }
             var claimed = false
             var videoLen: Long? = null
             while (true) {
@@ -99,6 +104,119 @@ object StillMotion {
             if (!claimed) return false
             return videoLen == null
         }
+    }
+
+    private class MotionClaim {
+        var claimed = false
+        var turnedOff = false
+        var videoLen: Long? = null
+    }
+
+    /**
+     * An AVIF or HEIF still. The packet is a `uuid` box. The clip is the last
+     * bytes of the file, which is the movie inside an `mpvd` box.
+     */
+    private fun containerMotionPhoto(input: RandomAccessFile, fileLen: Long): Boolean {
+        if (fileLen < 12L) return false
+        input.seek(0)
+        val head = ByteArray(12)
+        if (!readFully(input, head)) return false
+        if (!head.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))) return false
+        val brand = String(head, 8, 4, Charsets.US_ASCII)
+        if (brand !in stillBrands) return false
+        val claim = MotionClaim()
+        walkMotionBoxes(input, 0L, fileLen, 0, claim)
+        if (claim.turnedOff) return false
+        val videoLen = claim.videoLen
+        if (videoLen != null && videoLen > 0L && videoLen < fileLen) {
+            input.seek(fileLen - videoLen)
+            val header = ByteArray(8)
+            if (readFully(input, header) &&
+                header.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))
+            ) {
+                return true
+            }
+        }
+        if (!claim.claimed) return false
+        return videoLen == null
+    }
+
+    private fun walkMotionBoxes(
+        input: RandomAccessFile,
+        start: Long,
+        end: Long,
+        depth: Int,
+        claim: MotionClaim,
+    ) {
+        if (depth > 6) return
+        var pos = start
+        while (pos + 8 <= end) {
+            input.seek(pos)
+            val hdr = ByteArray(8)
+            if (!readFully(input, hdr)) return
+            var size = be32(hdr, 0)
+            val typ = hdr.copyOfRange(4, 8)
+            var header = 8L
+            if (size == 1L) {
+                if (pos + 16 > end) return
+                val ext = ByteArray(8)
+                if (!readFully(input, ext)) return
+                size = be64(ext)
+                header = 16L
+            }
+            val boxEnd = if (size == 0L) {
+                end
+            } else {
+                if (size < header) return
+                val next = pos + size
+                if (next > end) return
+                next
+            }
+            if (typ.contentEquals("uuid".toByteArray(Charsets.US_ASCII)) && boxEnd >= pos + header + 16) {
+                input.seek(pos + header)
+                val uuid = ByteArray(16)
+                if (readFully(input, uuid) && uuid.contentEquals(XMP_UUID)) {
+                    val payloadLen = (boxEnd - (pos + header + 16)).coerceAtMost(1_000_000L)
+                    if (payloadLen > 0L) {
+                        val buf = ByteArray(payloadLen.toInt())
+                        if (readFully(input, buf)) noteMotionXmp(claim, motionXmpText(buf))
+                    }
+                }
+            } else if (typ.contentEquals("xml ".toByteArray(Charsets.US_ASCII)) && boxEnd > pos + header) {
+                val payloadLen = (boxEnd - (pos + header)).coerceAtMost(1_000_000L)
+                if (payloadLen > 0L) {
+                    input.seek(pos + header)
+                    val buf = ByteArray(payloadLen.toInt())
+                    if (readFully(input, buf)) noteMotionXmp(claim, motionXmpText(buf))
+                }
+            } else if (typ.contentEquals("meta".toByteArray(Charsets.US_ASCII)) &&
+                depth < 4 && boxEnd >= pos + header + 4
+            ) {
+                walkMotionBoxes(input, pos + header + 4, boxEnd, depth + 1, claim)
+            }
+            if (size == 0L) return
+            pos = boxEnd
+        }
+    }
+
+    private fun noteMotionXmp(claim: MotionClaim, parsed: MotionXmp) {
+        when (parsed) {
+            MotionXmp.No -> Unit
+            MotionXmp.Off -> claim.turnedOff = true
+            is MotionXmp.Video -> {
+                claim.claimed = true
+                if (claim.videoLen == null) claim.videoLen = parsed.length
+            }
+            MotionXmp.Unreadable -> claim.claimed = true
+        }
+    }
+
+    private fun be64(bytes: ByteArray): Long {
+        var n = 0L
+        for (byte in bytes) {
+            n = (n shl 8) or (byte.toLong() and 0xFF)
+        }
+        return n
     }
 
     /**
@@ -173,9 +291,19 @@ object StillMotion {
         data object Unreadable : MotionXmp()
     }
 
+    private val XMP_UUID = byteArrayOf(
+        0xBE.toByte(), 0x7A, 0xCF.toByte(), 0xCB.toByte(), 0x97.toByte(), 0xA9.toByte(), 0x42, 0xE8.toByte(),
+        0x9C.toByte(), 0x71, 0x99.toByte(), 0x94.toByte(), 0x91.toByte(), 0xE3.toByte(), 0xAF.toByte(), 0xAC.toByte(),
+    )
+
     private fun motionXmp(buf: ByteArray): MotionXmp {
         val prefix = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()
         if (buf.size < prefix.size || !buf.copyOf(prefix.size).contentEquals(prefix)) return MotionXmp.No
+        return motionXmpText(buf.copyOfRange(prefix.size, buf.size))
+    }
+
+    /** The packet body, without the JPEG APP1 prefix. A `uuid` box stores it that way. */
+    private fun motionXmpText(buf: ByteArray): MotionXmp {
         val text = buf.toString(Charsets.UTF_8)
         if (motionPhotoOff(text)) return MotionXmp.Off
         motionItemLength(text)?.let { return MotionXmp.Video(it) }

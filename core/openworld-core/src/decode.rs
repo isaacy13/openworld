@@ -64,7 +64,7 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         }
         return probe_tiff_player(path);
     }
-    // A motion photo is a JPEG still plus a video. The scan reads both. The
+    // A motion photo is a still plus a video. The scan reads both. The
     // cover is one more picture after the clip, so the clip's frame numbers stay.
     if let Some(clip) = motion_clip(path)? {
         let mut info = probe_video(&clip.path)?;
@@ -91,7 +91,10 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
         // The cover is a picture in the file. A clip that does not show the face
         // must not clear it. An aborted clip is not followed by another frame.
         if stats.clean {
-            if let Ok(cover) = open_oriented(path) {
+            // JPEG covers use the image crate. An AVIF or HEIF cover is a container
+            // the image crate does not read, so FFmpeg decodes that one picture.
+            let cover = open_oriented(path).ok().or_else(|| open_container_cover(path).ok());
+            if let Some(cover) = cover {
                 let keep = on_frame(stats.frames_decoded, &cover);
                 stats.frames_decoded = stats.frames_decoded.saturating_add(1);
                 stats.probe.frames = stats.probe.frames.saturating_add(1);
@@ -172,7 +175,8 @@ fn motion_clip(path: &Path) -> Result<Option<MotionClip>, MediaError> {
 }
 
 /// `MicroVideoOffset` or a MotionPhoto item length is the video at the end of the file.
-/// A Samsung trailer holds that video before `SEFT` instead.
+/// A JPEG stores that length in an XMP marker. An AVIF or HEIF stores it in a `uuid` box,
+/// and the clip itself is an `mpvd` box. A Samsung trailer holds the clip before `SEFT` instead.
 fn motion_video(path: &Path) -> MotionVideo {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -183,8 +187,14 @@ fn motion_video(path: &Path) -> MotionVideo {
         Err(_) => return MotionVideo::None,
     };
     let mut soi = [0u8; 2];
-    if file.read_exact(&mut soi).is_err() || soi != [0xFF, 0xD8] {
+    if file.read_exact(&mut soi).is_err() {
         return MotionVideo::None;
+    }
+    if soi != [0xFF, 0xD8] {
+        if file.seek(SeekFrom::Start(0)).is_err() {
+            return MotionVideo::None;
+        }
+        return container_motion(&mut file, len);
     }
     let mut claimed = false;
     let mut turned_off = false;
@@ -251,6 +261,153 @@ fn motion_video(path: &Path) -> MotionVideo {
         return MotionVideo::Broken;
     }
     MotionVideo::None
+}
+
+/// The still in an AVIF or HEIF motion photo. The image crate does not read those files.
+fn open_container_cover(path: &Path) -> Result<RgbImage, MediaError> {
+    let mut info = probe_video(path)?;
+    info.frames = 1;
+    info.frames_exact = true;
+    let mut cover = None;
+    decode_video(path, &info, &mut |_index, frame| {
+        cover = Some(frame.clone());
+        false
+    })?;
+    cover.ok_or(MediaError::BadCodec)
+}
+
+const XMP_UUID: [u8; 16] = [
+    0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC,
+];
+
+struct MotionClaim {
+    claimed: bool,
+    turned_off: bool,
+    video_len: Option<u64>,
+}
+
+/// An AVIF or HEIF still whose XMP names a clip. The clip is the last bytes of the file,
+/// inside an `mpvd` box. The packet lives in a `uuid` box, not in a JPEG marker.
+fn container_motion(file: &mut File, len: u64) -> MotionVideo {
+    if !still_image_brand(file) {
+        return MotionVideo::None;
+    }
+    let mut claim = MotionClaim { claimed: false, turned_off: false, video_len: None };
+    walk_motion_boxes(file, 0, len, 0, &mut claim);
+    if claim.turned_off {
+        return MotionVideo::None;
+    }
+    if let Some(start) = claim.video_len.and_then(|video_len| video_at_end(file, len, video_len)) {
+        return MotionVideo::Span { start, end: len };
+    }
+    if !claim.claimed {
+        return MotionVideo::None;
+    }
+    if claim.video_len.is_none() {
+        return MotionVideo::Broken;
+    }
+    MotionVideo::None
+}
+
+fn still_image_brand(file: &mut File) -> bool {
+    let mut header = [0u8; 12];
+    if file.seek(SeekFrom::Start(0)).is_err() || file.read_exact(&mut header).is_err() {
+        return false;
+    }
+    if &header[4..8] != b"ftyp" {
+        return false;
+    }
+    matches!(
+        &header[8..12],
+        b"avif" | b"avis" | b"heic" | b"heix" | b"hevc" | b"heif" | b"mif1" | b"msf1"
+    )
+}
+
+fn note_motion_xmp(claim: &mut MotionClaim, parsed: MotionXmp) {
+    match parsed {
+        MotionXmp::No => {}
+        MotionXmp::Off => claim.turned_off = true,
+        MotionXmp::Video(n) => {
+            claim.claimed = true;
+            if claim.video_len.is_none() {
+                claim.video_len = Some(n);
+            }
+        }
+        MotionXmp::Unreadable => claim.claimed = true,
+    }
+}
+
+/// Top-level boxes, and the children of `meta`. Image bytes in `mdat` are not XMP.
+fn walk_motion_boxes(file: &mut File, start: u64, end: u64, depth: u32, claim: &mut MotionClaim) {
+    if depth > 6 {
+        return;
+    }
+    let mut pos = start;
+    while pos + 8 <= end {
+        if file.seek(SeekFrom::Start(pos)).is_err() {
+            return;
+        }
+        let mut hdr = [0u8; 8];
+        if file.read_exact(&mut hdr).is_err() {
+            return;
+        }
+        let mut size = u32::from_be_bytes([hdr[0], hdr[1], hdr[2], hdr[3]]) as u64;
+        let typ = [hdr[4], hdr[5], hdr[6], hdr[7]];
+        let mut header = 8u64;
+        if size == 1 {
+            if pos + 16 > end {
+                return;
+            }
+            let mut ext = [0u8; 8];
+            if file.read_exact(&mut ext).is_err() {
+                return;
+            }
+            size = u64::from_be_bytes(ext);
+            header = 16;
+        }
+        let box_end = if size == 0 {
+            end
+        } else {
+            if size < header {
+                return;
+            }
+            match pos.checked_add(size) {
+                Some(next) if next <= end => next,
+                _ => return,
+            }
+        };
+        if typ == *b"uuid" && box_end >= pos + header + 16 {
+            if file.seek(SeekFrom::Start(pos + header)).is_err() {
+                return;
+            }
+            let mut uuid = [0u8; 16];
+            if file.read_exact(&mut uuid).is_ok() && uuid == XMP_UUID {
+                let payload_at = pos + header + 16;
+                let payload_len = (box_end - payload_at).min(1_000_000) as usize;
+                if payload_len > 0 {
+                    let mut buf = vec![0u8; payload_len];
+                    if file.read_exact(&mut buf).is_ok() {
+                        note_motion_xmp(claim, motion_length_in_xmp_text(&buf));
+                    }
+                }
+            }
+        } else if typ == *b"xml " && box_end > pos + header {
+            let payload_at = pos + header;
+            let payload_len = (box_end - payload_at).min(1_000_000) as usize;
+            if payload_len > 0 && file.seek(SeekFrom::Start(payload_at)).is_ok() {
+                let mut buf = vec![0u8; payload_len];
+                if file.read_exact(&mut buf).is_ok() {
+                    note_motion_xmp(claim, motion_length_in_xmp_text(&buf));
+                }
+            }
+        } else if typ == *b"meta" && depth < 4 && box_end >= pos + header + 4 {
+            walk_motion_boxes(file, pos + header + 4, box_end, depth + 1, claim);
+        }
+        if size == 0 {
+            return;
+        }
+        pos = box_end;
+    }
 }
 
 /// `video_len` bytes at the end of the file, when those bytes are a movie.
@@ -370,9 +527,15 @@ enum MotionXmp {
 /// lists the cover first, with length 0, then the video item. That item's length
 /// locates the video, and a leftover offset is ignored. Only `MotionPhoto` 1 is a motion photo.
 fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
-    if !buf.starts_with(b"http://ns.adobe.com/xap/1.0/\0") {
+    let prefix = b"http://ns.adobe.com/xap/1.0/\0";
+    if !buf.starts_with(prefix) {
         return MotionXmp::No;
     }
+    motion_length_in_xmp_text(&buf[prefix.len()..])
+}
+
+/// The packet body, without the JPEG APP1 prefix. A `uuid` box stores it that way.
+fn motion_length_in_xmp_text(buf: &[u8]) -> MotionXmp {
     let text = String::from_utf8_lossy(buf);
     if motion_photo_off(&text) {
         return MotionXmp::Off;

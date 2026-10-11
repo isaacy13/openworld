@@ -1757,6 +1757,34 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testAnAvifMotionPhotoIsRefusedInsteadOfClearingTheStill() throws {
+        // The still is an AVIF. The clip is an mpvd box, so it is not a JPEG trailer.
+        // The still decoder keeps the blank cover and clears a face that is only in the clip.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-avif-motion-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let clip = tinyMovie()
+        let motion = root.appendingPathComponent("motion.avif")
+        let still = root.appendingPathComponent("still.avif")
+        let off = root.appendingPathComponent("off.avif")
+        try avifMotionPhoto(video: clip, flag: "1").write(to: motion)
+        try avifStill().write(to: still)
+        try avifMotionPhoto(video: clip, flag: "0").write(to: off)
+        XCTAssertTrue(StillMotion.motionPhoto(motion))
+        XCTAssertFalse(StillMotion.motionPhoto(still))
+        XCTAssertFalse(StillMotion.motionPhoto(off))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(motion)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
     func testAStrippedMotionPhotoIsTheStill() throws {
         // Editors keep the motion-photo directory after the video is gone.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-stripped-\(UUID().uuidString)")
@@ -2515,6 +2543,69 @@ final class OpenWorldUITests: XCTestCase {
             ])
         }
         return out
+    }
+
+    /// An AVIF still: one `ftyp` box, no motion-photo packet.
+    private func avifStill() -> Data {
+        Data([
+            0x00, 0x00, 0x00, 0x14,
+            0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66,
+            0x00, 0x00, 0x00, 0x00,
+            0x61, 0x76, 0x69, 0x66,
+        ])
+    }
+
+    /// A movie header. The bytes at the end of a motion photo have to start with `ftyp`.
+    private func tinyMovie() -> Data {
+        Data([
+            0x00, 0x00, 0x00, 0x14,
+            0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D,
+            0x00, 0x00, 0x00, 0x00,
+            0x69, 0x73, 0x6F, 0x6D,
+        ])
+    }
+
+    /// An AVIF motion photo: the still, an XMP `uuid` box, then the clip in an `mpvd` box.
+    private func avifMotionPhoto(video: Data, flag: String) -> Data {
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        xmlns:Container="http://ns.google.com/photos/1.0/container/" \
+        xmlns:Item="http://ns.google.com/photos/1.0/container/item/" \
+        GCamera:MotionPhoto="\(flag)" GCamera:MotionPhotoVersion="1">\
+        <Container:Directory><rdf:Seq>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="image/avif" Item:Semantic="Primary" Item:Length="0" Item:Padding="8"/>\
+        </rdf:li>\
+        <rdf:li rdf:parseType="Resource">\
+        <Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto" Item:Length="\(video.count)" Item:Padding="0"/>\
+        </rdf:li></rdf:Seq></Container:Directory>\
+        </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        let uuid = Data([
+            0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC,
+        ])
+        let xmpBytes = Data(xmp.utf8)
+        var out = avifStill()
+        out.append(contentsOf: boxSize(8 + uuid.count + xmpBytes.count))
+        out.append(Data("uuid".utf8))
+        out.append(uuid)
+        out.append(xmpBytes)
+        out.append(contentsOf: boxSize(8 + video.count))
+        out.append(Data("mpvd".utf8))
+        out.append(video)
+        return out
+    }
+
+    private func boxSize(_ value: Int) -> [UInt8] {
+        [
+            UInt8((value >> 24) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8(value & 0xFF),
+        ]
     }
 
     private func motionPhotoData(still jpeg: Data, video: Data) -> Data {

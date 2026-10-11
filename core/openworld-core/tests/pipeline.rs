@@ -2372,6 +2372,105 @@ fn a_motion_photo_offset_keeps_a_face_that_is_not_on_the_still() {
     assert!(report.candidates.iter().any(|c| c.kind == "face"));
 }
 
+#[test]
+fn an_avif_motion_photo_keeps_a_face_that_is_not_on_the_still() {
+    // The still is an AVIF. The clip is an mpvd box after it, not a JPEG trailer.
+    // A still decode keeps the blank cover and clears a face that is only in the clip.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    scene.image.save(dir.path().join("scene.png")).unwrap();
+    let blank = dir.path().join("blank.avif");
+    let movie = dir.path().join("scene.mp4");
+    let motion = dir.path().join("motion.avif");
+    let blank_ok = Command::new("ffmpeg")
+        .args([
+            "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64",
+            "-frames:v", "1", "-c:v", "libaom-av1", "-still-picture", "1",
+        ])
+        .arg(&blank)
+        .status()
+        .expect("ffmpeg");
+    assert!(blank_ok.success());
+    let scene_ok = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("scene.png"))
+        .args(["-frames:v", "8", "-r", "10", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(scene_ok.success());
+    let still = fs::read(&blank).unwrap();
+    let mp4 = fs::read(&movie).unwrap();
+    stitch_avif_motion(&still, &mp4, &motion);
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let report = scan_path(
+        &ScanRequest {
+            input: motion,
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack,
+            out_dir: dir.path().join("out"),
+            detection: DetectionSize::Px(640),
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Computer,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: None,
+            now: now(),
+        },
+        &mut |_| {},
+    );
+    assert_eq!(report.status, "complete", "{}", report.message);
+    assert_eq!(report.frames_decoded, 9);
+    assert_eq!(report.summary, POSSIBLE_CANDIDATE);
+    assert!(report.candidates.iter().any(|c| c.kind == "face"));
+}
+
+/// An AVIF motion photo: the still, an XMP packet, then the clip in an `mpvd` box.
+fn stitch_avif_motion(still: &[u8], video: &[u8], out: &std::path::Path) {
+    let xmp = format!(
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
+         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
+         <rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         xmlns:Container=\"http://ns.google.com/photos/1.0/container/\" \
+         xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\">\n\
+         <Container:Directory><rdf:Seq>\n\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"image/avif\" Item:Semantic=\"Primary\" Item:Length=\"0\" Item:Padding=\"8\"/>\
+         </rdf:li>\n\
+         <rdf:li rdf:parseType=\"Resource\">\
+         <Container:Item Item:Mime=\"video/mp4\" Item:Semantic=\"MotionPhoto\" Item:Length=\"{}\" Item:Padding=\"0\"/>\
+         </rdf:li></rdf:Seq></Container:Directory>\n\
+         </rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+        video.len()
+    );
+    let uuid = [
+        0xBEu8, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC,
+    ];
+    let mut xmp_box = Vec::new();
+    let xmp_size = (8 + uuid.len() + xmp.len()) as u32;
+    xmp_box.extend_from_slice(&xmp_size.to_be_bytes());
+    xmp_box.extend_from_slice(b"uuid");
+    xmp_box.extend_from_slice(&uuid);
+    xmp_box.extend_from_slice(xmp.as_bytes());
+    let mut mpvd = Vec::new();
+    let mpvd_size = (8 + video.len()) as u32;
+    mpvd.extend_from_slice(&mpvd_size.to_be_bytes());
+    mpvd.extend_from_slice(b"mpvd");
+    mpvd.extend_from_slice(video);
+    let mut bytes = Vec::with_capacity(still.len() + xmp_box.len() + mpvd.len());
+    bytes.extend_from_slice(still);
+    bytes.extend_from_slice(&xmp_box);
+    bytes.extend_from_slice(&mpvd);
+    fs::write(out, bytes).unwrap();
+}
+
 /// Samsung's trailer: the embedded-video marker, the clip, then an SEFH directory and SEFT.
 fn samsung_trailer(video: &[u8]) -> Vec<u8> {
     let marker = b"\x00\x00\x30\x0A";
