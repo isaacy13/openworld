@@ -84,12 +84,69 @@ public enum StillMotion {
                 guard (try? input.seek(toOffset: next)) != nil else { break }
             }
         }
+        if let length = videoLen, length > 0, length < fileLen,
+           (try? input.seek(toOffset: fileLen - length)) != nil,
+           let header = try? input.read(upToCount: 8), header.count == 8,
+           Array([UInt8](header)[4..<8]) == Array("ftyp".utf8) {
+            return true
+        }
+        // Samsung stores the clip before an SEFT trailer, so it is not the last bytes.
+        if samsungVideo(input, fileLen) { return true }
         if !claimed { return false }
-        guard let length = videoLen else { return true }
-        if length == 0 || length >= fileLen { return false }
-        guard (try? input.seek(toOffset: fileLen - length)) != nil else { return false }
-        guard let header = try? input.read(upToCount: 8), header.count == 8 else { return false }
-        return Array([UInt8](header)[4..<8]) == Array("ftyp".utf8)
+        return videoLen == nil
+    }
+
+    /// The mp4 embedded in a Samsung trailer. The trailer ends with `SEFT`.
+    /// The clip starts after the `MotionPhoto_Data` marker.
+    private static func samsungVideo(_ input: FileHandle, _ fileLen: UInt64) -> Bool {
+        if fileLen < 32 { return false }
+        guard (try? input.seek(toOffset: fileLen - 8)) != nil,
+              let tail = try? input.read(upToCount: 8), tail.count == 8 else { return false }
+        let tailBytes = [UInt8](tail)
+        if Array(tailBytes[4..<8]) != Array("SEFT".utf8) { return false }
+        let sefSize = UInt64(tailBytes[0]) | (UInt64(tailBytes[1]) << 8) | (UInt64(tailBytes[2]) << 16) | (UInt64(tailBytes[3]) << 24)
+        if sefSize < 12 || sefSize > fileLen - 8 { return false }
+        let sefh = fileLen - 8 - sefSize
+        guard (try? input.seek(toOffset: sefh)) != nil,
+              let head = try? input.read(upToCount: 12), head.count == 12 else { return false }
+        let headBytes = [UInt8](head)
+        if Array(headBytes[0..<4]) != Array("SEFH".utf8) { return false }
+        let count = UInt64(headBytes[8]) | (UInt64(headBytes[9]) << 8) | (UInt64(headBytes[10]) << 16) | (UInt64(headBytes[11]) << 24)
+        if count == 0 || count > 16 { return false }
+        let entriesBytes = count * 12
+        if sefh + 12 + entriesBytes > fileLen - 8 { return false }
+        guard let entries = try? input.read(upToCount: Int(entriesBytes)), entries.count == Int(entriesBytes) else { return false }
+        let entryBytes = [UInt8](entries)
+        let marker: [UInt8] = [0x00, 0x00, 0x30, 0x0A]
+        var at = 0
+        while at + 12 <= entryBytes.count {
+            if Array(entryBytes[at..<at + 4]) != marker {
+                at += 12
+                continue
+            }
+            let back = UInt64(entryBytes[at + 4]) | (UInt64(entryBytes[at + 5]) << 8) | (UInt64(entryBytes[at + 6]) << 16) | (UInt64(entryBytes[at + 7]) << 24)
+            let dataLen = UInt64(entryBytes[at + 8]) | (UInt64(entryBytes[at + 9]) << 8) | (UInt64(entryBytes[at + 10]) << 16) | (UInt64(entryBytes[at + 11]) << 24)
+            if back > sefh || dataLen < 32 || sefh - back + dataLen > sefh {
+                at += 12
+                continue
+            }
+            let field = sefh - back
+            guard (try? input.seek(toOffset: field)) != nil,
+                  let hdr = try? input.read(upToCount: 24), hdr.count == 24 else { return false }
+            let hdrBytes = [UInt8](hdr)
+            let nameLen = UInt64(hdrBytes[4]) | (UInt64(hdrBytes[5]) << 8) | (UInt64(hdrBytes[6]) << 16) | (UInt64(hdrBytes[7]) << 24)
+            if Array(hdrBytes[0..<4]) != marker || nameLen != 16 || Array(hdrBytes[8..<24]) != Array("MotionPhoto_Data".utf8) {
+                at += 12
+                continue
+            }
+            let start = field + 24
+            if start >= field + dataLen { at += 12; continue }
+            guard (try? input.seek(toOffset: start)) != nil,
+                  let box = try? input.read(upToCount: 8), box.count == 8 else { return false }
+            if Array([UInt8](box)[4..<8]) == Array("ftyp".utf8) { return true }
+            at += 12
+        }
+        return false
     }
 
     private enum MotionPacket {

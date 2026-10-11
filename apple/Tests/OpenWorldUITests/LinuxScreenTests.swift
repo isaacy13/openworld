@@ -1671,6 +1671,43 @@ final class OpenWorldUITests: XCTestCase {
         }
     }
 
+    func testASamsungMotionPhotoIsRefusedInsteadOfClearingTheStill() throws {
+        // The clip sits before an SEFT trailer, so it is not the last bytes of the file.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-samsung-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let blank = root.appendingPathComponent("blank.jpg")
+        let video = root.appendingPathComponent("clip.mp4")
+        try ffmpeg(["-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.path])
+        try ffmpeg([
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.path,
+        ])
+        let motion = root.appendingPathComponent("motion.jpg")
+        let xmp = """
+        <?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+        <rdf:Description xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" \
+        GCamera:MotionPhoto="1" GCamera:MotionPhotoVersion="1"/>\
+        </rdf:RDF></x:xmpmeta><?xpacket end="w"?>
+        """
+        let clip = try Data(contentsOf: video)
+        try jpegWithXmp(still: try Data(contentsOf: blank), xmp: Data(xmp.utf8), trailer: samsungTrailer(clip)).write(to: motion)
+        XCTAssertTrue(StillMotion.motionPhoto(motion))
+        XCTAssertFalse(StillMotion.motionPhoto(blank))
+        MainActor.assumeIsolated {
+            let model = FlowModel(phone: true)
+            model.choose(motion)
+            model.loadEstimate()
+            XCTAssertEqual(model.step, .estimate)
+            XCTAssertNil(model.estimate)
+            XCTAssertFalse(model.canAnalyze)
+            XCTAssertTrue(model.error?.contains("not fully decoded") == true)
+            XCTAssertTrue(model.error?.contains("Refusing") == true)
+            XCTAssertFalse(model.error?.contains("AVFoundation") == true)
+        }
+    }
+
     func testAStrippedMotionPhotoIsTheStill() throws {
         // Editors keep the motion-photo directory after the video is gone.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ow-stripped-\(UUID().uuidString)")
@@ -2441,6 +2478,36 @@ final class OpenWorldUITests: XCTestCase {
         </rdf:RDF></x:xmpmeta><?xpacket end="w"?>
         """
         return jpegWithXmp(still: jpeg, xmp: Data(xmp.utf8), trailer: video)
+    }
+
+    /// Samsung's trailer: the embedded-video marker, the clip, then an SEFH directory and SEFT.
+    private func samsungTrailer(_ video: Data) -> Data {
+        let marker = Data([0x00, 0x00, 0x30, 0x0A])
+        var trailer = Data()
+        trailer.append(marker)
+        trailer.append(le32(16))
+        trailer.append(Data("MotionPhoto_Data".utf8))
+        trailer.append(video)
+        let sefh = UInt32(trailer.count)
+        trailer.append(Data("SEFH".utf8))
+        trailer.append(le32(106))
+        trailer.append(le32(1))
+        trailer.append(marker)
+        trailer.append(le32(sefh))
+        trailer.append(le32(sefh))
+        let sefDataSize = UInt32(trailer.count) - sefh
+        trailer.append(le32(sefDataSize))
+        trailer.append(Data("SEFT".utf8))
+        return trailer
+    }
+
+    private func le32(_ value: UInt32) -> Data {
+        Data([
+            UInt8(value & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 24) & 0xFF),
+        ])
     }
 
     private func jpegWithXmp(still jpeg: Data, xmp: Data, trailer: Data) -> Data {

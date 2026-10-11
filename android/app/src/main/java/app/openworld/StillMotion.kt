@@ -85,14 +85,85 @@ object StillMotion {
                     input.seek(next)
                 }
             }
+            if (videoLen != null && videoLen > 0L && videoLen < fileLen) {
+                input.seek(fileLen - videoLen)
+                val header = ByteArray(8)
+                if (readFully(input, header) &&
+                    header.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))
+                ) {
+                    return true
+                }
+            }
+            // Samsung stores the clip before an SEFT trailer, so it is not the last bytes.
+            if (samsungVideo(input, fileLen)) return true
             if (!claimed) return false
-            val length = videoLen ?: return true
-            if (length <= 0L || length >= fileLen) return false
-            input.seek(fileLen - length)
-            val header = ByteArray(8)
-            if (!readFully(input, header)) return false
-            return header.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))
+            return videoLen == null
         }
+    }
+
+    /**
+     * The mp4 embedded in a Samsung trailer. The trailer ends with `SEFT`.
+     * The clip starts after the `MotionPhoto_Data` marker.
+     */
+    private fun samsungVideo(input: RandomAccessFile, fileLen: Long): Boolean {
+        if (fileLen < 32L) return false
+        input.seek(fileLen - 8L)
+        val tail = ByteArray(8)
+        if (!readFully(input, tail)) return false
+        if (!tail.copyOfRange(4, 8).contentEquals("SEFT".toByteArray(Charsets.US_ASCII))) return false
+        val sefSize = le32(tail, 0)
+        if (sefSize < 12L || sefSize > fileLen - 8L) return false
+        val sefh = fileLen - 8L - sefSize
+        input.seek(sefh)
+        val head = ByteArray(12)
+        if (!readFully(input, head)) return false
+        if (!head.copyOfRange(0, 4).contentEquals("SEFH".toByteArray(Charsets.US_ASCII))) return false
+        val count = le32(head, 8)
+        if (count <= 0L || count > 16L) return false
+        val entriesBytes = count * 12L
+        if (sefh + 12L + entriesBytes > fileLen - 8L) return false
+        val entries = ByteArray(entriesBytes.toInt())
+        if (!readFully(input, entries)) return false
+        val marker = byteArrayOf(0, 0, 0x30, 0x0A)
+        var at = 0
+        while (at + 12 <= entries.size) {
+            if (!entries.copyOfRange(at, at + 4).contentEquals(marker)) {
+                at += 12
+                continue
+            }
+            val back = le32(entries, at + 4)
+            val dataLen = le32(entries, at + 8)
+            if (back > sefh || dataLen < 32L) {
+                at += 12
+                continue
+            }
+            val field = sefh - back
+            if (field + dataLen > sefh) {
+                at += 12
+                continue
+            }
+            input.seek(field)
+            val hdr = ByteArray(24)
+            if (!readFully(input, hdr)) return false
+            val nameLen = le32(hdr, 4)
+            if (!hdr.copyOfRange(0, 4).contentEquals(marker) || nameLen != 16L ||
+                !hdr.copyOfRange(8, 24).contentEquals("MotionPhoto_Data".toByteArray(Charsets.US_ASCII))
+            ) {
+                at += 12
+                continue
+            }
+            val start = field + 24L
+            if (start >= field + dataLen) {
+                at += 12
+                continue
+            }
+            input.seek(start)
+            val box = ByteArray(8)
+            if (!readFully(input, box)) return false
+            if (box.copyOfRange(4, 8).contentEquals("ftyp".toByteArray(Charsets.US_ASCII))) return true
+            at += 12
+        }
+        return false
     }
 
     private sealed class MotionXmp {

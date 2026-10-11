@@ -172,6 +172,7 @@ fn motion_clip(path: &Path) -> Result<Option<MotionClip>, MediaError> {
 }
 
 /// `MicroVideoOffset` or a MotionPhoto item length is the video at the end of the file.
+/// A Samsung trailer holds that video before `SEFT` instead.
 fn motion_video(path: &Path) -> MotionVideo {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -186,6 +187,7 @@ fn motion_video(path: &Path) -> MotionVideo {
         return MotionVideo::None;
     }
     let mut claimed = false;
+    let mut turned_off = false;
     let mut video_len = None;
     loop {
         let marker = match next_jpeg_marker(&mut file) {
@@ -215,6 +217,7 @@ fn motion_video(path: &Path) -> MotionVideo {
             }
             match motion_length_in_xmp(&buf) {
                 MotionXmp::No => {}
+                MotionXmp::Off => turned_off = true,
                 MotionXmp::Video(n) => {
                     claimed = true;
                     if video_len.is_none() {
@@ -227,26 +230,115 @@ fn motion_video(path: &Path) -> MotionVideo {
             break;
         }
     }
+    // A value other than 1 is a still, even when a trailer still holds a clip.
+    if turned_off {
+        return MotionVideo::None;
+    }
+    // Google's directory and the older offset store the clip as the last bytes.
+    if let Some(start) = video_len.and_then(|video_len| video_at_end(&mut file, len, video_len)) {
+        return MotionVideo::Span { start, end: len };
+    }
+    // Samsung stores that clip before an SEFT trailer, so it is not the last bytes.
+    if let Some((start, end)) = samsung_video(&mut file, len) {
+        return MotionVideo::Span { start, end };
+    }
     if !claimed {
         return MotionVideo::None;
     }
     // The packet names a motion photo. A missing length is not a still.
     // A length that does not land on a movie means the video was removed.
-    let Some(video_len) = video_len else {
+    if video_len.is_none() {
         return MotionVideo::Broken;
-    };
-    if video_len >= len {
-        return MotionVideo::None;
+    }
+    MotionVideo::None
+}
+
+/// `video_len` bytes at the end of the file, when those bytes are a movie.
+fn video_at_end(file: &mut File, len: u64, video_len: u64) -> Option<u64> {
+    if video_len == 0 || video_len >= len {
+        return None;
     }
     let start = len - video_len;
     let mut header = [0u8; 8];
-    if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut header).is_err() {
-        return MotionVideo::None;
-    }
+    file.seek(SeekFrom::Start(start)).ok()?;
+    file.read_exact(&mut header).ok()?;
     if &header[4..8] != b"ftyp" {
-        return MotionVideo::None;
+        return None;
     }
-    MotionVideo::Span { start, end: len }
+    Some(start)
+}
+
+/// The mp4 embedded in a Samsung trailer. The trailer ends with `SEFT`.
+/// The clip starts after the `MotionPhoto_Data` marker, not at the end of the file.
+fn samsung_video(file: &mut File, len: u64) -> Option<(u64, u64)> {
+    if len < 32 {
+        return None;
+    }
+    let mut tail = [0u8; 8];
+    file.seek(SeekFrom::End(-8)).ok()?;
+    file.read_exact(&mut tail).ok()?;
+    if &tail[4..8] != b"SEFT" {
+        return None;
+    }
+    let sef_size = u64::from(u32::from_le_bytes([tail[0], tail[1], tail[2], tail[3]]));
+    if sef_size < 12 || sef_size > len - 8 {
+        return None;
+    }
+    let sefh = len - 8 - sef_size;
+    let mut head = [0u8; 12];
+    file.seek(SeekFrom::Start(sefh)).ok()?;
+    file.read_exact(&mut head).ok()?;
+    if &head[0..4] != b"SEFH" {
+        return None;
+    }
+    let count = u32::from_le_bytes([head[8], head[9], head[10], head[11]]);
+    if count == 0 || count > 16 {
+        return None;
+    }
+    let entries_bytes = u64::from(count) * 12;
+    if sefh + 12 + entries_bytes > len - 8 {
+        return None;
+    }
+    let mut entries = vec![0u8; entries_bytes as usize];
+    file.read_exact(&mut entries).ok()?;
+    let marker = b"\x00\x00\x30\x0A";
+    for chunk in entries.chunks_exact(12) {
+        if &chunk[0..4] != marker {
+            continue;
+        }
+        let back = u64::from(u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]));
+        let data_len = u64::from(u32::from_le_bytes([chunk[8], chunk[9], chunk[10], chunk[11]]));
+        if back > sefh || data_len < 32 {
+            continue;
+        }
+        let field = sefh - back;
+        if field.checked_add(data_len)? > sefh {
+            continue;
+        }
+        let mut hdr = [0u8; 24];
+        file.seek(SeekFrom::Start(field)).ok()?;
+        file.read_exact(&mut hdr).ok()?;
+        if &hdr[0..4] != marker {
+            continue;
+        }
+        let name_len = u64::from(u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]));
+        if name_len != 16 || &hdr[8..24] != b"MotionPhoto_Data" {
+            continue;
+        }
+        let start = field + 24;
+        let end = field + data_len;
+        if start >= end {
+            continue;
+        }
+        let mut box_header = [0u8; 8];
+        file.seek(SeekFrom::Start(start)).ok()?;
+        file.read_exact(&mut box_header).ok()?;
+        if &box_header[4..8] != b"ftyp" {
+            continue;
+        }
+        return Some((start, end));
+    }
+    None
 }
 
 fn next_jpeg_marker(file: &mut File) -> Option<u8> {
@@ -265,6 +357,8 @@ fn next_jpeg_marker(file: &mut File) -> Option<u8> {
 
 enum MotionXmp {
     No,
+    /// `MotionPhoto` is present and is not 1. The file is a still.
+    Off,
     /// The packet names a motion photo and gives the video's byte length.
     Video(u64),
     /// The packet names a motion photo, and the video length is not readable.
@@ -280,7 +374,7 @@ fn motion_length_in_xmp(buf: &[u8]) -> MotionXmp {
     }
     let text = String::from_utf8_lossy(buf);
     if motion_photo_off(&text) {
-        return MotionXmp::No;
+        return MotionXmp::Off;
     }
     if let Some(n) = motion_item_length(&text) {
         return MotionXmp::Video(n);

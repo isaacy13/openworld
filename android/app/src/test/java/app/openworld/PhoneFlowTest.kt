@@ -1017,6 +1017,44 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aSamsungMotionPhotoIsRefusedInsteadOfClearingTheStill() {
+        // The clip sits before an SEFT trailer, so it is not the last bytes of the file.
+        val root = File(System.getProperty("java.io.tmpdir"), "ow-samsung-" + System.nanoTime())
+        assertTrue(root.mkdirs())
+        val blank = File(root, "blank.jpg")
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64", "-frames:v", "1", blank.absolutePath)
+        val video = File(root, "clip.mp4")
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=10:d=0.2",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", video.absolutePath,
+        )
+        val motion = File(root, "motion.jpg")
+        val xmp = (
+            "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>" +
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">" +
+                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" " +
+                "GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\"/>" +
+                "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+            ).toByteArray(Charsets.UTF_8)
+        motion.writeBytes(jpegWithXmp(blank.readBytes(), xmp, samsungTrailer(video.readBytes())))
+        assertTrue(StillMotion.motionPhoto(motion))
+        assertFalse(StillMotion.motionPhoto(blank))
+        val model = FlowModel()
+        val uri = Uri.parse("content://app.openworld/samsung.jpg")
+        val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
+        shadowOf(resolver).registerInputStream(uri, motion.inputStream())
+        model.choose(uri, resolver)
+        model.continueFromDevice()
+        model.continueFromBundle()
+        model.continueFromSize()
+        assertFalse(model.canAnalyze)
+        assertTrue(model.estimateText.contains("not fully decoded"))
+        assertTrue(model.estimateText.contains("Refusing"))
+        assertFalse(model.estimateText.contains("Bad codec"))
+    }
+
+    @Test
     fun aStrippedMotionPhotoIsTheStill() {
         // Editors keep the motion-photo directory after the video is gone.
         val root = File(System.getProperty("java.io.tmpdir"), "ow-stripped-" + System.nanoTime())
@@ -3940,6 +3978,27 @@ private fun motionPhotoBytes(jpeg: ByteArray, video: ByteArray): ByteArray {
             "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
         ).toByteArray(Charsets.UTF_8)
     return jpegWithXmp(jpeg, xmp, video)
+}
+
+/** Samsung's trailer: the embedded-video marker, the clip, then an SEFH directory and SEFT. */
+private fun samsungTrailer(video: ByteArray): ByteArray {
+    val marker = byteArrayOf(0, 0, 0x30, 0x0A)
+    val trailer = java.io.ByteArrayOutputStream()
+    trailer.write(marker)
+    trailer.write(le32(16))
+    trailer.write("MotionPhoto_Data".toByteArray(Charsets.US_ASCII))
+    trailer.write(video)
+    val sefh = trailer.size()
+    trailer.write("SEFH".toByteArray(Charsets.US_ASCII))
+    trailer.write(le32(106))
+    trailer.write(le32(1))
+    trailer.write(marker)
+    trailer.write(le32(sefh))
+    trailer.write(le32(sefh))
+    val sefDataSize = trailer.size() - sefh
+    trailer.write(le32(sefDataSize))
+    trailer.write("SEFT".toByteArray(Charsets.US_ASCII))
+    return trailer.toByteArray()
 }
 
 private fun jpegWithXmp(jpeg: ByteArray, xmp: ByteArray, trailer: ByteArray): ByteArray {
