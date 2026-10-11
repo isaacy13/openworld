@@ -1370,12 +1370,11 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
     if info.square_pixels {
         command.args(["-vf", "scale=iw*sar:ih,setsar=1"]);
     }
-    // A GIF image stays up until the next one. FFmpeg's default decoder repeats
-    // that image to fill a steady rate, so the first `nb_frames` pictures can
-    // all be the first image. One picture per image is the file.
-    if gif_file(path) {
-        command.args(["-fps_mode", "passthrough"]);
-    }
+    // A picture stays up until the next one. FFmpeg's default decoder repeats
+    // that picture to fill a steady rate, so the first `nb_frames` buffers can
+    // all be the picture that stays up. The pictures after it never appear.
+    // One buffer per stored picture is the file.
+    command.args(["-fps_mode", "passthrough"]);
     let mut child = command
         .args(["-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
         .stdin(Stdio::null())
@@ -1560,13 +1559,79 @@ pub fn read_presentation(dir: &Path) -> Option<Vec<f64>> {
     Some(delays)
 }
 
-fn gif_file(path: &Path) -> bool {
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let mut header = [0u8; 6];
-    file.read_exact(&mut header).is_ok() && (&header == b"GIF87a" || &header == b"GIF89a")
+/// Per-picture display times. A GIF uses its own blocks. A video uses the
+/// timestamps a player shows. A still has none.
+pub fn picture_delays(path: &Path) -> Option<Vec<f64>> {
+    if let Some(delays) = gif_delays(path) {
+        return Some(delays);
+    }
+    video_frame_delays(path)
+}
+
+/// Seconds each stored picture stays up, from the gaps between display times.
+/// The last picture uses its own duration. A missing or backwards clock has no list.
+fn video_frame_delays(path: &Path) -> Option<Vec<f64>> {
+    let shown = shown_video_stream(path).ok()?;
+    let selector = format!("v:{shown}");
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            &selector,
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time,duration_time",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let frames = value.get("frames").and_then(|frames| frames.as_array())?;
+    if frames.len() < 2 {
+        return None;
+    }
+    let mut times = Vec::with_capacity(frames.len());
+    for frame in frames {
+        let time = json_f64(frame.get("best_effort_timestamp_time"))?;
+        if !time.is_finite() || time < 0.0 {
+            return None;
+        }
+        times.push(time);
+    }
+    let mut delays = Vec::with_capacity(times.len());
+    for index in 0..times.len() - 1 {
+        let gap = times[index + 1] - times[index];
+        if !gap.is_finite() || gap < 0.0 {
+            return None;
+        }
+        delays.push(gap);
+    }
+    let last = json_f64(frames.last().and_then(|frame| frame.get("duration_time")))
+        .filter(|delay| delay.is_finite() && *delay >= 0.0)
+        .or_else(|| delays.last().copied())?;
+    delays.push(last);
+    if delays.iter().all(|delay| *delay == 0.0) {
+        return None;
+    }
+    Some(delays)
+}
+
+fn json_f64(value: Option<&Value>) -> Option<f64> {
+    let value = value?;
+    if let Some(number) = value.as_f64() {
+        return Some(number);
+    }
+    let text = value.as_str()?;
+    if text.is_empty() || text == "N/A" {
+        return None;
+    }
+    text.parse().ok()
 }
 
 /// Per-frame display times for a GIF. A still or a video has none.

@@ -262,8 +262,8 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
     if let Err(report) = prepare_out(&req.out_dir) {
         return report;
     }
-    let delays = if req.coverage == Coverage::Measured {
-        decode::gif_delays(&req.input)
+    let delays = if req.coverage == Coverage::Measured && probed.video {
+        decode::picture_delays(&req.input)
     } else {
         None
     };
@@ -1207,8 +1207,16 @@ pub fn estimate_for(req: &ScanRequest) -> Result<crate::estimate::Estimate, Scan
             probed.motion_cover,
         )
     };
-    // A GIF frame that stays up is one picture, however many average-rate slots it covers.
-    if let Some(keep) = on_screen_frames(req.coverage, fps, frames, decode::gif_delays(&req.input)) {
+    // A picture that stays up is one picture, however many average-rate slots it covers.
+    // The phone already counted those pictures. Probing them again would replace that count.
+    let delays = if req.coverage == Coverage::Measured && req.media.is_none() {
+        decode::picture_delays(&req.input)
+    } else if req.coverage == Coverage::Measured {
+        decode::gif_delays(&req.input)
+    } else {
+        None
+    };
+    if let Some(keep) = on_screen_frames(req.coverage, fps, frames, delays) {
         if !keep.is_empty() {
             frames = keep.len() as u64;
             fps = 1.0;

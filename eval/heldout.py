@@ -329,6 +329,7 @@ def main() -> int:
         "gif_still": 0,
         "gif_later_candidate": 0,
         "apng_later_candidate": 0,
+        "held_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -605,6 +606,48 @@ def main() -> int:
         if not crops or any(item.get("frame_label") != f"Frame {int(item.get('frame_index')) + 1}." for item in crops):
             fail(f"later apng crops did not name their frame: {crops}")
         counts["apng_later_candidate"] += 1
+
+        # The first picture stays up for a second. Repeating it until the frame
+        # count is full would hide the marker on the last picture.
+        for index in range(4):
+            name = root / f"h{index}.png"
+            if index == 3:
+                shutil.copyfile(scene, name)
+                continue
+            proc = run([
+                "ffmpeg", "-y", "-v", "error", "-i", str(wide),
+                "-vf", f"drawbox=x={index}:y=0:w=1:h=1:color=black:t=fill",
+                str(name),
+            ])
+            if proc.returncode != 0:
+                fail(proc.stderr or f"h{index}.png was not written")
+        steady = root / "steady-held.mp4"
+        held = root / "held-later.mp4"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "25", "-start_number", "0",
+            "-i", str(root / "h%d.png"), "-frames:v", "4", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0",
+            "-video_track_timescale", "12800", str(steady),
+        ])
+        if proc.returncode != 0 or not steady.is_file():
+            fail(proc.stderr or "steady held video was not written")
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(steady), "-c", "copy",
+            "-bsf:v",
+            "setts=pts='if(eq(N\\,0),PTS,PTS+12800)':dts='if(eq(N\\,0),DTS,DTS+12800)'",
+            str(held),
+        ])
+        if proc.returncode != 0 or not held.is_file():
+            fail(proc.stderr or "held video was not written")
+        report = scan(args.bin, args.bundles, posters, held, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"held later summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 4:
+            fail(f"held later decoded {report.get('frames_decoded')} frames")
+        found = report.get("candidates") or []
+        if not found or any(item.get("frame_index") != 3 or item.get("frame_label") != "Frame 4." for item in found):
+            fail(f"held later candidates were not on the last picture: {found}")
+        counts["held_later_candidate"] += 1
 
         turned = root / "turned.jpg"
         proc = run([
@@ -896,6 +939,7 @@ def main() -> int:
         or counts["gif_still"] != 1
         or counts["gif_later_candidate"] != 1
         or counts["apng_later_candidate"] != 1
+        or counts["held_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1
