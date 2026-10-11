@@ -11,6 +11,7 @@ import android.media.MediaFormat
 import java.io.File
 import java.io.IOException
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** The window closed while frames were still being written. */
 internal class DecodeStopped : IOException()
@@ -270,7 +271,8 @@ object PlatformDecode {
         val duration = durationUs / 1_000_000.0
         val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() else 0.0
         if (fps <= 0.0) throw IOException("The decoder did not report a frame rate. Refusing.")
-        val frames = if (duration > 0.0) maxOf(1L, (duration * fps).roundToInt().toLong()) else 1L
+        val frames = videoFrameCount(duration, fps)
+        if (frames <= 0L) throw IOException("Bad codec or unreadable file. Refusing.")
         return Facts(shown.first, shown.second, fps, frames, duration, true)
     }
 
@@ -359,6 +361,18 @@ object PlatformDecode {
         }
         return Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
     }
+}
+
+/**
+ * How many pictures the estimate counts. A duration of zero is one still frame.
+ * A count that does not fit in a 64-bit integer is 0, so the estimate refuses
+ * instead of planning [Int.MAX_VALUE] frames.
+ */
+internal fun videoFrameCount(durationSec: Double, fps: Double): Long {
+    if (!durationSec.isFinite() || durationSec <= 0.0 || !fps.isFinite() || fps <= 0.0) return 1L
+    val pictures = durationSec * fps
+    if (!pictures.isFinite() || pictures >= Long.MAX_VALUE.toDouble()) return 0L
+    return maxOf(1L, pictures.roundToLong())
 }
 
 /** A plane buffer's position is the first sample. An absolute read from zero takes the padding before it. */

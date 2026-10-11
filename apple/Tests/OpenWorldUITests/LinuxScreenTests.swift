@@ -1605,6 +1605,11 @@ final class OpenWorldUITests: XCTestCase {
         XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 0, rate: 10), 1)
     }
 
+    func testAFrameCountThatDoesNotFitRefusesInsteadOfTrapping() {
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 1e20, rate: 30), 0)
+        XCTAssertEqual(VideoDisplay.frameCount(pictureSeconds: 1e200, rate: 1e200), 0)
+    }
+
     func testAJpegOrientationTagIsReadFromTheFile() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ow-orient-\(UUID().uuidString)")
         try Data(jpegWithOrientation(6)).write(to: url)

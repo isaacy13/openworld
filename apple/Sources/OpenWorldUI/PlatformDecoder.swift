@@ -136,11 +136,15 @@ enum PlatformDecoder {
             guard shown.0 > 0, shown.1 > 0 else {
                 throw failure("Bad codec or unreadable file. Refusing.")
             }
+            let frames = VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate)
+            guard frames > 0 else {
+                throw failure("Bad codec or unreadable file. Refusing.")
+            }
             return Facts(
                 width: shown.0,
                 height: shown.1,
                 fps: rate,
-                frames: VideoDisplay.frameCount(pictureSeconds: seconds, rate: rate),
+                frames: frames,
                 duration: seconds,
                 video: true,
                 containerUnix: nil,

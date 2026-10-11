@@ -835,6 +835,13 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aDurationThatDoesNotFitIsNotAFrameCount() {
+        assertEquals(60L, videoFrameCount(2.0, 30.0))
+        assertEquals(1L, videoFrameCount(0.0, 30.0))
+        assertEquals(0L, videoFrameCount(1e20, 30.0))
+    }
+
+    @Test
     fun aVideoPlaneStartsAtTheBufferPositionAndStudioBlackIsBlack() {
         val plane = ByteBuffer.allocate(8)
         plane.put(0, 9)

@@ -40,10 +40,15 @@ public enum VideoDisplay {
     }
 
     /// How many pictures the estimate counts. `pictureSeconds` is the video track.
+    /// A count that does not fit in `Int` is 0, so the estimate refuses instead of trapping.
     public static func frameCount(pictureSeconds: Double, rate: Double) -> Int {
         guard pictureSeconds.isFinite, pictureSeconds > 0, rate.isFinite, rate > 0 else {
             return 1
         }
-        return max(1, Int((pictureSeconds * rate).rounded()))
+        let pictures = (pictureSeconds * rate).rounded()
+        guard pictures.isFinite, let count = Int(exactly: pictures), count >= 1 else {
+            return 0
+        }
+        return count
     }
 }

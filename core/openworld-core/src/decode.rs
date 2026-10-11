@@ -695,7 +695,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     // Matroska and WebM put the picture length in the track's DURATION tag.
     // MP4 puts it on the video stream. The frame estimate uses that length.
     let picture = picture_duration(stream, duration);
-    let presented = if picture > 0.0 { (picture * fps).round() as u64 } else { 0 };
+    let presented = presented_frames(picture, fps).ok_or(MediaError::BadCodec)?;
     // nb_frames counts every stored sample. An edit list can hide some of them.
     // The stream duration is the length a player shows.
     let frames = match nb {
@@ -714,6 +714,19 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         video: true,
         square_pixels,
     })
+}
+
+/// How many pictures `picture` seconds at `fps` is. `None` when that count does not
+/// fit, so a broken duration is a refusal instead of a plan for every integer.
+fn presented_frames(picture: f64, fps: f64) -> Option<u64> {
+    if !(picture > 0.0) || !picture.is_finite() || !fps.is_finite() || fps <= 0.0 {
+        return Some(0);
+    }
+    let pictures = picture * fps;
+    if !pictures.is_finite() || pictures >= u64::MAX as f64 {
+        return None;
+    }
+    Some(pictures.round() as u64)
 }
 
 /// Picture length in seconds. A track clock wins, then the video stream's own duration.
@@ -1828,6 +1841,13 @@ mod tests {
         assert_eq!(super::displayed_size(320, 480, 2, 1, true), (240, 320, true));
         assert_eq!(super::displayed_size(320, 480, 2, 1, false), (640, 480, true));
         assert_eq!(super::displayed_size(480, 640, 1, 1, true), (640, 480, false));
+    }
+
+    #[test]
+    fn a_duration_that_does_not_fit_is_not_a_frame_count() {
+        assert_eq!(super::presented_frames(2.0, 30.0), Some(60));
+        assert_eq!(super::presented_frames(0.0, 30.0), Some(0));
+        assert!(super::presented_frames(1e20, 30.0).is_none());
     }
 
     #[test]
