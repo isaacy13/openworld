@@ -1186,7 +1186,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-read_intervals",
             "%+#1",
             "-show_entries",
-            "frame=width,height:frame_side_data=rotation",
+            "frame=width,height,duration_time,pkt_duration_time:frame_side_data=rotation",
             "-of",
             "json",
         ])
@@ -1211,7 +1211,16 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         .unwrap_or(header_height);
     // The average is the rate a player uses. Theora and IVF leave it at 0/0
     // and put the real rate on r_frame_rate. A timebase is not that rate.
-    let fps = stream_frame_rate(stream);
+    // An animated PNG can leave the average at 0/0 and put a 100000 timebase
+    // on r_frame_rate. The first picture's own duration is the rate a player uses.
+    let fps = {
+        let listed = stream_frame_rate(stream);
+        if listed > 0.0 {
+            listed
+        } else {
+            frame_duration_rate(&value).unwrap_or(0.0)
+        }
+    };
     let nb = json_u32(stream.get("nb_frames")).map(u64::from);
     let duration = value
         .get("format")
@@ -1604,6 +1613,21 @@ fn stream_frame_rate(stream: &Value) -> f64 {
     frame_rate_field(stream.get("avg_frame_rate"))
         .or_else(|| frame_rate_field(stream.get("r_frame_rate")))
         .unwrap_or(0.0)
+}
+
+/// Pictures per second from the first picture's duration. Zero is not a rate,
+/// and a timebase of 1000 or more is not one either.
+fn frame_duration_rate(value: &Value) -> Option<f64> {
+    let duration = json_f64(value.pointer("/frames/0/duration_time"))
+        .filter(|duration| *duration > 0.0)
+        .or_else(|| {
+            json_f64(value.pointer("/frames/0/pkt_duration_time")).filter(|duration| *duration > 0.0)
+        })?;
+    if !duration.is_finite() {
+        return None;
+    }
+    let fps = 1.0 / duration;
+    if fps > 0.0 && fps < 1000.0 { Some(fps) } else { None }
 }
 
 fn frame_rate_field(value: Option<&Value>) -> Option<f64> {
