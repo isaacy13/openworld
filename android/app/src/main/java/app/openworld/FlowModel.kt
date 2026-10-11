@@ -694,7 +694,13 @@ class FlowModel : ViewModel() {
             for (name in listOf("last_modified", "date_modified", "datetaken")) {
                 val index = it.getColumnIndex(name)
                 if (index < 0 || it.isNull(index)) continue
-                val value = it.getLong(index)
+                // A provider can store the same column as text. Reading that as a long
+                // throws, and Choose runs on the main thread.
+                val value = try {
+                    it.getLong(index)
+                } catch (_: RuntimeException) {
+                    continue
+                }
                 // Zero means the column did not report a time. A negative value is a
                 // real date from before 1970.
                 if (value == 0L) continue

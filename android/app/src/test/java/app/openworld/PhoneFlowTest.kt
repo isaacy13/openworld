@@ -558,6 +558,24 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aDateStoredAsTextStillOpensTheFile() {
+        // A document provider can return the same column name as text. Reading it as a
+        // long throws, and that throw used to leave Choose on the main thread.
+        val text = chooseDated("content://app.openworld/text-date.png", "date_modified", "not-a-time")
+        assertEquals(Step.Device, text.step)
+        assertEquals("photo.png", text.fileName)
+        assertFalse(text.oldFile)
+        val mixed = chooseDated(
+            "content://app.openworld/mixed-date.png",
+            linkedMapOf("last_modified" to "not-a-time", "date_modified" to 788_918_400L),
+        )
+        assertEquals(Step.Device, mixed.step)
+        assertEquals("photo.png", mixed.fileName)
+        assertTrue(mixed.oldFile)
+        assertTrue(chooseDated("content://app.openworld/numeric-text.png", "date_modified", "788918400").oldFile)
+    }
+
+    @Test
     @Config(sdk = [34], qualifiers = "w360dp-h800dp", shadows = [SharedFileOsShadow::class])
     fun aSharedFileFromBefore1970StillCountsAsOld() {
         val model = chooseSharedFile("archive.png", -315_619_200_000L)
@@ -565,7 +583,11 @@ class PhoneFlowTest {
         assertEquals(Step.Device, model.step)
     }
 
-    private fun chooseDated(address: String, column: String, value: Long): FlowModel {
+    private fun chooseDated(address: String, column: String, value: Any): FlowModel {
+        return chooseDated(address, linkedMapOf(column to value))
+    }
+
+    private fun chooseDated(address: String, columns: Map<String, Any>): FlowModel {
         val model = FlowModel()
         val uri = Uri.parse(address)
         val file = still("blank")
@@ -575,8 +597,8 @@ class PhoneFlowTest {
                 moveToPosition(-1)
             }
         }
-        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME, column))
-        cursor.setResults(arrayOf(arrayOf<Any>("photo.png", value)))
+        cursor.setColumnNames(listOf(OpenableColumns.DISPLAY_NAME) + columns.keys)
+        cursor.setResults(arrayOf(arrayOf("photo.png", *columns.values.toTypedArray())))
         shadowOf(resolver).setCursor(uri, cursor)
         shadowOf(resolver).registerInputStream(uri, file.inputStream())
         model.choose(uri, resolver)
