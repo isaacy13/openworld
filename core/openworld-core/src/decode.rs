@@ -962,6 +962,11 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     let turned = swaps_axes(display_rotation(&value));
     let (sar_num, sar_den) = sample_aspect(stream.get("sample_aspect_ratio").and_then(|v| v.as_str()));
     let (width, height, square_pixels) = displayed_size(width, height, sar_num, sar_den, turned);
+    // The scan allocates one RGB buffer of this displayed size. A size that does
+    // not fit is a refusal, not a plan for a frame that cannot be decoded.
+    if rgb_frame_len(width, height).is_none() {
+        return Err(MediaError::BadCodec);
+    }
     // The container duration includes audio that continues after the pictures.
     // Matroska and WebM put the picture length in the track's DURATION tag.
     // MP4 puts it on the video stream. The frame estimate uses that length.
@@ -1083,7 +1088,17 @@ fn parse_clock(text: &str) -> Option<f64> {
     Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }
 
+/// Byte length of one RGB24 frame. `None` when that buffer does not fit, or the size is zero.
+fn rgb_frame_len(width: u32, height: u32) -> Option<usize> {
+    let pixels = (width as usize).checked_mul(height as usize)?;
+    let bytes = pixels.checked_mul(3)?;
+    if bytes == 0 { None } else { Some(bytes) }
+}
+
 fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
+    // Checked before FFmpeg starts. The unchecked product panics in debug when
+    // both sides are near u32::MAX, and a wrapped length would allocate the wrong buffer.
+    let frame_bytes = rgb_frame_len(info.width, info.height).ok_or(MediaError::BadCodec)?;
     let mut command = Command::new("ffmpeg");
     let mapped = format!("0:v:{}", info.shown_stream);
     command.args(["-v", "error", "-i"]).arg(path);
@@ -1106,11 +1121,6 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
         .spawn()
         .map_err(|_| MediaError::BadCodec)?;
     let mut stdout = child.stdout.take().ok_or(MediaError::BadCodec)?;
-    let frame_bytes = info.width as usize * info.height as usize * 3;
-    if frame_bytes == 0 {
-        let _ = child.kill();
-        return Err(MediaError::BadCodec);
-    }
     let mut decoded = 0u64;
     let mut stopped = false;
     let mut capped = false;
@@ -1580,6 +1590,27 @@ mod tests {
         // 320 * u32::MAX does not fit in the displayed width. The coded width stays.
         assert_eq!(super::square_width(320, u32::MAX, 1), 320);
         assert_eq!(super::square_width(320, 2, 1), 640);
+    }
+
+    #[test]
+    fn a_frame_whose_pixels_do_not_fit_refuses() {
+        // A displayed frame of u32::MAX by u32::MAX RGB does not fit in one buffer.
+        // The old multiply overflowed after FFmpeg had already been started.
+        let info = super::Probe {
+            width: u32::MAX,
+            height: u32::MAX,
+            fps: 30.0,
+            duration_sec: 1.0,
+            frames: 1,
+            frames_exact: true,
+            container_created: None,
+            video: true,
+            square_pixels: false,
+            shown_stream: 0,
+            motion_cover: false,
+        };
+        let result = super::decode_video(std::path::Path::new("missing-frame"), &info, &mut |_, _| true);
+        assert!(matches!(result, Err(super::MediaError::BadCodec)));
     }
 
     use image::{DynamicImage, ImageEncoder, RgbImage};
