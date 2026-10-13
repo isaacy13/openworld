@@ -25,8 +25,10 @@ FBI photos on.
 from __future__ import annotations
 
 import argparse
+import binascii
 import json
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -248,6 +250,25 @@ def require(proc: subprocess.CompletedProcess[str], what: str) -> dict:
         fail(f"{what} was not JSON: {exc}\n{proc.stdout[:400]}")
 
 
+def apng_with_orientation(png: bytes, orientation: int) -> bytes:
+    """Camera orientation after the header. Before the first image, this FFmpeg will not read the file."""
+    tiff = bytearray()
+    tiff += b"II\x2a\x00"
+    tiff += (8).to_bytes(4, "little")
+    tiff += (1).to_bytes(2, "little")
+    tiff += (0x0112).to_bytes(2, "little")
+    tiff += (3).to_bytes(2, "little")
+    tiff += (1).to_bytes(4, "little")
+    tiff += int(orientation).to_bytes(2, "little")
+    tiff += (0).to_bytes(2, "little")
+    tiff += (0).to_bytes(4, "little")
+    typed = b"eXIf" + bytes(tiff)
+    chunk = struct.pack(">I", len(tiff)) + typed + struct.pack(">I", binascii.crc32(typed) & 0xFFFFFFFF)
+    ihdr_len = struct.unpack(">I", png[8:12])[0]
+    at = 8 + 12 + ihdr_len
+    return png[:at] + chunk + png[at:]
+
+
 def scan(bin_path: str, bundles: str, posters: Path, image: Path, out: Path, coverage: str) -> dict:
     proc = run(
         [
@@ -339,6 +360,7 @@ def main() -> int:
         "theora_candidate": 0,
         "cropped_candidate": 0,
         "apng_rate_candidate": 0,
+        "apng_orient_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -808,6 +830,31 @@ def main() -> int:
             fail(f"unrated apng candidates {report.get('candidates')}")
         counts["apng_rate_candidate"] += 1
 
+        side_png = root / "apng-side.png"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(scene),
+            "-vf", "transpose=2", str(side_png),
+        ])
+        if proc.returncode != 0 or not side_png.is_file():
+            fail(proc.stderr or "sideways apng source was not written")
+        plain = root / "apng-side.apng"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(side_png),
+            "-frames:v", "3", "-r", "2", "-plays", "1", "-f", "apng", str(plain),
+        ])
+        if proc.returncode != 0 or not plain.is_file():
+            fail(proc.stderr or "sideways apng was not written")
+        turned_apng = root / "apng-turned.apng"
+        turned_apng.write_bytes(apng_with_orientation(plain.read_bytes(), 6))
+        report = scan(args.bin, args.bundles, posters, turned_apng, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"turned apng summary {report.get('summary')!r} {report.get('message')}")
+        if not report.get("frames_decoded"):
+            fail(f"turned apng decoded {report.get('frames_decoded')} frames")
+        if not any(item.get("kind") == "face" for item in report.get("candidates") or []):
+            fail(f"turned apng candidates {report.get('candidates')}")
+        counts["apng_orient_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -1141,6 +1188,7 @@ def main() -> int:
         or counts["theora_candidate"] != 1
         or counts["cropped_candidate"] != 1
         or counts["apng_rate_candidate"] != 1
+        or counts["apng_orient_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1

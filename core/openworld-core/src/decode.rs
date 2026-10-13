@@ -2,7 +2,8 @@
 
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
 //! A JPEG, a still WebP, a PNG, or a TIFF is turned to match its camera orientation
-//! tag before the pixels are scanned. Every page of a TIFF is scanned. A 16-bit
+//! tag before the pixels are scanned. An animated PNG is turned the same way, on
+//! every frame. Every page of a TIFF is scanned. A 16-bit
 //! sample contributes its high 8 bits. CMYK and full-resolution YCbCr become RGB.
 //! A one-page palette, bilevel, or subsampled TIFF is read as a player shows that
 //! page. A multi-page TIFF whose pages are not all read is refused. Audio is not decoded. Phone, Mac, and Android shells
@@ -111,6 +112,18 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
         let image = open_oriented(path).map_err(|_| MediaError::BadCodec)?;
         let keep_going = on_frame(0, &image);
         return Ok(DecodeStats { frames_decoded: 1, clean: keep_going, probe: info });
+    }
+    // An animated PNG skips the still path so every frame is read. The camera
+    // tag on that file is the same turn a still PNG gets.
+    if let Some(orientation) = png_exif_orientation(path) {
+        if orientation != Orientation::NoTransforms {
+            return decode_video(path, &info, &mut |index, frame| {
+                let mut image = DynamicImage::ImageRgb8(frame.clone());
+                image.apply_orientation(orientation);
+                let shown = image.to_rgb8();
+                on_frame(index, &shown)
+            });
+        }
     }
     decode_video(path, &info, &mut on_frame)
 }

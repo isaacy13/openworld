@@ -2059,6 +2059,41 @@ fn png_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
     panic!("png had no image data");
 }
 
+/// The same orientation chunk, placed after the header. Before the first image
+/// the animation control chunk sits there, and this FFmpeg will not read the file.
+fn apng_with_orientation(png: &[u8], orientation: u8) -> Vec<u8> {
+    let mut tiff = Vec::new();
+    tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00]);
+    tiff.extend_from_slice(&0x0112u16.to_le_bytes());
+    tiff.extend_from_slice(&3u16.to_le_bytes());
+    tiff.extend_from_slice(&1u32.to_le_bytes());
+    tiff.extend_from_slice(&(u16::from(orientation)).to_le_bytes());
+    tiff.extend_from_slice(&0u16.to_le_bytes());
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    let mut typed = b"eXIf".to_vec();
+    typed.extend_from_slice(&tiff);
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in &typed {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    let crc = !crc;
+    let mut chunk = Vec::new();
+    chunk.extend_from_slice(&(tiff.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&typed);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let ihdr_len = u32::from_be_bytes(png[8..12].try_into().unwrap()) as usize;
+    let at = 8 + 12 + ihdr_len;
+    let mut out = Vec::with_capacity(png.len() + chunk.len());
+    out.extend_from_slice(&png[..at]);
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&png[at..]);
+    out
+}
+
 #[test]
 fn a_png_with_camera_orientation_is_scanned_as_shown() {
     let dir = tempfile::tempdir().unwrap();
@@ -4147,4 +4182,63 @@ fn an_animated_png_without_an_average_rate_is_scanned() {
     assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
     assert!(!report.candidates.is_empty());
     assert!(report.frames_decoded > 0, "{}", report.message);
+}
+
+#[test]
+fn an_animated_png_with_camera_orientation_is_scanned_as_shown() {
+    // The still path turns a PNG to match the camera tag. An animated PNG skips
+    // that path so every frame is read, and the tag was left on the stored pixels.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let stored = image::imageops::rotate270(&scene.image);
+    stored.save(dir.path().join("side.png")).unwrap();
+    let movie = dir.path().join("clip.apng");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-loop", "1", "-i"])
+        .arg(dir.path().join("side.png"))
+        .args(["-frames:v", "3", "-r", "2", "-plays", "1", "-f", "apng"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let tagged = dir.path().join("tagged.apng");
+    fs::write(&tagged, apng_with_orientation(&fs::read(&movie).unwrap(), 6)).unwrap();
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |input: std::path::PathBuf| {
+        let out_dir = dir.path().join(format!("out-{}", input.file_name().unwrap().to_string_lossy()));
+        scan_path(
+            &ScanRequest {
+                input,
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir,
+                detection: DetectionSize::Px(640),
+                coverage: Coverage::Complete,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    let turned = scan(tagged);
+    assert_eq!(turned.status, "complete", "{}", turned.message);
+    assert_eq!(turned.summary, POSSIBLE_CANDIDATE, "{}", turned.message);
+    assert!(
+        turned.candidates.iter().any(|candidate| candidate.kind == "face"),
+        "{:?}",
+        turned.candidates
+    );
+    assert!(turned.frames_decoded > 0, "{}", turned.message);
+    let sideways = scan(movie);
+    assert_eq!(sideways.status, "complete", "{}", sideways.message);
+    assert_eq!(sideways.summary, NO_CLEARANCE, "{}", sideways.message);
+    assert!(sideways.candidates.is_empty());
 }
