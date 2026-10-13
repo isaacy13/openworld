@@ -1,0 +1,43 @@
+schema = "openworld.bundle.v1"
+id = "fast"
+name = "Fast"
+version = "0.1.0"
+official = true
+best_for = "Phones and long video."
+# Locked fixture cutoff. Not taken from LFW, NIST, or a real-face set.
+threshold = 0.55
+estimate_factor = 1.0
+curve = "../../eval/curves/fast.json"
+
+[models]
+detector = "SCRFD-0.5GF"
+detector_version = "SCRFD_500M"
+embedder = "ArcFace-MBF"
+embedder_version = "MBF@WebFace600K"
+plate = "RTMDet-nano"
+plate_version = "rtmdet_nano"
+plate_license = "Apache-2.0"
+
+[[files]]
+role = "detector"
+name = "SCRFD-0.5GF"
+version = "SCRFD_500M"
+sha256 = ""
+license = "InsightFace pretrained models are non-commercial research only. Not bundled. SHA-256 is pinned when a redistributable file is added."
+path = "weights/scrfd_0.5g.onnx"
+
+[[files]]
+role = "embedder"
+name = "ArcFace-MBF"
+version = "MBF@WebFace600K"
+sha256 = ""
+license = "InsightFace pretrained models are non-commercial research only. Not bundled. SHA-256 is pinned when a redistributable file is added."
+path = "weights/arcface_mbf.onnx"
+
+[[files]]
+role = "plate"
+name = "RTMDet-nano"
+version = "rtmdet_nano"
+sha256 = ""
+license = "Apache-2.0. Not bundled until the file and its SHA-256 are pinned."
+path = "weights/rtmdet_nano.onnx"

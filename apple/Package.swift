@@ -1,0 +1,54 @@
+// swift-tools-version: 5.9
+// SPDX-License-Identifier: Apache-2.0
+import PackageDescription
+
+// The iPhone and Mac app imports SwiftUI. That executable is built on macOS.
+// Linux CI compiles the phone model and its tests. It does not build the app.
+let contract = Target.target(name: "OpenWorldContract", path: "Sources/OpenWorldContract")
+let contractTests = Target.testTarget(
+    name: "OpenWorldContractTests",
+    dependencies: ["OpenWorldContract"],
+    path: "Tests/OpenWorldContractTests"
+)
+
+#if os(Linux)
+let package = Package(
+    name: "OpenWorld",
+    targets: [
+        contract,
+        contractTests,
+        .target(
+            name: "OpenWorldUI",
+            dependencies: ["OpenWorldContract"],
+            path: "Sources/OpenWorldUI"
+        ),
+        .testTarget(
+            name: "OpenWorldUITests",
+            dependencies: ["OpenWorldUI", "OpenWorldContract"],
+            path: "Tests/OpenWorldUITests"
+        ),
+    ]
+)
+#else
+let package = Package(
+    name: "OpenWorld",
+    platforms: [
+        .macOS(.v14),
+        .iOS(.v17),
+    ],
+    targets: [
+        contract,
+        contractTests,
+        .target(
+            name: "OpenWorldUI",
+            dependencies: ["OpenWorldContract"],
+            path: "Sources/OpenWorldUI"
+        ),
+        .executableTarget(
+            name: "OpenWorld",
+            dependencies: ["OpenWorldUI"],
+            path: "Sources/OpenWorld"
+        ),
+    ]
+)
+#endif

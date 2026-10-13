@@ -1,0 +1,69 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg g++
+      - name: unit snapshot and line coverage
+        run: cargo llvm-cov --manifest-path core/Cargo.toml --fail-under-lines 90
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
+      - run: python3 eval/measure_fast.py --bin core/target/release/openworld --bundles bundles --out /tmp/fast-curve.json --check eval/curves/fast.json
+      - run: python3 eval/heldout.py --bin core/target/release/openworld --bundles bundles
+      - run: python3 tests/words.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Google removed the legacy SDK package named tools. The action's old
+      # default still asks for it and fails the job. platform-tools is enough;
+      # the platform and build-tools are installed on the next step.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: android sdk packages
+        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+      - name: link the host scan library
+        run: OPENWORLD_PROFILE=release sh android/scripts/link-host-jni.sh
+      - name: android phone screens
+        working-directory: android
+        env:
+          OPENWORLD_REQUIRE_LINKED: "1"
+        run: ./gradlew testDebugUnitTest --stacktrace
+  apple-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libssl-dev uuid-dev pkg-config g++-14 ffmpeg
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli -p openworld-core
+      - name: Install Swift 6.3.3
+        run: |
+          curl -fsSL "https://download.swift.org/swift-6.3.3-release/ubuntu2404/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-ubuntu24.04.tar.gz" -o /tmp/swift.tar.gz
+          sudo mkdir -p /opt/swift
+          sudo tar -xzf /tmp/swift.tar.gz -C /opt/swift --strip-components=1
+          echo /opt/swift/usr/bin >> "$GITHUB_PATH"
+          /opt/swift/usr/bin/swift --version
+      - name: Phone model and contract tests
+        working-directory: apple
+        env:
+          OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
+          OPENWORLD_BUNDLES: ${{ github.workspace }}/bundles
+          OPENWORLD_LIB: ${{ github.workspace }}/core/target/release/libopenworld_core.so
+        run: swift test --filter 'PhoneContractTests|OpenWorldUITests'
+  apple-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SwiftUI app build
+        run: |
+          swift build --package-path apple
+          test -x "$(swift build --package-path apple --show-bin-path)/OpenWorld"

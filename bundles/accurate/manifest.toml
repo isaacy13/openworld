@@ -1,0 +1,43 @@
+schema = "openworld.bundle.v1"
+id = "accurate"
+name = "Accurate"
+version = "0.1.0"
+official = true
+best_for = "A computer, when you want fewer misses."
+# Separate locked cutoff. Scores are not comparable with Fast.
+# This bundle is not measured, so this number is not an accuracy claim.
+threshold = 0.60
+estimate_factor = 3.5
+
+[models]
+detector = "SCRFD-10GF"
+detector_version = "SCRFD_10G"
+embedder = "ArcFace-R100"
+embedder_version = "ResNet100@Glint360K"
+plate = "RTMDet-nano"
+plate_version = "rtmdet_nano"
+plate_license = "Apache-2.0"
+
+[[files]]
+role = "detector"
+name = "SCRFD-10GF"
+version = "SCRFD_10G"
+sha256 = ""
+license = "InsightFace pretrained models are non-commercial research only. Not bundled. SHA-256 is pinned when a redistributable file is added."
+path = "weights/scrfd_10g.onnx"
+
+[[files]]
+role = "embedder"
+name = "ArcFace-R100"
+version = "ResNet100@Glint360K"
+sha256 = ""
+license = "InsightFace pretrained models are non-commercial research only. Not bundled. SHA-256 is pinned when a redistributable file is added."
+path = "weights/arcface_r100.onnx"
+
+[[files]]
+role = "plate"
+name = "RTMDet-nano"
+version = "rtmdet_nano"
+sha256 = ""
+license = "Apache-2.0. Not bundled until the file and its SHA-256 are pinned."
+path = "weights/rtmdet_nano.onnx"

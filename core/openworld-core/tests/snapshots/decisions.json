@@ -1,0 +1,59 @@
+{
+  "below_64": {
+    "candidates": [],
+    "faces_seen_not_compared": 0,
+    "inventory": [],
+    "status": "complete",
+    "summary": "No candidate is not a clearance."
+  },
+  "below_cutoff": {
+    "candidates": [],
+    "faces_seen_not_compared": 0,
+    "inventory": [
+      "face:Below the locked cutoff. Not a candidate."
+    ],
+    "status": "complete",
+    "summary": "No candidate is not a clearance."
+  },
+  "blank": {
+    "candidates": [],
+    "faces_seen_not_compared": 0,
+    "inventory": [],
+    "status": "complete",
+    "summary": "No candidate is not a clearance."
+  },
+  "impostor": {
+    "candidates": [],
+    "faces_seen_not_compared": 0,
+    "inventory": [
+      "face:Below the locked cutoff. Not a candidate."
+    ],
+    "status": "complete",
+    "summary": "No candidate is not a clearance."
+  },
+  "scene": {
+    "candidates": [
+      {
+        "kind": "face",
+        "leaving": "You are leaving OpenWorld.",
+        "poster_class": "missing",
+        "wording": "Possible candidate. Not an identification."
+      },
+      {
+        "kind": "plate",
+        "leaving": "You are leaving OpenWorld.",
+        "poster_class": "wanted",
+        "wording": "Possible candidate. Not an identification."
+      }
+    ],
+    "faces_seen_not_compared": 1,
+    "inventory": [
+      "face:Possible candidate. Not an identification.",
+      "face:Not compared.",
+      "vehicle:A vehicle is not a person.",
+      "plate:Possible candidate. Not an identification."
+    ],
+    "status": "complete",
+    "summary": "Possible candidate. Not an identification."
+  }
+}

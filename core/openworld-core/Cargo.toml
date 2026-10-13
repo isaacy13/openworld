@@ -1,0 +1,25 @@
+[package]
+name = "openworld-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "On-device photo and video scan for OpenWorld"
+publish = false
+
+[lib]
+name = "openworld_core"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+image = { version = "0.25.5", default-features = false, features = ["png", "jpeg", "webp"] }
+tiff = "0.9.1"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.134"
+sha2 = "0.10.8"
+thiserror = "1.0.69"
+toml = "0.8.23"
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "copy-dylibs", "api-27", "tls-rustls"] }
+ndarray = "0.17"
+
+[dev-dependencies]
+tempfile = "3.14.0"
