@@ -4242,3 +4242,63 @@ fn an_animated_png_with_camera_orientation_is_scanned_as_shown() {
     assert_eq!(sideways.summary, NO_CLEARANCE, "{}", sideways.message);
     assert!(sideways.candidates.is_empty());
 }
+
+#[test]
+fn an_animated_webp_keeps_a_face_that_is_not_on_the_first_frame() {
+    // FFmpeg's WebP decoder skips an animation and reports no picture. A player
+    // still shows every frame. The marker is on the middle one.
+    let dir = tempfile::tempdir().unwrap();
+    let scene = demo_scene(fast().threshold);
+    let seq = dir.path().join("seq");
+    fs::create_dir(&seq).unwrap();
+    let blank = RgbImage::from_pixel(scene.image.width(), scene.image.height(), image::Rgb([255, 255, 255]));
+    blank.save(seq.join("000.png")).unwrap();
+    scene.image.save(seq.join("001.png")).unwrap();
+    blank.save(seq.join("002.png")).unwrap();
+    let movie = dir.path().join("clip.webp");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-framerate", "2", "-i"])
+        .arg(seq.join("%03d.png"))
+        .args(["-frames:v", "3", "-an", "-c:v", "libwebp_anim", "-lossless", "1"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let pack = dir.path().join("posters");
+    posters::write_fixture_pack(&pack, now()).unwrap();
+    let scan = |coverage| {
+        scan_path(
+            &ScanRequest {
+                input: movie.clone(),
+                bundles_dir: repo().join("bundles"),
+                bundle_id: "fast".into(),
+                posters_dir: pack.clone(),
+                out_dir: dir.path().join(match coverage {
+                    Coverage::Complete => "out-complete",
+                    Coverage::Measured => "out-measured",
+                }),
+                detection: DetectionSize::Px(640),
+                coverage,
+                form_factor: FormFactor::Computer,
+                execution: Execution::Cpu,
+                missing: true,
+                wanted: true,
+                abort_after_frames: None,
+                frames_dir: None,
+                media: None,
+                now: now(),
+            },
+            &mut |_| {},
+        )
+    };
+    for report in [scan(Coverage::Complete), scan(Coverage::Measured)] {
+        assert_eq!(report.status, "complete", "{}", report.message);
+        assert_eq!(report.summary, POSSIBLE_CANDIDATE, "{}", report.message);
+        assert!(
+            report.candidates.iter().any(|candidate| candidate.kind == "face"),
+            "{:?}",
+            report.candidates
+        );
+        assert_eq!(report.frames_decoded, 3, "{}", report.message);
+    }
+}

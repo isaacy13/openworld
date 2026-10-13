@@ -361,6 +361,7 @@ def main() -> int:
         "cropped_candidate": 0,
         "apng_rate_candidate": 0,
         "apng_orient_candidate": 0,
+        "webp_later_candidate": 0,
         "oriented_jpeg_candidate": 0,
         "oriented_webp_candidate": 0,
         "oriented_png_candidate": 0,
@@ -855,6 +856,34 @@ def main() -> int:
             fail(f"turned apng candidates {report.get('candidates')}")
         counts["apng_orient_candidate"] += 1
 
+        blank = root / "webp-blank.png"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=white:s=640x480:d=0.1",
+            "-frames:v", "1", str(blank),
+        ])
+        if proc.returncode != 0 or not blank.is_file():
+            fail(proc.stderr or "webp blank was not written")
+        webp_seq = root / "webp-seq"
+        webp_seq.mkdir(exist_ok=True)
+        for name in ("000.png", "002.png"):
+            (webp_seq / name).write_bytes(blank.read_bytes())
+        (webp_seq / "001.png").write_bytes(scene.read_bytes())
+        later_webp = root / "later.webp"
+        proc = run([
+            "ffmpeg", "-y", "-v", "error", "-framerate", "2", "-i", str(webp_seq / "%03d.png"),
+            "-frames:v", "3", "-an", "-c:v", "libwebp_anim", "-lossless", "1", str(later_webp),
+        ])
+        if proc.returncode != 0 or not later_webp.is_file():
+            fail(proc.stderr or "later webp was not written")
+        report = scan(args.bin, args.bundles, posters, later_webp, out, "complete")
+        if report.get("status") != "complete" or report.get("summary") != POSSIBLE:
+            fail(f"later webp summary {report.get('summary')!r} {report.get('message')}")
+        if report.get("frames_decoded") != 3:
+            fail(f"later webp decoded {report.get('frames_decoded')} frames")
+        if not any(item.get("kind") == "face" for item in report.get("candidates") or []):
+            fail(f"later webp candidates {report.get('candidates')}")
+        counts["webp_later_candidate"] += 1
+
         turned = root / "turned.jpg"
         proc = run([
             "ffmpeg", "-y", "-v", "error", "-i", str(scene),
@@ -1189,6 +1218,7 @@ def main() -> int:
         or counts["cropped_candidate"] != 1
         or counts["apng_rate_candidate"] != 1
         or counts["apng_orient_candidate"] != 1
+        or counts["webp_later_candidate"] != 1
         or counts["oriented_jpeg_candidate"] != 1
         or counts["oriented_webp_candidate"] != 1
         or counts["oriented_png_candidate"] != 1

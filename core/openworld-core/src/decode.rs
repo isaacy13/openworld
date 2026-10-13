@@ -3,7 +3,7 @@
 //! Desktop file scans use FFmpeg for video and the image crate for stills.
 //! A JPEG, a still WebP, a PNG, or a TIFF is turned to match its camera orientation
 //! tag before the pixels are scanned. An animated PNG is turned the same way, on
-//! every frame. Every page of a TIFF is scanned. A 16-bit
+//! every frame. An animated WebP is every frame of that file. Every page of a TIFF is scanned. A 16-bit
 //! sample contributes its high 8 bits. CMYK and full-resolution YCbCr become RGB.
 //! A one-page palette, bilevel, or subsampled TIFF is read as a player shows that
 //! page. A multi-page TIFF whose pages are not all read is refused. Audio is not decoded. Phone, Mac, and Android shells
@@ -14,7 +14,7 @@
 
 use crate::timeutil::parse_rfc3339;
 use image::metadata::Orientation;
-use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageReader, RgbImage};
 use serde_json::Value;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
@@ -73,6 +73,9 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         info.motion_cover = true;
         return Ok(info);
     }
+    if animated_webp(path) {
+        return probe_animated_webp(path);
+    }
     if let Some(info) = probe_image(path) {
         return Ok(info);
     }
@@ -106,6 +109,11 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
             }
         }
         return Ok(stats);
+    }
+    // FFmpeg's WebP decoder skips an animation and reports no picture. A player
+    // still shows every frame, so the scan reads those frames itself.
+    if animated_webp(path) {
+        return decode_animated_webp(path, &mut on_frame);
     }
     let info = probe(path)?;
     if !info.video {
@@ -1064,6 +1072,81 @@ fn animated_webp(path: &Path) -> bool {
     false
 }
 
+/// One composited picture and how long it stays up, in seconds.
+/// A duration of 0 is a tenth of a second, which is how a player shows it.
+fn webp_frames(path: &Path) -> Result<Vec<(RgbImage, f64)>, MediaError> {
+    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
+    if !decoder.has_animation() {
+        return Err(MediaError::BadCodec);
+    }
+    let orientation = webp_exif_orientation(path).unwrap_or(Orientation::NoTransforms);
+    let mut frames = Vec::new();
+    for frame in decoder.into_frames() {
+        let frame = frame.map_err(|_| MediaError::BadCodec)?;
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let millis = if denom == 0 { 0.0 } else { f64::from(numer) / f64::from(denom) };
+        let seconds = if millis > 0.0 { millis / 1000.0 } else { 0.1 };
+        let mut image = DynamicImage::ImageRgba8(frame.into_buffer());
+        if orientation != Orientation::NoTransforms {
+            image.apply_orientation(orientation);
+        }
+        let shown = image.to_rgb8();
+        if shown.width() == 0 || shown.height() == 0 {
+            return Err(MediaError::BadCodec);
+        }
+        frames.push((shown, seconds));
+    }
+    if frames.is_empty() {
+        return Err(MediaError::BadCodec);
+    }
+    Ok(frames)
+}
+
+fn probe_animated_webp(path: &Path) -> Result<Probe, MediaError> {
+    webp_probe(&webp_frames(path)?)
+}
+
+fn webp_probe(frames: &[(RgbImage, f64)]) -> Result<Probe, MediaError> {
+    let (width, height) = frames[0].0.dimensions();
+    let count = frames.len() as u64;
+    let duration: f64 = frames.iter().map(|(_, delay)| *delay).sum();
+    let moving = count > 1;
+    let fps = if duration > 0.0 { count as f64 / duration } else { 0.0 };
+    if moving && !(fps > 0.0) {
+        return Err(MediaError::BadCodec);
+    }
+    Ok(Probe {
+        width,
+        height,
+        fps: if moving { fps } else { 0.0 },
+        duration_sec: if moving { duration } else { 0.0 },
+        frames: count,
+        frames_exact: true,
+        container_created: None,
+        video: moving,
+        square_pixels: false,
+        shown_stream: 0,
+        motion_cover: false,
+    })
+}
+
+fn decode_animated_webp(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
+    let frames = webp_frames(path)?;
+    let info = webp_probe(&frames)?;
+    let mut decoded = 0u64;
+    let mut clean = true;
+    for (image, _) in &frames {
+        if !on_frame(decoded, image) {
+            decoded += 1;
+            clean = false;
+            break;
+        }
+        decoded += 1;
+    }
+    Ok(DecodeStats { frames_decoded: decoded, clean, probe: info })
+}
+
 /// Orientation from a WebP EXIF chunk. The payload is a TIFF header, sometimes
 /// behind the six-byte marker a JPEG uses.
 fn webp_exif_orientation(path: &Path) -> Option<Orientation> {
@@ -1707,7 +1790,20 @@ pub fn picture_delays(path: &Path) -> Option<Vec<f64>> {
     if let Some(delays) = gif_delays(path) {
         return Some(delays);
     }
+    if let Some(delays) = webp_delays(path) {
+        return Some(delays);
+    }
     video_frame_delays(path)
+}
+
+/// Seconds each animated-WebP picture stays up. A still has none.
+/// A duration of 0 is a tenth of a second, which is how a player shows it.
+fn webp_delays(path: &Path) -> Option<Vec<f64>> {
+    let frames = webp_frames(path).ok()?;
+    if frames.len() < 2 {
+        return None;
+    }
+    Some(frames.into_iter().map(|(_, delay)| delay).collect())
 }
 
 /// Seconds each stored picture stays up, from the gaps between display times.
