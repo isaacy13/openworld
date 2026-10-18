@@ -62,12 +62,18 @@ fn paint_face(id: u16, module: u32, x: u32, y: u32, w: u32, h: u32) -> RgbImage 
 #[test]
 fn catalog_rows_name_fast_and_keep_accurate_unmeasured() {
     let all = bundles();
-    assert_eq!(all.len(), 2);
+    assert_eq!(all.len(), 3);
     assert_eq!(all[0].id, "fast");
     let fast = all.iter().find(|b| b.id == "fast").unwrap();
     let accurate = all.iter().find(|b| b.id == "accurate").unwrap();
+    let open = all.iter().find(|b| b.id == "open").unwrap();
     assert!(fast.preselected());
     assert!(!accurate.preselected());
+    assert!(!open.preselected());
+    assert_eq!((open.detector.as_str(), open.embedder.as_str()), ("YuNet", "SFace"));
+    assert_eq!(open.threshold, 0.51);
+    assert_eq!(open.best_for, "A computer, with weights measured on public photos.");
+    assert!(!open.real_posters_allowed);
     assert_eq!(fast.best_for, "Phones and long video.");
     assert_eq!(accurate.best_for, "A computer, when you want fewer misses.");
     assert!(!accurate.best_for.to_ascii_lowercase().contains("more accurate"));

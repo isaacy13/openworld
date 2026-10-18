@@ -17,3 +17,4 @@ android/local.properties
 apple/.build/
 apple/.swiftpm/
 apple/Package.resolved
+bundles/*/weights/
