@@ -58,6 +58,8 @@ jobs:
             ~/.cache/openworld-eval/pairs.txt
             ~/.cache/openworld-eval/WIDER_val.zip
             ~/.cache/openworld-eval/wider_face_split.zip
+            ~/.cache/openworld-eval/calfw
+            ~/.cache/openworld-eval/cplfw
           key: public-faces-${{ hashFiles('eval/real_faces.py') }}
           restore-keys: public-faces-
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli

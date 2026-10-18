@@ -205,6 +205,92 @@
       }
     }
   },
+  "held_out_pairs": {
+    "calfw": {
+      "what": "Cross-age LFW: the two photos of a same-person pair are years apart.",
+      "source": "huggingface.co/datasets/marcelohaps/calfw at 4f3e4cda32f6bdd163a46c42c6cc313629397700",
+      "pairs": 6000,
+      "photos": 7156,
+      "photo_without_a_compared_face": {
+        "count": 0,
+        "trials": 7156,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.0005365481828536542
+        ]
+      },
+      "same_pairs_without_a_face": 0,
+      "different_pairs_without_a_face": 0,
+      "at_manifest_threshold": {
+        "threshold": 0.51,
+        "false_match": {
+          "count": 0,
+          "trials": 3000,
+          "rate": 0.0,
+          "wilson95": [
+            1.0842021724855044e-19,
+            0.0012788956648046956
+          ]
+        },
+        "false_non_match": {
+          "count": 1116,
+          "trials": 3000,
+          "rate": 0.372,
+          "wilson95": [
+            0.3548779447744818,
+            0.3894494525157082
+          ]
+        }
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.9332,
+        "accuracy_std": 0.011
+      }
+    },
+    "cplfw": {
+      "what": "Cross-pose LFW: one photo of a same-person pair is often turned toward profile.",
+      "source": "huggingface.co/datasets/marcelohaps/cplfw at 89b5236a99194f93382774d70b4bbcb18afa77ec",
+      "pairs": 6000,
+      "photos": 5984,
+      "photo_without_a_compared_face": {
+        "count": 107,
+        "trials": 5984,
+        "rate": 0.017881016042780747,
+        "wilson95": [
+          0.014819510119174045,
+          0.02156114497363936
+        ]
+      },
+      "same_pairs_without_a_face": 107,
+      "different_pairs_without_a_face": 81,
+      "at_manifest_threshold": {
+        "threshold": 0.51,
+        "false_match": {
+          "count": 1,
+          "trials": 3000,
+          "rate": 0.0003333333333333333,
+          "wilson95": [
+            5.884242821930163e-05,
+            0.0018858673061421909
+          ]
+        },
+        "false_non_match": {
+          "count": 1779,
+          "trials": 3000,
+          "rate": 0.593,
+          "wilson95": [
+            0.5753118597139407,
+            0.6104502656924057
+          ]
+        }
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.87,
+        "accuracy_std": 0.0141
+      }
+    }
+  },
   "scans": {
     "posters": 100,
     "stills": {
@@ -350,7 +436,9 @@
   },
   "sources": {
     "lfw": "Labeled Faces in the Wild, all 13,233 images, pairs.txt view 2. Downloaded, not committed.",
-    "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed."
+    "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed.",
+    "held_out": "CALFW and CPLFW pairs, read from a mirror at a pinned commit. Downloaded, not committed."
   },
   "not": "Not mugshots, not FBI posters, not NIST. LFW is celebrity press photos."
 }
+

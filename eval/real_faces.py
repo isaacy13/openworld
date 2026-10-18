@@ -12,6 +12,9 @@ from LFW go through the shipping `openworld scan` command, against a poster
 pack built from other LFW photos, and the cosines the scan reports are checked
 against the library's own vectors.
 
+CALFW and CPLFW are held out: the cutoff chosen on LFW is applied to their
+pairs unchanged, so their miss and false match rates were not tuned on them.
+
 LFW faces are about 94 px (median detected short side; 85 to 104 px for
 the middle 80%), under the 112 px compare rule. They are enlarged
 twice with a bicubic filter. The embedder still reads a 112 px aligned crop,
@@ -19,6 +22,7 @@ so this measures faces about that size, not larger ones.
 """
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -27,6 +31,7 @@ import random
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import zipfile
 import tarfile
@@ -48,6 +53,30 @@ PINS = {
     "pairs.txt": "ea42330c62c92989f9d7c03237ed5d591365e89b3e649747777b70e692dc1592",
     "WIDER_val.zip": "f9efbd09f28c5d2d884be8c0eaef3967158c866a593fc36ab0413e4b2a58a17a",
     "wider_face_split.zip": "c7561e4f5e7a118c249e0a5c5c902b0de90bbf120d7da9fa28d99041f68a8a5c",
+}
+# Held out from the cutoff: cross-age LFW (Zheng, Deng, Hu 2017) and cross-pose
+# LFW (Zheng, Deng 2018), from a Hugging Face mirror read at one commit. Each
+# has 6,000 pairs in ten folds. Only the photos those pairs name are downloaded.
+HELD_OUT = {
+    "calfw": {
+        "repo": "marcelohaps/calfw",
+        "commit": "4f3e4cda32f6bdd163a46c42c6cc313629397700",
+        "folder": "raw",
+        "columns": ("image_a_raw_path", "image_b_raw_path"),
+        "what": "Cross-age LFW: the two photos of a same-person pair are years apart.",
+    },
+    "cplfw": {
+        "repo": "marcelohaps/cplfw",
+        "commit": "89b5236a99194f93382774d70b4bbcb18afa77ec",
+        "folder": "train",
+        "columns": ("image_a_path", "image_b_path"),
+        "what": "Cross-pose LFW: one photo of a same-person pair is often turned toward profile.",
+    },
+}
+# SHA-256 over pairs.csv and every photo it names, in path order, after a full download.
+HELD_OUT_PINS = {
+    "calfw": "659b22911774ca45f2e7a4f0ebc4a76e3deac603172ea7b9f6dfb7e6825db56d",
+    "cplfw": "93681bda53ca934cca461ac2120835c40672dfea46c176d86c1894d61434fe57",
 }
 FMR_TARGETS = [1e-3, 1e-4, 1e-5, 1e-6]
 # A scan compares each face with every enabled poster. One in a hundred
@@ -76,11 +105,7 @@ def fetch(data: Path, need):
         target = data / name
         if not target.exists():
             print(f"downloading {name}", file=sys.stderr)
-            part = target.with_suffix(target.suffix + ".part")
-            with urllib.request.urlopen(SOURCES[name], timeout=600) as response, part.open("wb") as out:
-                while block := response.read(1 << 20):
-                    out.write(block)
-            part.replace(target)
+            download(SOURCES[name], target)
         digest = hashlib.sha256()
         with target.open("rb") as handle:
             while block := handle.read(1 << 20):
@@ -95,6 +120,108 @@ def fetch(data: Path, need):
         zipfile.ZipFile(data / "WIDER_val.zip").extractall(data)
     if "wider_face_split.zip" in need and not (data / "wider_face_split").is_dir():
         zipfile.ZipFile(data / "wider_face_split.zip").extractall(data)
+
+
+def download(url: str, target: Path, attempts=6):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    part = target.with_suffix(target.suffix + ".part")
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as out:
+                while block := response.read(1 << 20):
+                    out.write(block)
+            part.replace(target)
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 ** (attempt + 1))
+
+
+def held_out_pairs(root: Path, spec, folds=None):
+    with (root / "pairs.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    a_col, b_col = spec["columns"]
+    out = []
+    for row in rows:
+        fold = int(row["fold_id"])
+        if folds is None or fold in folds:
+            out.append((fold - 1, row["is_same"] == "1", root / spec["folder"] / row[a_col], root / spec["folder"] / row[b_col]))
+    return out
+
+
+def fetch_held_out(data: Path, name, folds=None):
+    spec = HELD_OUT[name]
+    root = data / name
+    base = f"https://huggingface.co/datasets/{spec['repo']}/resolve/{spec['commit']}"
+    if not (root / "pairs.csv").is_file():
+        download(f"{base}/pairs.csv", root / "pairs.csv")
+    pairs = held_out_pairs(root, spec, folds)
+    photos = sorted({p for _, _, a, b in pairs for p in (a, b)})
+    missing = [p for p in photos if not p.is_file()]
+    if missing:
+        print(f"downloading {len(missing)} {name} photos", file=sys.stderr)
+        with ThreadPoolExecutor(8) as pool:
+            list(pool.map(lambda p: download(f"{base}/{spec['folder']}/{p.relative_to(root / spec['folder']).as_posix()}", p), missing))
+    if folds is None:
+        digest = hashlib.sha256()
+        for path in [root / "pairs.csv", *photos]:
+            digest.update(path.relative_to(root).as_posix().encode())
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+        got, want = digest.hexdigest(), HELD_OUT_PINS[name]
+        if want is None:
+            print(f"{name} digest {got} is not pinned yet", file=sys.stderr)
+        elif got != want:
+            raise SystemExit(f"{name} is not the pinned set ({got}). Refusing.")
+    return pairs
+
+
+def measure_held_out(args, vectors, data, threshold):
+    """The manifest cutoff, chosen on LFW, on pairs it never saw.
+
+    A same-person pair where either photo has no compared face is a miss: the
+    scan would not have carded it. A different-person pair without one is not a
+    false match."""
+    folds = None if args.people is None else {1}
+    section = {}
+    for name, spec in HELD_OUT.items():
+        pairs = fetch_held_out(data, name, folds)
+        paths = sorted({str(p) for _, _, a, b in pairs for p in (a, b)})
+        rows = vectors.rows(paths, enlarge=2)
+        chosen = {p: center_face(rows[p]) for p in paths}
+        scores, same, fold_ids = [], [], []
+        no_face = {"same": 0, "different": 0}
+        for fold, match, a, b in pairs:
+            fa, fb = chosen[str(a)], chosen[str(b)]
+            if fa is None or fb is None:
+                no_face["same" if match else "different"] += 1
+                score = -1.0
+            else:
+                score = float(np.dot(fa["embedding"], fb["embedding"]))
+            scores.append(score)
+            same.append(match)
+            fold_ids.append(fold)
+        scores, same, fold_ids = np.array(scores), np.array(same), np.array(fold_ids)
+        genuine, impostor = scores[same], scores[~same]
+        result = {
+            "what": spec["what"],
+            "source": f"huggingface.co/datasets/{spec['repo']} at {spec['commit']}",
+            "pairs": len(pairs),
+            "photos": len(paths),
+            "photo_without_a_compared_face": rate(sum(c is None for c in chosen.values()), len(paths)),
+            "same_pairs_without_a_face": no_face["same"],
+            "different_pairs_without_a_face": no_face["different"],
+            "at_manifest_threshold": {
+                "threshold": threshold,
+                "false_match": rate(int((impostor >= threshold).sum()), len(impostor)),
+                "false_non_match": rate(int((genuine < threshold).sum()), len(genuine)),
+            },
+        }
+        if folds is None:
+            mean, std = ten_fold(scores, same, fold_ids)
+            result["ten_fold"] = {"accuracy_mean": round(mean, 4), "accuracy_std": round(std, 4)}
+        section[name] = result
+    return section
 
 
 class Vectors:
@@ -544,6 +671,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         scans = measure_scans(args, vectors, data, threshold, Path(tmp))
     wider = measure_wider(args, vectors, data)
+    held_out = measure_held_out(args, vectors, data, threshold)
     curve = {
         "schema": "openworld.curve.v1",
         "bundle": args.bundle,
@@ -553,11 +681,13 @@ def main():
         "cutoff_rule": f"Lowest LFW all-pairs score with a false match rate at or under {CUTOFF_FMR:g}.",
         "measured_cutoff": round(cutoff, 4),
         "lfw": lfw,
+        "held_out_pairs": held_out,
         "scans": scans,
         "wider_face_val": wider,
         "sources": {
             "lfw": "Labeled Faces in the Wild, all 13,233 images, pairs.txt view 2. Downloaded, not committed.",
             "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed.",
+            "held_out": "CALFW and CPLFW pairs, read from a mirror at a pinned commit. Downloaded, not committed.",
         },
         "not": "Not mugshots, not FBI posters, not NIST. LFW is celebrity press photos.",
     }
@@ -576,7 +706,13 @@ def rates(curve):
     """The rates whose trials are independent, so a sample has an interval around them."""
     lfw = curve["lfw"]["enlarged_2x"]["at_manifest_threshold"]
     stills, video = curve["scans"]["stills"], curve["scans"]["video"]
+    held = {
+        f"{name.upper()} {kind.replace('_', ' ')}": section["at_manifest_threshold"][kind]
+        for name, section in curve["held_out_pairs"].items()
+        for kind in ("false_match", "false_non_match")
+    }
     return {
+        **held,
         "LFW miss, one pair per person": lfw["false_non_match_one_pair_per_person"],
         "enrolled stills found": stills["enrolled_found"],
         "video found, complete": video["complete_found"],
@@ -606,7 +742,13 @@ def check(curve, published, args):
             if sample["trials"] and want is not None and not lo <= want <= hi:
                 failures.append(f"{name}: {sample['count']}/{sample['trials']} here, the published {want:.4f} is outside [{lo:.4f}, {hi:.4f}]")
         return failures
+    # Regression guards a little past the published run, not targets. Missing an
+    # older or a turned photo is common at this cutoff; a false match is not.
     floors = {
+        "CALFW false match": (None, 0.001),
+        "CALFW false non match": (None, 0.42),
+        "CPLFW false match": (None, 0.001),
+        "CPLFW false non match": (None, 0.65),
         "LFW miss, one pair per person": (None, 0.08),
         "enrolled stills found": (0.9, None),
         "video found, complete": (0.9, None),
@@ -614,7 +756,7 @@ def check(curve, published, args):
         "WIDER recall at 640": (0.9, None),
     }
     for name, value in rates(curve).items():
-        low, high = floors[name]
+        low, high = floors.get(name, (None, None))
         if (low is not None and value["rate"] < low) or (high is not None and value["rate"] > high):
             failures.append(f"{name} {value['rate']:.4f}")
     if not 0 <= curve["threshold"] - curve["measured_cutoff"] <= 0.01:

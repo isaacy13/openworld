@@ -73,9 +73,14 @@ python3 eval/real_faces.py --bin core/target/release/openworld --eval-bin eval/r
 | Stills through `openworld scan`: 100 enrolled people, 100 strangers | 93 found, 0 on the wrong poster, 0 strangers carded |
 | 1280x720 H.264 clips, the enrolled face on screen for one second | 20 of 20 found, under complete and under measured |
 | WIDER FACE validation, faces 72 px and up, at 640 px | 91.8% found (1,068 of 1,163), 95.3% when not occluded |
+| Held out from the cutoff: CALFW, 3,000 different-person pairs | 0 false matches (95% interval up to 0.13%) |
+| Held out from the cutoff: CALFW, 3,000 same-person pairs years apart | 1,116 missed, or 37.2% (35.5% to 38.9%) |
+| Held out from the cutoff: CPLFW, 3,000 different-person pairs | 1 false match (0.01% to 0.19%) |
+| Held out from the cutoff: CPLFW, 3,000 same-person pairs, one face turned | 1,779 missed, or 59.3% (57.5% to 61.1%) |
 
 Read those numbers with these limits:
 
+- The cutoff was chosen on LFW. On cross-age LFW (CALFW) and cross-pose LFW (CPLFW), which it never saw, false matches stay rare, but a same-person photo taken years apart is missed more than one time in three, and a turned face more than half the time. 107 of the 5,984 CPLFW photos had no face compared at all. A poster photo is often years old. A missed person is not a clearance, and this bundle misses many. Ten-fold accuracy on those sets, which picks its own threshold, is 93.3% and 87.0%.
 - LFW is celebrity press photos. It is not mugshots, not FBI posters, and not NIST. A poster photo can be older, smaller, and worse than these.
 - LFW faces are about 94 px, under the 112 px compare rule. At their own size, 99.98% of LFW faces are seen and 2.9% are compared. Every LFW number above enlarges the photo twice. The embedder still reads a 112 px aligned crop.
 - The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand (0.5062), rounded up. The all-pairs miss rate is weighted toward the few people with hundreds of photos. One pair per person is what one poster against one photo sees: about one enrolled person in seventeen is missed.

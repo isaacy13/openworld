@@ -21,8 +21,9 @@ The published Fast curve is a fixture-marker measurement. `real_posters_allowed`
 
 - LFW: the ten standard folds, then every same-person and different-person pair, so a false match rate near one in a million has trials behind it. The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand. The miss rate is reported over all pairs and over one pair per person; the second is what one poster against one photo sees.
 - Scans: 100 LFW people enrolled from one photo each, a different photo of each, and 100 strangers, through `openworld scan`. Then 1280x720 H.264 clips with the enrolled face on screen for one second, under both coverages.
+- Held out: CALFW and CPLFW, 6,000 pairs each, read from a Hugging Face mirror at a pinned commit and checked against one digest over the pairs file and every photo. The LFW cutoff is applied unchanged. A same-person pair with a photo that has no compared face counts as a miss.
 - WIDER FACE: detection recall for labeled faces 72 px and up on the detection image, and detections that land on no labeled face.
 
 LFW is press photos. It sets Open's cutoff on that photo type only. It is not a mugshot or poster set, and NIST numbers are not this curve. SCface needs that project's research agreement. The Open curve sets `real_posters_allowed` to false.
 
-`--people`, `--wider-images`, `--scan-people`, and `--video-people` take a fixed sample. With `--check`, a sample passes when each published rate lies inside the sample's 95% interval. The full run instead has to clear fixed floors, and the manifest cutoff has to sit at or within 0.01 above the measured one.
+`--people`, `--wider-images`, `--scan-people`, and `--video-people` take a fixed sample; the held-out sets use their first fold. With `--check`, a sample passes when each published rate lies inside the sample's 95% interval. The full run instead has to clear fixed floors, and the manifest cutoff has to sit at or within 0.01 above the measured one.
