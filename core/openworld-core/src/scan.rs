@@ -513,7 +513,7 @@ impl<'a> Engine<'a> {
         if !self.take_sample(index) {
             return true;
         }
-        let (det_img, map) = detection_image(frame, self.opts.detection);
+        let (det_img, map) = detection_image(frame, self.opts.detection, self.models.is_some());
         let hits = if self.models.is_some() {
             match self.models.as_mut().unwrap().detect(&det_img) {
                 Ok(hits) => hits,
@@ -591,7 +591,7 @@ impl<'a> Engine<'a> {
         };
         match hit.marker {
             Marker::Face { .. } => {
-                let local = hit.landmarks.map(|points| landmarks_in_crop(map, points, orig));
+                let local = hit.landmarks.map(|points| landmarks_in_frame(map, points));
                 self.ingest_face(index, frame, hit.rect, orig, track_id, local, progress);
             }
             Marker::Vehicle => {
@@ -648,8 +648,11 @@ impl<'a> Engine<'a> {
         let Some(crop_img) = crop_img else {
             return;
         };
-        if self.models.is_some() {
-            let embedded = self.models.as_mut().unwrap().embed(&crop_img, landmarks);
+        if let Some(models) = self.models.as_mut() {
+            let embedded = match landmarks {
+                Some(points) => models.embed(frame, Some(points)),
+                None => models.embed(&crop_img, None),
+            };
             let embedding = match embedded {
                 Ok(embedding) => embedding,
                 Err(message) => {
@@ -659,7 +662,7 @@ impl<'a> Engine<'a> {
                 }
             };
             self.faces_embedded += 1;
-            self.score_face(index, frame, det_rect, orig, track_id, &embedding, 0, crop_path, progress);
+            self.score_face(index, frame, det_rect, orig, track_id, &embedding, None, crop_path, progress);
             return;
         }
         let Some(id) = fiducial::decode_face(&crop_img) else {
@@ -681,69 +684,7 @@ impl<'a> Engine<'a> {
         };
         self.faces_embedded += 1;
         let (probe, _self_score) = fixture_probe(id, orig.x, orig.y, orig.w, orig.h, index);
-        let enabled = self.pack.posters.iter().filter(|p| class_on(p, self.opts)).collect::<Vec<_>>();
-        let mut best: Option<(&Poster, f32)> = None;
-        for poster in &enabled {
-            let Some(embedding) = poster.embedding.as_ref() else {
-                continue;
-            };
-            let score = crate::embed::cosine(&probe, embedding);
-            let passed = score >= self.bundle.threshold;
-            self.comparisons.push(Comparison {
-                frame_index: index,
-                poster_id: poster.id.clone(),
-                cosine: score,
-                passed,
-                fiducial_id: id,
-                poster_fiducial_id: poster.fiducial_id,
-            });
-            if best.map(|(_, s)| score > s).unwrap_or(true) {
-                best = Some((poster, score));
-            }
-            if passed {
-                let frame_path = self.write_frame(index, frame);
-                self.candidates.push(Candidate {
-                    wording: POSSIBLE_CANDIDATE.into(),
-                    kind: "face".into(),
-                    frame_index: index,
-                    frame_label: frame_label(index),
-                    track_id,
-                    cosine: Some(score),
-                    threshold: self.bundle.threshold,
-                    uncertainty: face_uncertainty(score, self.bundle.threshold, &self.bundle.name),
-                    poster_id: poster.id.clone(),
-                    poster_class: poster.class.as_str().into(),
-                    poster_class_label: poster.class.label().into(),
-                    poster_title: poster.title.clone(),
-                    fbi_url: poster.fbi_url.clone(),
-                    plate: None,
-                    crop: crop_path.clone(),
-                    frame: frame_path,
-                    leaving: crate::copy::LEAVING.into(),
-                });
-            }
-        }
-        let label = if self.candidates.iter().any(|c| c.frame_index == index && c.kind == "face" && c.track_id == track_id)
-        {
-            POSSIBLE_CANDIDATE
-        } else {
-            BELOW_CUTOFF
-        };
-        let item = InventoryItem {
-            kind: "face".into(),
-            frame_index: index,
-            frame_label: frame_label(index),
-            track_id,
-            det_short_px: det_rect.short(),
-            orig_short_px: orig.short(),
-            label: label.into(),
-            compared: true,
-            crop: crop_path.clone(),
-            fiducial_id: Some(id),
-        };
-        progress(Progress { frame_index: index, frame_label: frame_label(index), label: label.into(), kind: "face".into(), crop: crop_path });
-        self.inventory.push(item);
-        let _ = best;
+        self.score_face(index, frame, det_rect, orig, track_id, &probe, Some(id), crop_path, progress);
     }
 
     fn score_face(
@@ -754,29 +695,25 @@ impl<'a> Engine<'a> {
         orig: Rect,
         track_id: u64,
         probe: &[f32],
-        id: u16,
+        fiducial: Option<u16>,
         crop_path: Option<String>,
         progress: &mut dyn FnMut(Progress),
     ) {
         let enabled = self.pack.posters.iter().filter(|p| class_on(p, self.opts)).collect::<Vec<_>>();
-        let mut best: Option<(&Poster, f32)> = None;
         for poster in &enabled {
             let Some(embedding) = poster.embedding.as_ref() else {
                 continue;
             };
-            let score = crate::embed::cosine(&probe, embedding);
+            let score = crate::embed::cosine(probe, embedding);
             let passed = score >= self.bundle.threshold;
             self.comparisons.push(Comparison {
                 frame_index: index,
                 poster_id: poster.id.clone(),
                 cosine: score,
                 passed,
-                fiducial_id: id,
+                fiducial_id: fiducial.unwrap_or(0),
                 poster_fiducial_id: poster.fiducial_id,
             });
-            if best.map(|(_, s)| score > s).unwrap_or(true) {
-                best = Some((poster, score));
-            }
             if passed {
                 let frame_path = self.write_frame(index, frame);
                 self.candidates.push(Candidate {
@@ -816,11 +753,10 @@ impl<'a> Engine<'a> {
             label: label.into(),
             compared: true,
             crop: crop_path.clone(),
-            fiducial_id: Some(id),
+            fiducial_id: fiducial,
         };
         progress(Progress { frame_index: index, frame_label: frame_label(index), label: label.into(), kind: "face".into(), crop: crop_path });
         self.inventory.push(item);
-        let _ = best;
     }
 
 
@@ -1022,13 +958,13 @@ fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {
     }
 }
 
-fn landmarks_in_crop(map: FrameMap, points: [(f32, f32); 5], orig: Rect) -> [(f32, f32); 5] {
-    let mut local = points;
-    for point in &mut local {
-        point.0 = point.0 * map.det_to_orig_x - orig.x as f32;
-        point.1 = point.1 * map.det_to_orig_y - orig.y as f32;
+fn landmarks_in_frame(map: FrameMap, points: [(f32, f32); 5]) -> [(f32, f32); 5] {
+    let mut mapped = points;
+    for point in &mut mapped {
+        point.0 *= map.det_to_orig_x;
+        point.1 *= map.det_to_orig_y;
     }
-    local
+    mapped
 }
 
 fn class_on(poster: &Poster, opts: &ScanOpts) -> bool {
@@ -1038,14 +974,20 @@ fn class_on(poster: &Poster, opts: &ScanOpts) -> bool {
     }
 }
 
-fn detection_image(frame: &RgbImage, detection: DetectionSize) -> (RgbImage, FrameMap) {
+/// Fixture markers keep a point sample so their cells stay aligned. A network
+/// reads a filtered picture.
+fn detection_image(frame: &RgbImage, detection: DetectionSize, network: bool) -> (RgbImage, FrameMap) {
     let (w, h) = frame.dimensions();
     let long = w.max(h);
     let target = match detection {
         DetectionSize::Full => long,
         DetectionSize::Px(px) => px,
     };
-    geom::resize_long_side(frame, target)
+    if network {
+        geom::resize_long_side_smooth(frame, target)
+    } else {
+        geom::resize_long_side(frame, target)
+    }
 }
 
 /// A result path that cannot become a directory, checked without creating or deleting anything.

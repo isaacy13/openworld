@@ -92,7 +92,7 @@ fn rect_from(x1: f32, y1: f32, x2: f32, y2: f32, width: u32, height: u32) -> Opt
     Some(Rect { x: left.round() as u32, y: top.round() as u32, w: w as u32, h: h as u32 })
 }
 
-fn nms(faces: &mut Vec<FaceBox>, iou_threshold: f32) {
+pub(crate) fn nms(faces: &mut Vec<FaceBox>, iou_threshold: f32) {
     faces.sort_by(|a, b| b.score.total_cmp(&a.score));
     let mut kept: Vec<FaceBox> = Vec::new();
     for face in faces.drain(..) {
@@ -127,6 +127,15 @@ pub struct Letterbox {
 impl Letterbox {
     pub fn fit(src_w: u32, src_h: u32, dst: u32) -> Self {
         let scale = (dst as f32 / src_w as f32).min(dst as f32 / src_h as f32);
+        let pad_x = (dst as f32 - src_w as f32 * scale) / 2.0;
+        let pad_y = (dst as f32 - src_h as f32 * scale) / 2.0;
+        Self { scale, pad_x, pad_y }
+    }
+
+    /// Like `fit`, but a picture that already fits keeps its own pixels.
+    /// Enlarging it would only blur the faces the 64 px rule measures.
+    pub fn within(src_w: u32, src_h: u32, dst: u32) -> Self {
+        let scale = (dst as f32 / src_w as f32).min(dst as f32 / src_h as f32).min(1.0);
         let pad_x = (dst as f32 - src_w as f32 * scale) / 2.0;
         let pad_y = (dst as f32 - src_h as f32 * scale) / 2.0;
         Self { scale, pad_x, pad_y }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{landmarks_in_crop, Engine, ScanOpts};
+use super::{landmarks_in_frame, Engine, ScanOpts};
 use crate::bundle::Bundle;
 use crate::copy::{BELOW_CUTOFF, POSSIBLE_CANDIDATE};
 use crate::embed::{fixture_probe, unit_embedding};
@@ -81,7 +81,7 @@ fn a_probe_that_matches_the_poster_is_a_candidate() {
         rect,
         3,
         &unit_embedding(7),
-        7,
+        Some(7),
         None,
         &mut |event| {
             labels.push(event.label);
@@ -134,7 +134,7 @@ fn repeated_frames_of_one_track_keep_the_strongest_card() {
     let weaker = weaker.expect("a passing probe under the clean poster vector");
     let strong = unit_embedding(7);
     let score = |engine: &mut Engine, index: u64, probe: &[f32], id: u16| {
-        engine.score_face(index, &frame, rect, rect, 3, probe, id, None, &mut |_| {});
+        engine.score_face(index, &frame, rect, rect, 3, probe, Some(id), None, &mut |_| {});
     };
     score(&mut engine, 2, &weaker, 7);
     score(&mut engine, 8, &strong, 7);
@@ -189,7 +189,7 @@ fn an_impostor_probe_stays_below_the_cutoff() {
         rect,
         4,
         &unit_embedding(99),
-        99,
+        Some(99),
         None,
         &mut |_| {},
     );
@@ -230,7 +230,7 @@ fn a_turned_off_class_is_not_scored() {
         rect,
         5,
         &unit_embedding(11),
-        11,
+        Some(11),
         None,
         &mut |_| {},
     );
@@ -276,15 +276,12 @@ fn a_stopped_scan_without_a_reason_is_incomplete() {
 }
 
 #[test]
-fn landmarks_move_into_the_original_crop() {
-    let map = FrameMap::uniform(2.0);
+fn landmarks_move_onto_the_original_frame() {
+    // The embedder aligns from the whole frame, so the crop around the eyes and
+    // mouth keeps the cheeks and forehead that a tight face box leaves out.
+    let map = FrameMap { det_to_orig_x: 2.0, det_to_orig_y: 3.0 };
     let points = [(10.0, 20.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
-    let orig = Rect {
-        x: 4,
-        y: 6,
-        w: 40,
-        h: 40,
-    };
-    let local = landmarks_in_crop(map, points, orig);
-    assert_eq!(local[0], (16.0, 34.0));
+    let mapped = landmarks_in_frame(map, points);
+    assert_eq!(mapped[0], (20.0, 60.0));
+    assert_eq!(mapped[4], (8.0, 12.0));
 }

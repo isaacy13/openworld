@@ -137,6 +137,21 @@ pub fn resize_long_side(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) 
     )
 }
 
+/// Like `resize_long_side`, with an area filter. A detector reads camera
+/// pixels, and a point sample of a large frame aliases the faces it looks for.
+pub fn resize_long_side_smooth(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) {
+    let (w, h) = src.dimensions();
+    let long = w.max(h);
+    if long_side == 0 || long <= long_side {
+        return (src.clone(), FrameMap::identity());
+    }
+    let scale = long_side as f32 / long as f32;
+    let nw = ((w as f32 * scale).round() as u32).max(1);
+    let nh = ((h as f32 * scale).round() as u32).max(1);
+    let dst = image::imageops::resize(src, nw, nh, image::imageops::FilterType::Triangle);
+    (dst, FrameMap { det_to_orig_x: w as f32 / nw as f32, det_to_orig_y: h as f32 / nh as f32 })
+}
+
 pub fn crop(img: &RgbImage, rect: Rect) -> Option<RgbImage> {
     let rect = rect.clamp(img.width(), img.height())?;
     let mut out = RgbImage::new(rect.w, rect.h);

@@ -25,6 +25,7 @@ pub mod scene;
 pub mod timeutil;
 pub mod track;
 pub mod update;
+pub mod yunet;
 
 pub use bundle::{load_bundles, Bundle};
 pub use estimate::{estimate, Coverage, DetectionSize, FormFactor};
