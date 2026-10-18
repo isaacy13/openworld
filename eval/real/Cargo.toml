@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "openworld-eval"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Measures a bundle on public face sets. Not shipped."
+publish = false
+
+[dependencies]
+openworld-core = { path = "../../core/openworld-core" }
+image = { version = "0.25.5", default-features = false, features = ["png", "jpeg"] }
+serde_json = "1.0.134"

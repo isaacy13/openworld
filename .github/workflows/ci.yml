@@ -38,6 +38,36 @@ jobs:
         env:
           OPENWORLD_REQUIRE_LINKED: "1"
         run: ./gradlew testDebugUnitTest --stacktrace
+  real-faces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg g++
+      - run: python -m pip install numpy
+      - name: Open weights, kept only when the pinned SHA-256 matches
+        run: python scripts/fetch_weights.py open
+      # The archives are pinned by SHA-256 in eval/real_faces.py. Photos are not committed.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/openworld-eval/lfw.tgz
+            ~/.cache/openworld-eval/pairs.txt
+            ~/.cache/openworld-eval/WIDER_val.zip
+            ~/.cache/openworld-eval/wider_face_split.zip
+          key: public-faces-${{ hashFiles('eval/real_faces.py') }}
+          restore-keys: public-faces-
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
+      - run: cargo build --release --manifest-path eval/real/Cargo.toml
+      - name: sampled LFW and WIDER FACE against the published Open curve
+        run: >
+          python eval/real_faces.py --bin core/target/release/openworld
+          --eval-bin eval/real/target/release/openworld-eval
+          --people 300 --wider-images 500 --scan-people 30 --video-people 5
+          --check eval/curves/open.json > /dev/null
   apple-linux:
     runs-on: ubuntu-latest
     steps:
