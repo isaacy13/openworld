@@ -360,10 +360,10 @@ def enlarge_file(source: Path, dest: Path):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(source), "-vf", "scale=iw*2:ih*2:flags=bicubic", str(dest)], check=True)
 
 
-def scan(bin_path, bundles, bundle, posters, source, out, coverage="complete"):
+def scan(bin_path, bundles, bundle, posters, source, out, coverage="complete", long_side="640"):
     result = subprocess.run(
         [bin_path, "--json", "--bundles", bundles, "scan", "--input", str(source), "--bundle", bundle,
-         "--posters", str(posters), "--out", str(out), "--coverage", coverage, "--long-side", "640"],
+         "--posters", str(posters), "--out", str(out), "--coverage", coverage, "--long-side", long_side],
         capture_output=True, text=True,
     )
     return json.loads(result.stdout)
@@ -527,6 +527,105 @@ def measure_scans(args, vectors, data, threshold, workdir: Path):
         },
     }
     section["video"] = measure_videos(args, enrolled, strangers, files, probes, reports, pack, workdir)
+    section["phone_files"] = measure_variants(args, probes, files, reports, pack, workdir)
+    return section
+
+
+def with_orientation(jpeg: bytes, orientation: int) -> bytes:
+    """A JPEG with an EXIF orientation tag after its JFIF segment, the way a camera writes it."""
+    entry = (0x0112).to_bytes(2, "little") + (3).to_bytes(2, "little") + (1).to_bytes(4, "little")
+    entry += orientation.to_bytes(2, "little") + b"\0\0"
+    tiff = b"II*\0" + (8).to_bytes(4, "little") + (1).to_bytes(2, "little") + entry + (0).to_bytes(4, "little")
+    payload = b"Exif\0\0" + tiff
+    segment = b"\xff\xe1" + (len(payload) + 2).to_bytes(2, "big") + payload
+    at = 2
+    if jpeg[2:4] == b"\xff\xe0":
+        at = 4 + int.from_bytes(jpeg[4:6], "big")
+    return jpeg[:at] + segment + jpeg[at:]
+
+
+def ffmpeg(*argv):
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *map(str, argv)], check=True)
+
+
+PHONE_FILES = {
+    "jpeg_stored_sideways_with_tag": "A JPEG stored a quarter turn off, with the orientation tag that shows it upright.",
+    "photo_12mp_large_face": "A 4032x3024 JPEG, the face about 560 px.",
+    "photo_12mp_group_face": "A 4032x3024 JPEG, the face about 190 px, as in a group photo.",
+    "portrait_video_with_rotation": "A 1080x1920 H.264 clip stored as 1920x1080 with a display rotation, the face on screen for one second.",
+}
+
+
+def measure_variants(args, probes, files, reports, pack, workdir: Path):
+    """Enrolled people whose plain still was found, in the files a phone makes.
+
+    The face and the poster are the same as in the still, so a miss here is the
+    decode, the turn, or the detection size, not the comparison."""
+    found = [i for i, (owner, _) in enumerate(probes) if owner and owner in {c["poster_id"] for c in reports[i]["candidates"]}]
+    chosen = found[: args.variant_people] if args.variant_people is not None else found
+    out = workdir / "phone"
+    out.mkdir(exist_ok=True)
+
+    def build(index):
+        owner, source = probes[index][0], files[index]
+        made = {}
+        sideways = out / f"{index}-sideways.jpg"
+        ffmpeg("-i", source, "-vf", "transpose=2", "-q:v", "2", sideways)
+        sideways.write_bytes(with_orientation(sideways.read_bytes(), 6))
+        made["jpeg_stored_sideways_with_tag"] = [(sideways, "640", "complete")]
+        for name, size in (("photo_12mp_large_face", 1500), ("photo_12mp_group_face", 500)):
+            photo = out / f"{index}-{name}.jpg"
+            ffmpeg("-i", source, "-vf", f"scale={size}:{size}:flags=bicubic,pad=4032:3024:1400:600:color=0x6b7280,setsar=1",
+                   "-q:v", "3", photo)
+            made[name] = [(photo, "640", "complete"), (photo, "full", "complete")]
+        stored = out / f"{index}-stored.mp4"
+        clip = out / f"{index}-portrait.mp4"
+        ffmpeg("-loop", "1", "-i", source, "-vf",
+               "scale=900:900,pad=1080:1920:90:510:color=0x6b7280,setsar=1,fps=30,transpose=1,format=yuv420p",
+               "-t", "1", "-c:v", "libx264", "-crf", "23", "-preset", "veryfast", stored)
+        ffmpeg("-display_rotation", "90", "-i", stored, "-c", "copy", clip)
+        made["portrait_video_with_rotation"] = [(clip, "640", "complete"), (clip, "640", "measured")]
+        def owner_cosine(report):
+            return max((c["cosine"] for c in report.get("comparisons", []) if c["poster_id"] == owner), default=None)
+
+        plain = owner_cosine(reports[index])
+        results = {}
+        for name, runs in made.items():
+            for n, (path, long_side, coverage) in enumerate(runs):
+                report = scan(args.bin, args.bundles, args.bundle, pack, path, out / f"{index}-{name}-{n}", coverage, long_side)
+                hit = report.get("status") == "complete" and any(
+                    c["kind"] == "face" and c["poster_id"] == owner for c in report.get("candidates", []))
+                wrong = any(c["kind"] == "face" and c["poster_id"] != owner for c in report.get("candidates", []))
+                unwarned = not hit and long_side != "full" and name.startswith("photo_12mp") and not any(
+                    "left out" in line for line in report.get("warnings", []))
+                seen = owner_cosine(report)
+                change = None if seen is None or plain is None else seen - plain
+                results[(name, long_side, coverage)] = (hit, wrong, report.get("status"), unwarned, change)
+        return results
+
+    with ThreadPoolExecutor(args.jobs) as pool:
+        built = list(pool.map(build, chosen))
+    section = {}
+    for name, what in PHONE_FILES.items():
+        keys = sorted({k for r in built for k in r if k[0] == name})
+        section[name] = {"what": what}
+        for _, long_side, coverage in keys:
+            rows = [r[(name, long_side, coverage)] for r in built]
+            label = f"{'640 px' if long_side == '640' else 'full resolution'}, {coverage}"
+            section[name][label] = {
+                "found": rate(sum(row[0] for row in rows), len(rows)),
+                "wrong_poster": sum(row[1] for row in rows),
+                "not_complete": sum(row[2] != "complete" for row in rows),
+                "missed_without_size_note": sum(row[3] for row in rows),
+            }
+            changes = sorted(row[4] for row in rows if row[4] is not None)
+            if changes:
+                section[name][label]["cosine_change_vs_still"] = {
+                    "compared": len(changes),
+                    "mean": sum(changes) / len(changes),
+                    "median": changes[len(changes) // 2],
+                    "worst": changes[0],
+                }
     return section
 
 
@@ -660,6 +759,7 @@ def main():
     parser.add_argument("--wider-images", type=int, help="WIDER validation images to sample; all when absent")
     parser.add_argument("--scan-people", type=int, default=100)
     parser.add_argument("--video-people", type=int, default=20)
+    parser.add_argument("--variant-people", type=int, help="found enrolled people to put in phone-made files; all when absent")
     args = parser.parse_args()
     data = Path(args.data)
     fetch(data, list(SOURCES))
@@ -718,7 +818,19 @@ def rates(curve):
         "video found, complete": video["complete_found"],
         "video found, measured": video["measured_found"],
         "WIDER recall at 640": curve["wider_face_val"]["detection_640"]["recall_faces_72px_and_up"]["all"],
+        **{f"{name.replace('_', ' ')}, {run}": result["found"] for name, run, result in phone_runs(curve) if (name, run) not in EXPECTED_MISS},
     }
+
+
+# A face this small in a 12-megapixel photo is under 64 px at 640. The scan says so instead.
+EXPECTED_MISS = {("photo_12mp_group_face", "640 px, complete")}
+
+
+def phone_runs(curve):
+    for name, runs in curve["scans"]["phone_files"].items():
+        for run, result in runs.items():
+            if run != "what":
+                yield name, run, result
 
 
 def check(curve, published, args):
@@ -734,6 +846,15 @@ def check(curve, published, args):
         failures.append(f"{stills['enrolled_wrong_poster']['count']} enrolled stills carded another poster")
     if stills["stranger_any_candidate"]["count"] > 2:
         failures.append(f"strangers matched {stills['stranger_any_candidate']['count']}")
+    for name, run, result in phone_runs(curve):
+        for key in ("wrong_poster", "not_complete", "missed_without_size_note"):
+            if result[key]:
+                failures.append(f"{name}, {run}: {key.replace('_', ' ')} {result[key]}")
+        # The face and the poster already matched in the plain still. A phone file
+        # of that face should score about the same.
+        change = result.get("cosine_change_vs_still")
+        if change and change["mean"] < -0.01:
+            failures.append(f"{name}, {run}: the owner's cosine is {-change['mean']:.4f} lower than in the plain still on average")
     if args.people is not None:
         # A sample is a few dozen trials. It has to agree with the full run, not clear the floors.
         for name, sample in rates(curve).items():
@@ -756,7 +877,7 @@ def check(curve, published, args):
         "WIDER recall at 640": (0.9, None),
     }
     for name, value in rates(curve).items():
-        low, high = floors.get(name, (None, None))
+        low, high = floors.get(name, (0.9, None) if name.split(",")[0].replace(" ", "_") in PHONE_FILES else (None, None))
         if (low is not None and value["rate"] < low) or (high is not None and value["rate"] > high):
             failures.append(f"{name} {value['rate']:.4f}")
     if not 0 <= curve["threshold"] - curve["measured_cutoff"] <= 0.01:
