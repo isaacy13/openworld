@@ -1366,6 +1366,71 @@ fn a_measured_gif_estimate_counts_the_held_frame_without_ffprobe() {
     );
 }
 
+#[test]
+fn an_estimate_does_not_decode_every_frame_of_a_video() {
+    // A two-hour video took as long to estimate as to decode, before the
+    // screen showed a time. Counting stored pictures only has to read packets.
+    let dir = tempfile::tempdir().unwrap();
+    let movie = dir.path().join("clip.mp4");
+    let encoded = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=160x120:r=10", "-t", "1.2"])
+        .args(["-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&movie)
+        .status()
+        .expect("ffmpeg");
+    assert!(encoded.success());
+    let trimmed = dir.path().join("trimmed.mp4");
+    let cut = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-ss", "0.4", "-i"])
+        .arg(&movie)
+        .args(["-c", "copy"])
+        .arg(&trimmed)
+        .status()
+        .expect("ffmpeg");
+    assert!(cut.success());
+    let real = String::from_utf8(Command::new("sh").args(["-c", "command -v ffprobe"]).output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string();
+    let shim = dir.path().join("bin");
+    fs::create_dir_all(&shim).unwrap();
+    let log = dir.path().join("ffprobe.log");
+    let script = shim.join("ffprobe");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\necho \"$*\" >> '{}'\nexec '{}' \"$@\"\n", log.display(), real),
+    )
+    .unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!("{}:{}", shim.display(), std::env::var("PATH").unwrap_or_default());
+    for (input, frames) in [(&movie, 12), (&trimmed, 8)] {
+        for coverage in ["complete", "measured"] {
+            let output = Command::new(bin())
+                .env("PATH", &path)
+                .arg("--json")
+                .arg("--bundles")
+                .arg(bundles())
+                .args(["estimate", "--input"])
+                .arg(input)
+                .args(["--bundle", "fast", "--long-side", "640", "--coverage", coverage, "--form-factor", "computer"])
+                .output()
+                .expect("openworld");
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert_eq!(output.status.code(), Some(0), "{text}");
+            let doc: serde_json::Value = serde_json::from_str(text.trim()).expect(&text);
+            if coverage == "complete" {
+                assert_eq!(doc["frames_analyzed"], frames, "{}\n{text}", input.display());
+            }
+        }
+    }
+    let calls = fs::read_to_string(&log).unwrap();
+    let decoded: Vec<_> = calls
+        .lines()
+        .filter(|line| line.contains("-show_frames") && !line.contains("-read_intervals"))
+        .collect();
+    assert!(decoded.is_empty(), "{decoded:#?}");
+}
+
 /// A phone does not ship ffprobe. The child must read the GIF itself.
 fn run_without_ffprobe(args: &[&str]) -> (Option<i32>, String, String) {
     let mut cmd = Command::new(bin());

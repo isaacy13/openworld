@@ -1352,7 +1352,8 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     // Matroska omits nb_frames. AVI can store a nominal rate instead, so the
     // header count is larger than the pictures. The packets are the pictures.
     // A smaller header count is left alone: that is the edit list.
-    let packets = video_packet_count(path, shown);
+    let read = video_packets(path, shown);
+    let packets = read.as_ref().map(|read| read.stored);
     let header_matches_packets = match (nb, packets) {
         (Some(listed), Some(counted)) => counted == 0 || counted >= listed,
         (Some(_), None) => true,
@@ -1368,7 +1369,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
     // still hide one of those packets. The frames a player lists are the pictures.
     // A short packet count is left alone: that file was cut, and the header
     // still names samples that are no longer there.
-    let stored = match (stored, packets, video_displayed_frames(path, shown)) {
+    let stored = match (stored, packets, read.as_ref().map(|read| read.shown).filter(|n| *n > 0)) {
         (Some(listed), Some(counted), Some(visible))
             if header_matches_packets && counted == listed && visible > 0 && visible < listed =>
         {
@@ -1445,37 +1446,22 @@ fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
     chosen.map(|(index, _)| index).ok_or(MediaError::BadCodec)
 }
 
-/// Stored pictures in the shown track.
-/// One packet is one picture for the tracks this scan reads. Zero is not a count.
-/// An AVI header can count a nominal rate instead, so this count wins when it is smaller.
-fn video_packet_count(path: &Path, shown: usize) -> Option<u64> {
-    let selector = format!("v:{shown}");
-    let output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            &selector,
-            "-count_packets",
-            "-show_entries",
-            "stream=nb_read_packets",
-            "-of",
-            "json",
-        ])
-        .arg(path)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
-    let count = json_u32(value.pointer("/streams/0/nb_read_packets")).map(u64::from)?;
-    if count == 0 { None } else { Some(count) }
+/// The shown track as the demuxer stores it. Reading packets does not decode,
+/// so a long video is counted in the time it takes to read the file.
+struct Packets {
+    /// Every stored picture. One packet is one picture for the tracks this scan reads.
+    /// An AVI header can count a nominal rate instead, so this count wins when it is smaller.
+    stored: u64,
+    /// Pictures a player lists. An edit list marks the samples it hides as discarded.
+    shown: u64,
+    /// Display time of each shown picture, in order. `None` when a packet has no
+    /// time or two share one, because then only the decoder knows the order.
+    times: Option<Vec<f64>>,
+    /// How long the last shown picture stays up.
+    last_duration: Option<f64>,
 }
 
-/// Pictures a player lists for the shown track. Zero is not a count.
-/// This is smaller than the packet count when an edit list hides a sample.
-fn video_displayed_frames(path: &Path, shown: usize) -> Option<u64> {
+fn video_packets(path: &Path, shown: usize) -> Option<Packets> {
     let selector = format!("v:{shown}");
     let output = Command::new("ffprobe")
         .args([
@@ -1483,11 +1469,10 @@ fn video_displayed_frames(path: &Path, shown: usize) -> Option<u64> {
             "error",
             "-select_streams",
             &selector,
-            "-show_frames",
             "-show_entries",
-            "frame=best_effort_timestamp_time",
+            "packet=pts_time,dts_time,duration_time,flags",
             "-of",
-            "json",
+            "csv=p=0",
         ])
         .arg(path)
         .output()
@@ -1495,10 +1480,47 @@ fn video_displayed_frames(path: &Path, shown: usize) -> Option<u64> {
     if !output.status.success() {
         return None;
     }
-    let value: Value = serde_json::from_slice(&output.stdout).ok()?;
-    let frames = value.get("frames").and_then(|frames| frames.as_array())?;
-    let count = u64::try_from(frames.len()).ok()?;
-    if count == 0 { None } else { Some(count) }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let mut stored = 0u64;
+    let mut kept: Vec<(Option<f64>, Option<f64>)> = Vec::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        stored += 1;
+        let mut fields = line.split(',');
+        let pts = csv_f64(fields.next());
+        let dts = csv_f64(fields.next());
+        let duration = csv_f64(fields.next());
+        let flags = fields.next().unwrap_or("");
+        if flags.contains('D') {
+            continue;
+        }
+        kept.push((pts.or(dts), duration));
+    }
+    if stored == 0 {
+        return None;
+    }
+    let mut timed: Option<Vec<(f64, Option<f64>)>> =
+        kept.iter().map(|(time, duration)| time.map(|time| (time, *duration))).collect();
+    if let Some(list) = timed.as_mut() {
+        list.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if list.windows(2).any(|pair| pair[1].0 <= pair[0].0) {
+            timed = None;
+        }
+    }
+    let last_duration = timed.as_ref().and_then(|list| list.last()).and_then(|(_, duration)| *duration);
+    Some(Packets {
+        stored,
+        shown: kept.len() as u64,
+        times: timed.map(|list| list.into_iter().map(|(time, _)| time).collect()),
+        last_duration,
+    })
+}
+
+fn csv_f64(field: Option<&str>) -> Option<f64> {
+    let text = field?.trim();
+    if text.is_empty() || text == "N/A" {
+        return None;
+    }
+    text.parse().ok().filter(|value: &f64| value.is_finite())
 }
 
 /// How many pictures `picture` seconds at `fps` is. `None` when that count does not
@@ -1810,6 +1832,11 @@ fn webp_delays(path: &Path) -> Option<Vec<f64>> {
 /// The last picture uses its own duration. A missing or backwards clock has no list.
 fn video_frame_delays(path: &Path) -> Option<Vec<f64>> {
     let shown = shown_video_stream(path).ok()?;
+    if let Some(read) = video_packets(path, shown) {
+        if let Some(times) = read.times {
+            return delays_from_times(&times, read.last_duration);
+        }
+    }
     let selector = format!("v:{shown}");
     let output = Command::new("ffprobe")
         .args([
@@ -1836,21 +1863,24 @@ fn video_frame_delays(path: &Path) -> Option<Vec<f64>> {
     }
     let mut times = Vec::with_capacity(frames.len());
     for frame in frames {
-        let time = json_f64(frame.get("best_effort_timestamp_time"))?;
-        if !time.is_finite() || time < 0.0 {
-            return None;
-        }
-        times.push(time);
+        times.push(json_f64(frame.get("best_effort_timestamp_time"))?);
+    }
+    delays_from_times(&times, json_f64(frames.last().and_then(|frame| frame.get("duration_time"))))
+}
+
+fn delays_from_times(times: &[f64], last_duration: Option<f64>) -> Option<Vec<f64>> {
+    if times.len() < 2 || times.iter().any(|time| !time.is_finite() || *time < 0.0) {
+        return None;
     }
     let mut delays = Vec::with_capacity(times.len());
-    for index in 0..times.len() - 1 {
-        let gap = times[index + 1] - times[index];
+    for pair in times.windows(2) {
+        let gap = pair[1] - pair[0];
         if !gap.is_finite() || gap < 0.0 {
             return None;
         }
         delays.push(gap);
     }
-    let last = json_f64(frames.last().and_then(|frame| frame.get("duration_time")))
+    let last = last_duration
         .filter(|delay| delay.is_finite() && *delay >= 0.0)
         .or_else(|| delays.last().copied())?;
     delays.push(last);
