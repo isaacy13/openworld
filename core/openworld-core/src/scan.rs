@@ -6,7 +6,7 @@ use crate::copy::{
     NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
-use crate::embed::fixture_probe;
+use crate::embed::{fixture_probe, FIXTURE_CUTOFF};
 use crate::estimate::{Coverage, DetectionSize, FormFactor};
 use crate::fiducial::{self, Marker, PERCEPTION_FIDUCIAL, PERCEPTION_ONNX};
 use crate::onnx_exec::FaceModels;
@@ -703,6 +703,16 @@ impl<'a> Engine<'a> {
         self.score_face(index, frame, det_rect, orig, track_id, &probe, Some(id), crop_path, progress);
     }
 
+    /// The cutoff and what scored. Fixture markers are scored by the fixture
+    /// scorer, so its measured cutoff applies whichever bundle was picked.
+    fn cutoff(&self) -> (f32, String) {
+        if self.pack.perception == PERCEPTION_FIDUCIAL {
+            (FIXTURE_CUTOFF, "Fixture markers keep".into())
+        } else {
+            (self.bundle.threshold, format!("{} keeps", self.bundle.name))
+        }
+    }
+
     fn score_face(
         &mut self,
         index: u64,
@@ -715,13 +725,14 @@ impl<'a> Engine<'a> {
         crop_path: Option<String>,
         progress: &mut dyn FnMut(Progress),
     ) {
+        let (threshold, keeps) = self.cutoff();
         let enabled = self.pack.posters.iter().filter(|p| class_on(p, self.opts)).collect::<Vec<_>>();
         for poster in &enabled {
             let Some(embedding) = poster.embedding.as_ref() else {
                 continue;
             };
             let score = crate::embed::cosine(probe, embedding);
-            let passed = score >= self.bundle.threshold;
+            let passed = score >= threshold;
             self.comparisons.push(Comparison {
                 frame_index: index,
                 poster_id: poster.id.clone(),
@@ -739,8 +750,8 @@ impl<'a> Engine<'a> {
                     frame_label: frame_label(index),
                     track_id,
                     cosine: Some(score),
-                    threshold: self.bundle.threshold,
-                    uncertainty: face_uncertainty(score, self.bundle.threshold, &self.bundle.name),
+                    threshold,
+                    uncertainty: face_uncertainty(score, threshold, &keeps),
                     poster_id: poster.id.clone(),
                     poster_class: poster.class.as_str().into(),
                     poster_class_label: poster.class.label().into(),
@@ -822,7 +833,7 @@ impl<'a> Engine<'a> {
                 frame_label: frame_label(index),
                 track_id,
                 cosine: None,
-                threshold: self.bundle.threshold,
+                threshold: self.cutoff().0,
                 uncertainty: format!("The plate reads {text}. That text is published on this poster."),
                 poster_id: poster.id.clone(),
                 poster_class: poster.class.as_str().into(),
@@ -884,6 +895,7 @@ impl<'a> Engine<'a> {
         if let Some(message) = self.runtime_failure {
             return refused("missing_weights", &message);
         }
+        let threshold = self.cutoff().0;
         let candidates = strongest_cards(self.candidates);
         let incomplete = self.stopped || self.incomplete_reason.is_some();
         let (status, summary, message) = if incomplete {
@@ -911,7 +923,7 @@ impl<'a> Engine<'a> {
             bundle_id: self.bundle.id.clone(),
             bundle_name: self.bundle.name.clone(),
             bundle_version: self.bundle.version.clone(),
-            threshold: self.bundle.threshold,
+            threshold,
             detector_declared: self.bundle.detector.clone(),
             embedder_declared: self.bundle.embedder.clone(),
             perception: self.pack.perception.clone(),
@@ -959,8 +971,9 @@ fn strongest_cards(candidates: Vec<Candidate>) -> Vec<Candidate> {
     chosen
 }
 
-fn face_uncertainty(score: f32, threshold: f32, bundle_name: &str) -> String {
-    format!("Score {score:.2}. {bundle_name} keeps a candidate at {threshold:.2} and above.")
+/// `keeps` names what scored: "Fast keeps", or "Fixture markers keep".
+fn face_uncertainty(score: f32, threshold: f32, keeps: &str) -> String {
+    format!("Score {score:.2}. {keeps} a candidate at {threshold:.2} and above.")
 }
 
 fn keeps_stronger(next: &Candidate, kept: &Candidate) -> bool {

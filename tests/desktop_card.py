@@ -110,7 +110,7 @@ def main() -> None:
                     "crop": "crops/a.png",
                     "frame": "crops/a.png",
                     "frame_label": "Frame 1.",
-                    "uncertainty": "Score 0.90. Fast keeps a candidate at 0.55 and above.",
+                    "uncertainty": "Score 0.90. Fixture markers keep a candidate at 0.55 and above.",
                     "poster_title": "Fixture subject A",
                     "poster_class_label": "Missing",
                     "fbi_url": "https://www.fbi.gov/wanted",

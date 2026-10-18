@@ -153,7 +153,7 @@ pub fn measure_fast(bundle: &Bundle) -> Measurement {
         schema: "openworld.measurement.v1".into(),
         bundle_id: bundle.id.clone(),
         bundle_name: bundle.name.clone(),
-        threshold: bundle.threshold,
+        threshold: crate::embed::FIXTURE_CUTOFF,
         hardware: "cpu".into(),
         preprocess: "integer-nearest-long-side".into(),
         perception: PERCEPTION_FIDUCIAL.into(),

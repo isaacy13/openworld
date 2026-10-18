@@ -2095,7 +2095,7 @@ class PhoneScreenTest {
         model.candidateRows = listOf(
             CandidateRow(
                 "Possible candidate. Not an identification.",
-                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Score 0.98. Fixture markers keep a candidate at 0.55 and above.",
                 "Fixture subject A",
                 "Missing",
                 "https://www.fbi.gov.evil.com/wanted",
@@ -2151,7 +2151,7 @@ class PhoneScreenTest {
         model.candidateRows = listOf(
             CandidateRow(
                 "Possible candidate. Not an identification.",
-                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Score 0.98. Fixture markers keep a candidate at 0.55 and above.",
                 "Fixture subject A",
                 "Missing",
                 "https://www.fbi.gov/wanted",
@@ -2203,7 +2203,7 @@ class PhoneScreenTest {
         model.candidateRows = listOf(
             CandidateRow(
                 "Possible candidate. Not an identification.",
-                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Score 0.98. Fixture markers keep a candidate at 0.55 and above.",
                 "Fixture subject A",
                 "Missing",
                 "https://www.fbi.gov/wanted",
@@ -2280,7 +2280,7 @@ class PhoneScreenTest {
         model.candidateRows = listOf(
             CandidateRow(
                 "Possible candidate. Not an identification.",
-                "Score 0.98. Fast keeps a candidate at 0.55 and above.",
+                "Score 0.98. Fixture markers keep a candidate at 0.55 and above.",
                 "Fixture subject A",
                 "Missing",
                 "https://www.fbi.gov/wanted",

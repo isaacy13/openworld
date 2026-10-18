@@ -8,6 +8,11 @@
 
 pub const EMBED_DIM: usize = 512;
 
+/// The cutoff on fixture cosines, whichever bundle was picked. The fixture
+/// curve in `bundles/fast/curve.json` measures it. A bundle's own threshold is
+/// for the vectors its networks make.
+pub const FIXTURE_CUTOFF: f32 = 0.55;
+
 #[derive(Clone, Copy)]
 struct SplitMix(u64);
 

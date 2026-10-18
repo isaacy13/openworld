@@ -151,6 +151,40 @@ plate_license = "Apache-2.0"
 }
 
 #[test]
+fn a_fixture_scan_keeps_the_fixture_cutoff_whatever_bundle_is_picked() {
+    // Fixture markers are scored by the fixture scorer, whose cutoff the Fast
+    // fixture curve measured. With Open picked, the card said "Open keeps a
+    // candidate at 0.51 and above." over a score Open's networks never made.
+    let fixture_cutoff = fast().threshold;
+    let dir = tempfile::tempdir().unwrap();
+    let pack_dir = dir.path().join("posters");
+    posters::write_fixture_pack(&pack_dir, now()).unwrap();
+    let pack = posters::load_pack(&pack_dir, now()).unwrap();
+    let scene = demo_scene(fixture_cutoff);
+    for bundle in bundles() {
+        let mut opts = opts(DetectionSize::Px(640), Coverage::Complete);
+        opts.fps = 0.0;
+        opts.out_dir = Some(dir.path().join(&bundle.id));
+        let report = scan_images(&[scene.image.clone()], &bundle, &pack, &opts, &mut |_| {});
+        assert_eq!(report.perception_note, FIXTURE_MARKERS, "{}", bundle.id);
+        assert_eq!(report.bundle_name, bundle.name);
+        assert_eq!(report.threshold, fixture_cutoff, "{}", bundle.id);
+        assert!(report.comparisons.iter().all(|c| c.passed == (c.cosine >= fixture_cutoff)), "{}", bundle.id);
+        let faces: Vec<_> = report.candidates.iter().filter(|c| c.kind == "face").collect();
+        assert!(!faces.is_empty(), "{}", bundle.id);
+        for face in faces {
+            assert_eq!(face.threshold, fixture_cutoff);
+            assert!(
+                face.uncertainty.ends_with(&format!("Fixture markers keep a candidate at {fixture_cutoff:.2} and above.")),
+                "{}: {}",
+                bundle.id,
+                face.uncertainty
+            );
+        }
+    }
+}
+
+#[test]
 fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     let bundle = fast();
     let dir = tempfile::tempdir().unwrap();
@@ -198,7 +232,7 @@ fn demo_scan_shows_the_face_strip_and_the_disclosure() {
     assert!(!report.perception_note.contains("SCRFD"));
     let face = report.candidates.iter().find(|c| c.kind == "face").unwrap();
     assert!(face.uncertainty.contains("Score "));
-    assert!(face.uncertainty.contains("Fast keeps a candidate at"));
+    assert!(face.uncertainty.contains("Fixture markers keep a candidate at 0.55 and above."));
     assert!(!face.uncertainty.contains("Cosine"));
     assert!(!face.uncertainty.contains(POSSIBLE_CANDIDATE));
     let plate = report.candidates.iter().find(|c| c.kind == "plate").unwrap();

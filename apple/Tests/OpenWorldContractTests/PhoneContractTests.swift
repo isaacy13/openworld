@@ -44,8 +44,8 @@ final class PhoneContractTests: XCTestCase {
 
         let cards = try JSONDecoder().decode([Candidate].self, from: Data("""
         [
-          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.90. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":1,"crop":"crops/a.png"},
-          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.80. Fast keeps a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":2,"crop":"crops/b.png"}
+          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.90. Fixture markers keep a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":1,"crop":"crops/a.png"},
+          {"wording":"Possible candidate. Not an identification.","kind":"face","uncertainty":"Score 0.80. Fixture markers keep a candidate at 0.55 and above.","poster_title":"Fixture subject A","poster_class":"missing","poster_class_label":"Missing","fbi_url":"https://www.fbi.gov/wanted","leaving":"You are leaving OpenWorld.","frame_index":0,"frame_label":"Frame 1.","poster_id":"fixture-missing-a","track_id":2,"crop":"crops/b.png"}
         ]
         """.utf8))
         XCTAssertEqual(cards.count, 2)
