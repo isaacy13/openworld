@@ -230,6 +230,34 @@ impl FaceModels {
         Ok(hits)
     }
 
+    pub fn input_side(&self) -> u32 {
+        self.side
+    }
+
+    /// Five landmarks from a second pass over the face's own neighbourhood of
+    /// `frame`, twice the face across, where the network sees the face at up to
+    /// half its input instead of shrunk with the whole frame.
+    pub fn landmarks_near(&mut self, frame: &RgbImage, face: Rect) -> Result<Option<[(f32, f32); 5]>, String> {
+        let (w, h) = frame.dimensions();
+        let reach = face.w.max(face.h);
+        let (cx, cy) = (face.x + face.w / 2, face.y + face.h / 2);
+        let (x0, y0) = (cx.saturating_sub(reach), cy.saturating_sub(reach));
+        let (x1, y1) = ((cx + reach).min(w), (cy + reach).min(h));
+        if x1 <= x0 || y1 <= y0 {
+            return Ok(None);
+        }
+        let region = Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+        let view = imageops::crop_imm(frame, region.x, region.y, region.w, region.h).to_image();
+        let fit = Letterbox::within(region.w, region.h, self.side);
+        let square = letterbox_image(&view, &fit, self.side);
+        let faces = self.faces_in(&square, &fit, region, (w, h))?;
+        Ok(faces
+            .into_iter()
+            .filter(|found| found.landmarks.is_some() && found.rect.iou(face) >= 0.5)
+            .max_by(|a, b| a.rect.iou(face).total_cmp(&b.rect.iou(face)))
+            .and_then(|found| found.landmarks))
+    }
+
     /// Faces on one network input, in the detection image's pixels.
     /// A tile box that touches an inside edge of that tile is left to the
     /// neighbouring tile or the whole-image pass, where it is not cut.
@@ -530,5 +558,10 @@ plate_license = "Apache-2.0"
         assert_eq!(aligned.len(), plain.len());
         let empty = face.embed(&RgbImage::new(0, 0), None).unwrap();
         assert_eq!(empty.len(), plain.len());
+        assert_eq!(face.input_side(), 640);
+        let near = face.landmarks_near(&image, Rect { x: 10, y: 8, w: 20, h: 20 }).unwrap();
+        assert!(near.is_none(), "a pass that finds no face keeps the first landmarks");
+        let outside = face.landmarks_near(&image, Rect { x: 60, y: 50, w: 0, h: 0 }).unwrap();
+        assert!(outside.is_none());
     }
 }

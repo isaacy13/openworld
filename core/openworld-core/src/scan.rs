@@ -614,7 +614,7 @@ impl<'a> Engine<'a> {
         match hit.marker {
             Marker::Face { .. } => {
                 let local = hit.landmarks.map(|points| landmarks_in_frame(map, points));
-                self.ingest_face(index, frame, hit.rect, orig, track_id, local, progress);
+                self.ingest_face(index, frame, map, hit.rect, orig, track_id, local, progress);
             }
             Marker::Vehicle => {
                 let crop = self.write_crop(index, frame, orig, "vehicle");
@@ -641,6 +641,7 @@ impl<'a> Engine<'a> {
         &mut self,
         index: u64,
         frame: &RgbImage,
+        map: FrameMap,
         det_rect: Rect,
         orig: Rect,
         track_id: u64,
@@ -671,7 +672,7 @@ impl<'a> Engine<'a> {
             return;
         };
         if let Some(models) = self.models.as_mut() {
-            let embedded = embed_face(models, frame, &crop_img, landmarks);
+            let embedded = embed_face(models, frame, &crop_img, orig, map, landmarks);
             let embedding = match embedded {
                 Ok(embedding) => embedding,
                 Err(message) => {
@@ -1034,7 +1035,7 @@ pub fn face_vectors(models: &mut FaceModels, frame: &RgbImage, detection: Detect
         let embedding = match geom::crop(frame, orig) {
             Some(crop) if orig.short() >= FACE_COMPARE_PX => {
                 let landmarks = hit.landmarks.map(|points| landmarks_in_frame(map, points));
-                Some(embed_face(models, frame, &crop, landmarks)?)
+                Some(embed_face(models, frame, &crop, orig, map, landmarks)?)
             }
             _ => None,
         };
@@ -1044,16 +1045,30 @@ pub fn face_vectors(models: &mut FaceModels, frame: &RgbImage, detection: Detect
 }
 
 /// Landmarks align the face on the whole frame. Without them the box is all there is.
+/// A frame larger than the network input reaches it shrunk. Landmarks found on a
+/// face the network saw under the 112 px compare size land several original
+/// pixels off; on 12-megapixel photos of LFW faces that cost about 0.02 of
+/// cosine. Those landmarks are read again near the face.
 fn embed_face(
     models: &mut FaceModels,
     frame: &RgbImage,
     crop: &RgbImage,
+    face: Rect,
+    map: FrameMap,
     landmarks: Option<[(f32, f32); 5]>,
 ) -> Result<Vec<f32>, String> {
-    match landmarks {
-        Some(points) => models.embed(frame, Some(points)),
-        None => models.embed(crop, None),
-    }
+    let Some(points) = landmarks else {
+        return models.embed(crop, None);
+    };
+    let shrink = map.det_to_orig_x.max(map.det_to_orig_y).max(1e-6);
+    let det_long = frame.width().max(frame.height()) as f32 / shrink;
+    let seen = face.short() as f32 / shrink * (models.input_side() as f32 / det_long).min(1.0);
+    let points = if seen < face.short() as f32 && seen < FACE_COMPARE_PX as f32 {
+        models.landmarks_near(frame, face)?.unwrap_or(points)
+    } else {
+        points
+    };
+    models.embed(frame, Some(points))
 }
 
 /// Fixture markers keep a point sample so their cells stay aligned. A network
