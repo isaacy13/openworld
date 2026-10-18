@@ -204,6 +204,19 @@ fn open_models(bundle: &Bundle, pack: &PosterPack) -> Result<Option<FaceModels>,
     crate::onnx_exec::load(bundle).map(Some).map_err(|message| refused("missing_weights", &message))
 }
 
+/// Vectors from one network mean nothing to another, so a network pack names
+/// the embedder weight that made it.
+fn pack_fits_embedder(bundle: &Bundle, pack: &PosterPack) -> Result<(), ScanReport> {
+    if pack.perception != PERCEPTION_ONNX {
+        return Ok(());
+    }
+    let embedder = bundle.weights.iter().find(|weight| weight.role == "embedder").map(|weight| weight.sha256.trim());
+    match (embedder, pack.embedder_sha256.as_deref().map(str::trim)) {
+        (Some(ours), Some(theirs)) if !ours.is_empty() && ours == theirs => Ok(()),
+        _ => Err(refused("embedder_mismatch", "The poster pack was made with another embedder. Refusing.")),
+    }
+}
+
 fn require_bundle(dir: &Path, id: &str) -> Result<Bundle, ScanReport> {
     let all = match crate::bundle::load_bundles(dir) {
         Ok(all) => all,
@@ -244,6 +257,9 @@ pub fn scan_path(req: &ScanRequest, progress: &mut dyn FnMut(Progress)) -> ScanR
             "missing_weights",
             "The bundle weights are not installed, or their SHA-256 is not pinned. Refusing.",
         );
+    }
+    if let Err(report) = pack_fits_embedder(&bundle, &pack) {
+        return report;
     }
     if pack.perception != PERCEPTION_FIDUCIAL && pack.perception != PERCEPTION_ONNX {
         return refused("bad_hash", "The poster pack perception is not recognized. Refusing.");
@@ -430,6 +446,9 @@ pub fn scan_images(
             "missing_weights",
             "The bundle weights are not installed, or their SHA-256 is not pinned. Refusing.",
         );
+    }
+    if let Err(report) = pack_fits_embedder(bundle, pack) {
+        return report;
     }
     if let Some(dir) = &opts.out_dir {
         if let Err(report) = prepare_out(dir) {

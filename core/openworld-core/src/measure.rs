@@ -246,6 +246,7 @@ fn pack_with(id: u16) -> PosterPack {
         created_at: "2026-01-01T00:00:00Z".into(),
         expires_at: "2027-12-31T00:00:00Z".into(),
         body_sha256: String::new(),
+        embedder_sha256: None,
         posters: vec![Poster {
             id: format!("poster-{id}"),
             class: PosterClass::Missing,
@@ -343,6 +344,7 @@ fn pack_with_plate(plate: &str) -> PosterPack {
         created_at: "2026-01-01T00:00:00Z".into(),
         expires_at: "2027-12-31T00:00:00Z".into(),
         body_sha256: String::new(),
+        embedder_sha256: None,
         posters: vec![Poster {
             id: format!("plate-{plate}"),
             class: PosterClass::Wanted,

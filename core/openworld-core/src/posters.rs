@@ -93,6 +93,9 @@ pub struct PosterPack {
     pub created_at: String,
     pub expires_at: String,
     pub body_sha256: String,
+    /// SHA-256 of the embedder weight that made these vectors. A network pack
+    /// is only compared by that embedder.
+    pub embedder_sha256: Option<String>,
     pub posters: Vec<Poster>,
 }
 
@@ -104,6 +107,8 @@ pub(crate) struct PosterFile {
     perception: String,
     created_at: String,
     expires_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    embedder_sha256: Option<String>,
     posters: Vec<Poster>,
 }
 
@@ -162,6 +167,7 @@ pub fn load_pack(dir: &Path, now: SystemTime) -> Result<PosterPack, PackError> {
         created_at: file.created_at,
         expires_at: file.expires_at,
         body_sha256: actual,
+        embedder_sha256: file.embedder_sha256,
         posters,
     })
 }
@@ -253,6 +259,7 @@ pub(crate) fn fixture_file(now: SystemTime) -> PosterFile {
         perception: PERCEPTION_FIDUCIAL.into(),
         created_at: format_rfc3339(now),
         expires_at: "2027-12-31T00:00:00Z".into(),
+        embedder_sha256: None,
         posters,
     }
 }

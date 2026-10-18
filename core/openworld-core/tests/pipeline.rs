@@ -11,11 +11,11 @@ use openworld_core::fiducial::{self, render_face_module, render_plate, render_ve
 use openworld_core::geom::{blank, resize_long_side, Rect, FACE_COMPARE_PX, FACE_SEEN_PX};
 use openworld_core::hardware::{execution_from_provider, Execution};
 use openworld_core::posters::{self, sha256_hex};
-use openworld_core::scan::{leave_prompt, media_warnings, scan_images, scan_path, MediaFacts, ScanOpts, ScanRequest};
+use openworld_core::scan::{leave_prompt, media_warnings, scan_images, scan_path, MediaFacts, ScanOpts, ScanReport, ScanRequest};
 use openworld_core::scene::demo_scene;
 use openworld_core::timeutil::parse_rfc3339;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
@@ -1844,11 +1844,10 @@ path = "weights/plate.onnx"
 }
 
 
-#[test]
-fn a_pinned_onnx_session_that_runs_can_finish_clear() {
-    // Constant zeros. Apache graphs so the session path can run. These are not SCRFD or ArcFace weights.
-    let dir = tempfile::tempdir().unwrap();
-    let bundle_dir = dir.path().join("bundles/custom");
+/// A catalog with one bundle whose weights are the constant-zero test graphs.
+/// Returns the embedder's SHA-256.
+fn zero_weight_bundle(root: &Path) -> String {
+    let bundle_dir = root.join("bundles/custom");
     std::fs::create_dir_all(bundle_dir.join("weights")).unwrap();
     let models = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/models");
     let mut pins = Vec::new();
@@ -1896,22 +1895,34 @@ path = "weights/{file}"
         ));
     }
     fs::write(bundle_dir.join("manifest.toml"), manifest).unwrap();
-    let pack = dir.path().join("posters");
+    pins.iter().find(|pin| pin.0 == "embedder").unwrap().2.clone()
+}
+
+/// The fixture pack, marked as network vectors made by `embedder`.
+fn onnx_pack(dir: &Path, embedder: Option<&str>) -> PathBuf {
+    let pack = dir.join("posters");
     posters::write_fixture_pack(&pack, now()).unwrap();
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(pack.join("snapshot.json")).unwrap()).unwrap();
     value["perception"] = serde_json::Value::String("onnx".into());
+    if let Some(sha) = embedder {
+        value["embedder_sha256"] = serde_json::Value::String(sha.into());
+    }
     let pretty = serde_json::to_vec_pretty(&value).unwrap();
     fs::write(pack.join("snapshot.json"), &pretty).unwrap();
     fs::write(pack.join("snapshot.sha256"), format!("{}\n", sha256_hex(&pretty))).unwrap();
+    pack
+}
+
+fn zero_weight_scan(dir: &Path, pack: PathBuf) -> ScanReport {
     let image = paint_face(7, 16, 16, 16, 320, 240);
-    image.save(dir.path().join("in.png")).unwrap();
-    let report = scan_path(
+    image.save(dir.join("in.png")).unwrap();
+    scan_path(
         &ScanRequest {
-            input: dir.path().join("in.png"),
-            bundles_dir: dir.path().join("bundles"),
+            input: dir.join("in.png"),
+            bundles_dir: dir.join("bundles"),
             bundle_id: "custom".into(),
             posters_dir: pack,
-            out_dir: dir.path().join("out"),
+            out_dir: dir.join("out"),
             detection: DetectionSize::Px(640),
             coverage: Coverage::Complete,
             form_factor: FormFactor::Computer,
@@ -1924,7 +1935,16 @@ path = "weights/{file}"
             now: now(),
         },
         &mut |_| {},
-    );
+    )
+}
+
+#[test]
+fn a_pinned_onnx_session_that_runs_can_finish_clear() {
+    // Constant zeros. Apache graphs so the session path can run. These are not SCRFD or ArcFace weights.
+    let dir = tempfile::tempdir().unwrap();
+    let embedder = zero_weight_bundle(dir.path());
+    let pack = onnx_pack(dir.path(), Some(&embedder));
+    let report = zero_weight_scan(dir.path(), pack);
     assert_eq!(report.status, "complete", "{}", report.message);
     assert_eq!(report.summary, NO_CLEARANCE);
     assert_eq!(report.perception, "onnx");
@@ -1935,6 +1955,21 @@ path = "weights/{file}"
     // The request said GPU. The session loaded CPU, so the note follows the session.
     assert_eq!(report.execution, "cpu");
     assert!(report.device_note.unwrap().contains("CPU"));
+}
+
+#[test]
+fn a_pack_from_another_embedder_is_refused() {
+    // Vectors from one network mean nothing to another. Scoring them anyway
+    // finished as a scan with no candidate, which reads as a clearance.
+    for embedder in [Some("0".repeat(64)), None] {
+        let dir = tempfile::tempdir().unwrap();
+        zero_weight_bundle(dir.path());
+        let pack = onnx_pack(dir.path(), embedder.as_deref());
+        let report = zero_weight_scan(dir.path(), pack);
+        assert_eq!(report.status, "refused", "{embedder:?} {}", report.message);
+        assert_eq!(report.message, "The poster pack was made with another embedder. Refusing.");
+        assert_ne!(report.summary, NO_CLEARANCE);
+    }
 }
 
 fn jpeg_with_orientation(image: &RgbImage, orientation: u8) -> Vec<u8> {
