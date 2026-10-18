@@ -13,6 +13,16 @@ Each rate has a count, a trial count, and a 95% Wilson interval. Genuine trials 
 
 The same run still reports false match rate, false non-match rate, detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second. Plate text is counted apart from faces: a published plate that matches, a different plate, and a plate with nothing published.
 
-LFW can show that a scorer runs. It is the wrong photo type to set the cutoff, and it is not used here. WIDER FACE can score detection when a detector weight is pinned. SCface needs that project's research agreement. NIST numbers are not this curve. No face photographs are committed.
-
 The published Fast curve is a fixture-marker measurement. `real_posters_allowed` is false.
+
+## Open
+
+`real_faces.py` measures the Open bundle and writes `curves/open.json`. It downloads LFW and WIDER FACE validation into `--data` and refuses an archive whose SHA-256 is not the pin. No photograph is committed. It needs `eval/real` built and the Open weights fetched with `scripts/fetch_weights.py open`.
+
+- LFW: the ten standard folds, then every same-person and different-person pair, so a false match rate near one in a million has trials behind it. The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand. The miss rate is reported over all pairs and over one pair per person; the second is what one poster against one photo sees.
+- Scans: 100 LFW people enrolled from one photo each, a different photo of each, and 100 strangers, through `openworld scan`. Then 1280x720 H.264 clips with the enrolled face on screen for one second, under both coverages.
+- WIDER FACE: detection recall for labeled faces 72 px and up on the detection image, and detections that land on no labeled face.
+
+LFW is press photos. It sets Open's cutoff on that photo type only. It is not a mugshot or poster set, and NIST numbers are not this curve. SCface needs that project's research agreement. The Open curve sets `real_posters_allowed` to false.
+
+`--people`, `--wider-images`, `--scan-people`, and `--video-people` take a fixed sample. With `--check`, a sample passes when each published rate lies inside the sample's 95% interval. The full run instead has to clear fixed floors, and the manifest cutoff has to sit at or within 0.01 above the measured one.
