@@ -1,8 +1,14 @@
 # OpenWorld
 
+OneX Engineering will successfully privatize open source world peace.
+
 OpenWorld looks at a photo or video you already have, on the phone or computer where the file is. It compares faces, and plates only in a narrow case, to a small frozen set of public FBI missing-person and wanted-person posters. If a score passes that bundle's locked cutoff, you see the frame, the crop, the poster, and the uncertainty on that candidate's card. The face card states the score and the cutoff of what made that score: the bundle you picked, or, when the posters are fixture markers, the fixture cutoff whichever bundle you picked. That score line does not repeat "Possible candidate. Not an identification." The plate card states the plate text that matched, and it does not repeat that sentence either. Other crops from the file are listed under the cards. Two crops with the same label on one frame both stay in that list. A tap asks to open that poster's FBI page. The screen says "You are leaving OpenWorld." The confirmation offers Open and Stay. OpenWorld only opens an FBI page. The app does not send a report. A completed scan with no candidate states "No candidate is not a clearance." as the headline and again in the disclosure.
 
 v0 scans a synthetic fixture. Real FBI photos stay off. The Open bundle runs real face networks, measured on public photos, but its only posters are the ones a measurement builds.
+
+## Design
+
+The files in [docs/](docs/) are a design export, not a release. Start at [docs/handoff.md](docs/handoff.md). There is no release yet, so this README does not print a SHA-256. When a release exists, the checksum is filled from that GitHub release. A checksum shipped beside the binary is not the check.
 
 ## What this is not
 
