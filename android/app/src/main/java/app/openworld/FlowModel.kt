@@ -354,6 +354,7 @@ class FlowModel : ViewModel() {
                     json.present("battery_note"),
                     json.present("suggest_computer_text"),
                     choiceLine(),
+                    json.present("size_note"),
                     if (coverage == "measured") "A brief face can be missed." else null,
                 ).joinToString("\n")
                 refreshClassLine()

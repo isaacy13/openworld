@@ -304,6 +304,57 @@ fn gates_64_and_112_and_full_res_versus_preview() {
 }
 
 #[test]
+fn a_large_photo_at_640_names_the_faces_it_leaves_out() {
+    let bundle = fast();
+    let pack_dir = tempfile::tempdir().unwrap();
+    posters::write_fixture_pack(pack_dir.path(), now()).unwrap();
+    let pack = posters::load_pack(pack_dir.path(), now()).unwrap();
+    let mut photo = blank(4032, 3024);
+    fiducial::place(&mut photo, &render_face_module(7, 32), 1400, 1000);
+    let note = "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px.";
+
+    let small = scan_images(&[photo.clone()], &bundle, &pack, &opts(DetectionSize::Px(640), Coverage::Complete), &mut |_| {});
+    assert!(small.inventory.iter().all(|i| i.kind != "face"));
+    assert_eq!(small.summary, NO_CLEARANCE);
+    assert!(small.warnings.iter().any(|line| line == note), "{:?}", small.warnings);
+
+    let full = scan_images(&[photo], &bundle, &pack, &opts(DetectionSize::Full, Coverage::Complete), &mut |_| {});
+    assert!(full.candidates.iter().any(|c| c.kind == "face"));
+    assert!(full.warnings.iter().all(|line| !line.contains("left out")), "{:?}", full.warnings);
+
+    let plan = |detection| {
+        openworld_core::scan::estimate_for(&ScanRequest {
+            input: pack_dir.path().join("photo.heic"),
+            bundles_dir: repo().join("bundles"),
+            bundle_id: "fast".into(),
+            posters_dir: pack_dir.path().into(),
+            out_dir: pack_dir.path().join("unused"),
+            detection,
+            coverage: Coverage::Complete,
+            form_factor: FormFactor::Phone,
+            execution: Execution::Cpu,
+            missing: true,
+            wanted: true,
+            abort_after_frames: None,
+            frames_dir: None,
+            media: Some(MediaFacts {
+                width: 4032,
+                height: 3024,
+                fps: 0.0,
+                frames: 1,
+                duration_sec: 0.0,
+                video: false,
+                container_unix: None,
+            }),
+            now: now(),
+        })
+        .expect("platform facts")
+    };
+    assert_eq!(plan(DetectionSize::Px(640)).size_note.as_deref(), Some(note));
+    assert_eq!(plan(DetectionSize::Full).size_note, None);
+}
+
+#[test]
 fn plate_is_not_read_without_a_published_plate_and_a_vehicle_is_not_a_person() {
     let bundle = fast();
     let dir = tempfile::tempdir().unwrap();

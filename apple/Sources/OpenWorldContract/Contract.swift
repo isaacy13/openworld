@@ -116,12 +116,14 @@ public struct Estimate: Decodable {
     public var heatNote: String?
     public var batteryNote: String?
     public var suggestComputerText: String?
+    public var sizeNote: String?
     enum CodingKeys: String, CodingKey {
         case human, caveat
         case deviceNote = "device_note"
         case heatNote = "heat_note"
         case batteryNote = "battery_note"
         case suggestComputerText = "suggest_computer_text"
+        case sizeNote = "size_note"
     }
 }
 

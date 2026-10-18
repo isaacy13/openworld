@@ -491,6 +491,7 @@ struct Engine<'a> {
     faces_seen_not_compared: u64,
     frames_analyzed: u64,
     frames_decoded: u64,
+    long_side: u32,
     stopped: bool,
     incomplete_reason: Option<String>,
 }
@@ -513,6 +514,7 @@ impl<'a> Engine<'a> {
             faces_seen_not_compared: 0,
             frames_analyzed: 0,
             frames_decoded: 0,
+            long_side: 0,
             stopped: false,
             incomplete_reason: None,
         }
@@ -532,6 +534,7 @@ impl<'a> Engine<'a> {
         if !self.take_sample(index) {
             return true;
         }
+        self.long_side = self.long_side.max(frame.width().max(frame.height()));
         let (det_img, map) = detection_image(frame, self.opts.detection, self.models.is_some());
         let hits = if self.models.is_some() {
             match self.models.as_mut().unwrap().detect(&det_img) {
@@ -896,6 +899,8 @@ impl<'a> Engine<'a> {
             return refused("missing_weights", &message);
         }
         let threshold = self.cutoff().0;
+        let mut warnings = self.opts.warnings.clone();
+        warnings.extend(crate::estimate::small_face_note(self.long_side, self.opts.detection));
         let candidates = strongest_cards(self.candidates);
         let incomplete = self.stopped || self.incomplete_reason.is_some();
         let (status, summary, message) = if incomplete {
@@ -937,7 +942,7 @@ impl<'a> Engine<'a> {
             detection: self.opts.detection.as_str(),
             execution: execution.as_str().into(),
             device_note: execution.device_note().map(str::to_string),
-            warnings: self.opts.warnings.clone(),
+            warnings,
             disclosure: disclosure_lines(!incomplete),
             frames_decoded: self.frames_decoded,
             frames_analyzed: self.frames_analyzed,

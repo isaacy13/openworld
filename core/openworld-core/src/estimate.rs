@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::copy::{BATTERY_NOTE, ESTIMATE_CAVEAT, HEAT_NOTE, SUGGEST_COMPUTER};
+use crate::geom::{FACE_COMPARE_PX, FACE_SEEN_PX};
 use crate::hardware::Execution;
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +78,24 @@ impl DetectionSize {
     }
 }
 
+/// The 64 px rule is applied on the resized image, so on the original it grows
+/// with the resize. Past the 112 px compare size, Full resolution compares faces
+/// that this size leaves out.
+pub fn small_face_note(original_long_side: u32, detection: DetectionSize) -> Option<String> {
+    let DetectionSize::Px(px) = detection else {
+        return None;
+    };
+    if px == 0 || original_long_side <= px {
+        return None;
+    }
+    let smallest = (u64::from(FACE_SEEN_PX) * u64::from(original_long_side)).div_ceil(u64::from(px));
+    (smallest > u64::from(FACE_COMPARE_PX)).then(|| {
+        format!(
+            "At {px} px, a face under {smallest} px in this file is left out. Full resolution compares a face from {FACE_COMPARE_PX} px."
+        )
+    })
+}
+
 /// Smaller than full resolution starts selected.
 pub fn default_detection_size() -> DetectionSize {
     DetectionSize::Px(640)
@@ -101,6 +120,7 @@ pub struct Estimate {
     pub device_note: Option<String>,
     pub heat_note: Option<String>,
     pub battery_note: Option<String>,
+    pub size_note: Option<String>,
     pub caveat: String,
 }
 
@@ -149,6 +169,7 @@ pub fn estimate(input: &EstimateInput) -> Estimate {
         device_note: input.execution.device_note().map(str::to_string),
         heat_note: (input.form_factor == FormFactor::Phone).then(|| HEAT_NOTE.to_string()),
         battery_note: (input.form_factor == FormFactor::Phone).then(|| BATTERY_NOTE.to_string()),
+        size_note: small_face_note(input.original_long_side, input.detection),
         caveat: ESTIMATE_CAVEAT.to_string(),
     }
 }
@@ -309,5 +330,19 @@ mod tests {
         assert_eq!(kept, 11);
         assert_eq!(est.frames_analyzed, kept);
         assert_eq!(est.human, "About 16 seconds");
+    }
+
+    #[test]
+    fn the_size_note_appears_once_full_resolution_would_compare_a_face_this_size_leaves_out() {
+        assert_eq!(small_face_note(640, DetectionSize::Px(640)), None);
+        assert_eq!(small_face_note(1120, DetectionSize::Px(640)), None);
+        assert_eq!(
+            small_face_note(1121, DetectionSize::Px(640)).as_deref(),
+            Some("At 640 px, a face under 113 px in this file is left out. Full resolution compares a face from 112 px.")
+        );
+        assert!(small_face_note(1920, DetectionSize::Px(640)).unwrap().contains("under 192 px"));
+        assert!(small_face_note(4032, DetectionSize::Px(320)).unwrap().contains("under 807 px"));
+        assert_eq!(small_face_note(4032, DetectionSize::Full), None);
+        assert_eq!(estimate(&base()).size_note.as_deref(), small_face_note(1920, DetectionSize::Px(640)).as_deref());
     }
 }

@@ -1269,6 +1269,9 @@ fn estimate_lines(
         detection.label(),
         coverage.label()
     ));
+    if let Some(note) = &est.size_note {
+        lines.push(note.clone());
+    }
     if coverage == Coverage::Measured {
         lines.push(openworld_core::copy::BRIEF_FACE.into());
     }

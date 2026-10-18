@@ -79,6 +79,7 @@ public enum PhonePreview {
                 if let note = estimate.batteryNote { lines.append(note) }
                 if let note = estimate.suggestComputerText { lines.append(note) }
                 lines.append(model.choiceLine)
+                if let note = estimate.sizeNote { lines.append(note) }
                 if model.showBriefOnEstimate {
                     lines.append(Copy.brief)
                 }

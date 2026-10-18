@@ -142,6 +142,24 @@ final class PhoneContractTests: XCTestCase {
         XCTAssertTrue(estimate.heatNote?.contains("This phone may get hot.") == true)
         XCTAssertEqual(estimate.batteryNote, "A long scan uses a lot of battery.")
         XCTAssertNil(estimate.suggestComputerText)
+        XCTAssertNil(estimate.sizeNote)
+        let photo = MediaArguments(width: 4032, height: 3024, fps: 0, frames: 1, duration: 0, video: false, containerUnix: nil)
+        let large = try JSONDecoder().decode(
+            Estimate.self,
+            from: run(PhoneArguments.estimate(
+                catalog: bundlesDir(),
+                input: file.path,
+                bundle: "fast",
+                longSide: "640",
+                coverage: "complete",
+                phone: true,
+                media: photo
+            ))
+        )
+        XCTAssertEqual(
+            large.sizeNote,
+            "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px."
+        )
         let measured = PhoneArguments.estimate(
             catalog: bundlesDir(),
             input: file.path,

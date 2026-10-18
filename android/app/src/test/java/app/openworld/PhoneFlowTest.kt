@@ -365,6 +365,27 @@ class PhoneFlowTest {
     }
 
     @Test
+    fun aLargePhotoAt640NamesTheFacesItLeavesOut() {
+        val photo = grayPng(4032, 3024)
+        val note = "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px."
+        val model = FlowModel()
+        choose(model, photo)
+        model.continueFromDevice()
+        model.bundleId = "fast"
+        model.longSide = "640"
+        model.coverage = "complete"
+        model.continueFromBundle()
+        model.continueFromSize()
+        val lines = model.estimateText.lines()
+        val choice = lines.indexOf("Fast. 640 px on the long side. Every decoded frame.")
+        assertTrue(model.estimateText, choice >= 0)
+        assertEquals(model.estimateText, note, lines.getOrNull(choice + 1))
+        model.analyze()
+        assertEquals(Step.Results, model.step)
+        assertTrue(model.warnings, model.warnings.lines().contains(note))
+    }
+
+    @Test
     fun phoneEstimateNamesCpuHeatAndBattery() {
         val model = FlowModel()
         choose(model, still("blank"))
@@ -4215,6 +4236,26 @@ private fun jpegWithXmp(jpeg: ByteArray, xmp: ByteArray, trailer: ByteArray): By
 private fun headerFile(brand: String): File {
     val out = File.createTempFile("ow-brand", null)
     out.writeBytes(ByteArray(4) + brand.toByteArray(Charsets.US_ASCII))
+    return out
+}
+
+private fun grayPng(width: Int, height: Int): File {
+    fun chunk(tag: String, data: ByteArray): ByteArray {
+        val body = tag.toByteArray(Charsets.US_ASCII) + data
+        val crc = java.util.zip.CRC32().apply { update(body) }.value
+        return ByteBuffer.allocate(4).putInt(data.size).array() + body + ByteBuffer.allocate(4).putInt(crc.toInt()).array()
+    }
+    val header = ByteBuffer.allocate(13).putInt(width).putInt(height).put(8).put(0).put(0).put(0).put(0).array()
+    val packed = java.io.ByteArrayOutputStream()
+    java.util.zip.DeflaterOutputStream(packed).use { deflate ->
+        val row = ByteArray(width + 1) { if (it == 0) 0 else 0x80.toByte() }
+        repeat(height) { deflate.write(row) }
+    }
+    val out = File.createTempFile("ow-gray", ".png")
+    out.writeBytes(
+        byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0d, 0x0a, 0x1a, 0x0a) +
+            chunk("IHDR", header) + chunk("IDAT", packed.toByteArray()) + chunk("IEND", ByteArray(0))
+    )
     return out
 }
 

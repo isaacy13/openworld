@@ -1043,6 +1043,7 @@ public struct FlowView: View {
                 if let note = estimate.batteryNote { Text(note) }
                 if let note = estimate.suggestComputerText { Text(note) }
                 Text(model.choiceLine)
+                if let note = estimate.sizeNote { Text(note) }
                 if model.showBriefOnEstimate {
                     Text(Copy.brief)
                 }

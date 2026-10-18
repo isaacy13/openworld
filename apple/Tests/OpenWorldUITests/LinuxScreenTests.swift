@@ -445,6 +445,35 @@ final class OpenWorldUITests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testALargePhotoNamesTheFacesItLeavesOutAfterTheChoice() throws {
+        let note = "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px."
+        let model = FlowModel(phone: true)
+        model.choose(try self.still("blank"))
+        model.bundles = [try row()]
+        model.coverage = "complete"
+        var estimate = try JSONDecoder().decode(Estimate.self, from: Data(estimateJSON.utf8))
+        XCTAssertNil(estimate.sizeNote)
+        estimate.sizeNote = note
+        model.estimate = estimate
+        model.step = .estimate
+        let lines = PhonePreview.lines(screen: "estimate", model: model)
+        let choiceAt = try XCTUnwrap(lines.firstIndex(of: model.choiceLine), "\(lines)")
+        XCTAssertEqual(lines[choiceAt + 1], note, "\(lines)")
+
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let column = view.components(separatedBy: "private var estimateColumn").dropFirst().first?
+            .components(separatedBy: "private var results:").first ?? ""
+        let drawn = try XCTUnwrap(column.range(of: "if let note = estimate.sizeNote { Text(note) }"), "the estimate column does not draw the size note")
+        let choice = try XCTUnwrap(column.range(of: "Text(model.choiceLine)"))
+        XCTAssertLessThan(choice.lowerBound, drawn.lowerBound)
+    }
+
     func testALongCropWordStaysInsideItsColumn() throws {
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

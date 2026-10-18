@@ -1367,6 +1367,38 @@ fn a_measured_gif_estimate_counts_the_held_frame_without_ffprobe() {
 }
 
 #[test]
+fn a_12_megapixel_still_at_640_says_which_faces_are_left_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let photo = dir.path().join("photo.jpg");
+    let made = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:s=4032x3024", "-frames:v", "1"])
+        .arg(&photo)
+        .status()
+        .expect("ffmpeg");
+    assert!(made.success());
+    let note = "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px.";
+    let (code, text, err) = run(false, &["estimate", "--input", photo.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{err}");
+    let lines: Vec<_> = text.lines().collect();
+    let size = lines.iter().position(|line| line.starts_with("Fast. 640 px")).expect(&text);
+    assert_eq!(lines.get(size + 1), Some(&note), "{text}");
+    let (code, text, err) = run(false, &["estimate", "--input", photo.to_str().unwrap(), "--long-side", "full"]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(!text.contains("left out"), "{text}");
+
+    let posters = dir.path().join("posters");
+    let (code, _text, err) = run(false, &["posters", "write-fixture", "--out", posters.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{err}");
+    let out = dir.path().join("result");
+    let (code, text, err) = run(
+        false,
+        &["scan", "--input", photo.to_str().unwrap(), "--posters", posters.to_str().unwrap(), "--out", out.to_str().unwrap()],
+    );
+    assert_eq!(code, Some(0), "{err}\n{text}");
+    assert!(text.lines().any(|line| line == note), "{text}");
+}
+
+#[test]
 fn an_estimate_does_not_decode_every_frame_of_a_video() {
     // A two-hour video took as long to estimate as to decode, before the
     // screen showed a time. Counting stored pictures only has to read packets.

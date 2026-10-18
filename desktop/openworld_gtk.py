@@ -919,6 +919,8 @@ class OpenWorld(Gtk.Application):
         if payload.get("suggest_computer_text"):
             lines.append(payload["suggest_computer_text"])
         lines.append(self.choice_line())
+        if payload.get("size_note"):
+            lines.append(payload["size_note"])
         if self.coverage == "measured":
             lines.append(PHRASES["brief"])
         self.estimate_body.set_text("\n".join(line for line in lines if line))
