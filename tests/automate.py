@@ -49,12 +49,16 @@ def gtk_ready() -> bool:
     return True
 
 
-def desktop() -> None:
+def desktop(required: bool = False) -> None:
+    missing = None
     if not os.environ.get("DISPLAY"):
-        print("no display; skipping the desktop window")
-        return
-    if not gtk_ready():
-        print("GTK 4 is not installed; skipping the desktop window")
+        missing = "no display"
+    elif not gtk_ready():
+        missing = "GTK 4 is not installed"
+    if missing and required:
+        raise SystemExit(f"{missing}; the desktop window was not tested")
+    if missing:
+        print(f"{missing}; skipping the desktop window")
         return
     bin_path = binary()
     with tempfile.TemporaryDirectory(prefix="openworld-auto-") as tmp:
@@ -98,6 +102,10 @@ def desktop() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["desktop"]:
+        desktop(required=True)
+        print("desktop ok")
+        return
     run(["cargo", "test", "--manifest-path", "core/Cargo.toml"])
     run([sys.executable, str(ROOT / "tests/words.py")])
     run(

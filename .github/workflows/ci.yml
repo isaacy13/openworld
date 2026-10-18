@@ -38,6 +38,17 @@ jobs:
         env:
           OPENWORLD_REQUIRE_LINKED: "1"
         run: ./gradlew testDebugUnitTest --stacktrace
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg g++ gir1.2-gtk-4.0 python3-gi xvfb
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
+      - name: GTK desktop window
+        env:
+          OPENWORLD_BIN: ${{ github.workspace }}/core/target/release/openworld
+        run: xvfb-run -a /usr/bin/python3 tests/automate.py desktop
   real-faces:
     runs-on: ubuntu-latest
     steps:
