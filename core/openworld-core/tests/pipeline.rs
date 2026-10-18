@@ -1898,18 +1898,23 @@ path = "weights/{file}"
     pins.iter().find(|pin| pin.0 == "embedder").unwrap().2.clone()
 }
 
-/// The fixture pack, marked as network vectors made by `embedder`.
+/// The fixture posters as network vectors made by `embedder`. Without one, the
+/// pack is a network pack that names no embedder.
 fn onnx_pack(dir: &Path, embedder: Option<&str>) -> PathBuf {
     let pack = dir.join("posters");
-    posters::write_fixture_pack(&pack, now()).unwrap();
-    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(pack.join("snapshot.json")).unwrap()).unwrap();
-    value["perception"] = serde_json::Value::String("onnx".into());
-    if let Some(sha) = embedder {
-        value["embedder_sha256"] = serde_json::Value::String(sha.into());
+    let fixture = posters::write_fixture_pack(&dir.join("fixture"), now()).unwrap();
+    let expires = now() + Duration::from_secs(86_400);
+    let written =
+        posters::write_network_pack(&pack, "test", "Test", embedder.unwrap_or(""), fixture.posters, now(), expires)
+            .unwrap();
+    assert_eq!(written.perception, "onnx");
+    if embedder.is_none() {
+        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(pack.join("snapshot.json")).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("embedder_sha256");
+        let pretty = serde_json::to_vec_pretty(&value).unwrap();
+        fs::write(pack.join("snapshot.json"), &pretty).unwrap();
+        fs::write(pack.join("snapshot.sha256"), format!("{}\n", sha256_hex(&pretty))).unwrap();
     }
-    let pretty = serde_json::to_vec_pretty(&value).unwrap();
-    fs::write(pack.join("snapshot.json"), &pretty).unwrap();
-    fs::write(pack.join("snapshot.sha256"), format!("{}\n", sha256_hex(&pretty))).unwrap();
     pack
 }
 
@@ -1955,6 +1960,23 @@ fn a_pinned_onnx_session_that_runs_can_finish_clear() {
     // The request said GPU. The session loaded CPU, so the note follows the session.
     assert_eq!(report.execution, "cpu");
     assert!(report.device_note.unwrap().contains("CPU"));
+}
+
+#[test]
+fn a_network_pack_names_its_embedder_and_face_vectors_follow_the_scan() {
+    let dir = tempfile::tempdir().unwrap();
+    let embedder = zero_weight_bundle(dir.path());
+    let pack = posters::load_pack(&onnx_pack(dir.path(), Some(&embedder)), now()).unwrap();
+    assert_eq!(pack.embedder_sha256.as_deref(), Some(embedder.as_str()));
+    assert_eq!(pack.perception, "onnx");
+
+    let bundle = load_bundles(&dir.path().join("bundles")).unwrap().into_iter().find(|b| b.id == "custom").unwrap();
+    let mut models = openworld_core::onnx_exec::load(&bundle).unwrap();
+    let image = paint_face(7, 16, 16, 16, 320, 240);
+    let faces = openworld_core::scan::face_vectors(&mut models, &image, DetectionSize::Px(640)).unwrap();
+    let report = zero_weight_scan(dir.path(), onnx_pack(&dir.path().join("again"), Some(&embedder)));
+    assert_eq!(faces.len(), report.inventory.len());
+    assert_eq!(faces.iter().filter(|f| f.embedding.is_some()).count() as u64, report.faces_embedded as u64);
 }
 
 #[test]

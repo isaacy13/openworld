@@ -268,6 +268,30 @@ pub fn write_fixture_pack(dir: &Path, now: SystemTime) -> Result<PosterPack, Pac
     write_pack(dir, &fixture_file(now))
 }
 
+/// A pack of network vectors, bound to the embedder weight that made them.
+/// The shipping commands do not write one. `source` names where the photos came from.
+pub fn write_network_pack(
+    dir: &Path,
+    id: &str,
+    source: &str,
+    embedder_sha256: &str,
+    posters: Vec<Poster>,
+    created_at: SystemTime,
+    expires_at: SystemTime,
+) -> Result<PosterPack, PackError> {
+    let file = PosterFile {
+        schema: SCHEMA.into(),
+        id: id.into(),
+        source: source.into(),
+        perception: crate::fiducial::PERCEPTION_ONNX.into(),
+        created_at: format_rfc3339(created_at),
+        expires_at: format_rfc3339(expires_at),
+        embedder_sha256: Some(embedder_sha256.into()),
+        posters,
+    };
+    write_pack(dir, &file)
+}
+
 pub fn normalize_plate(text: &str) -> String {
     text.chars()
         .filter(|c| c.is_ascii_alphanumeric())

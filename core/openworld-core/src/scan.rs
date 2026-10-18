@@ -668,10 +668,7 @@ impl<'a> Engine<'a> {
             return;
         };
         if let Some(models) = self.models.as_mut() {
-            let embedded = match landmarks {
-                Some(points) => models.embed(frame, Some(points)),
-                None => models.embed(&crop_img, None),
-            };
+            let embedded = embed_face(models, frame, &crop_img, landmarks);
             let embedding = match embedded {
                 Ok(embedding) => embedding,
                 Err(message) => {
@@ -990,6 +987,54 @@ fn class_on(poster: &Poster, opts: &ScanOpts) -> bool {
     match poster.class {
         crate::posters::PosterClass::Missing => opts.missing,
         crate::posters::PosterClass::Wanted => opts.wanted,
+    }
+}
+
+/// One face as a network scan sees it: the box on the original frame, its
+/// short side on the detection image, and its vector when it is compared.
+#[derive(Clone, Debug, Serialize)]
+pub struct FaceVector {
+    pub rect: Rect,
+    pub det_short_px: u32,
+    pub score: f32,
+    pub embedding: Option<Vec<f32>>,
+}
+
+/// The faces a network scan compares on one frame, under the same 64 px and
+/// 112 px rules. A face under 64 px on the detection image is left out. A face
+/// under 112 px on the original frame is listed without a vector.
+pub fn face_vectors(models: &mut FaceModels, frame: &RgbImage, detection: DetectionSize) -> Result<Vec<FaceVector>, String> {
+    let (det_img, map) = detection_image(frame, detection, true);
+    let mut out = Vec::new();
+    for hit in models.detect(&det_img)? {
+        if !matches!(hit.marker, Marker::Face { .. }) || hit.rect.short() < FACE_SEEN_PX {
+            continue;
+        }
+        let Some(orig) = map.to_original(hit.rect).clamp(frame.width(), frame.height()) else {
+            continue;
+        };
+        let embedding = match geom::crop(frame, orig) {
+            Some(crop) if orig.short() >= FACE_COMPARE_PX => {
+                let landmarks = hit.landmarks.map(|points| landmarks_in_frame(map, points));
+                Some(embed_face(models, frame, &crop, landmarks)?)
+            }
+            _ => None,
+        };
+        out.push(FaceVector { rect: orig, det_short_px: hit.rect.short(), score: hit.score, embedding });
+    }
+    Ok(out)
+}
+
+/// Landmarks align the face on the whole frame. Without them the box is all there is.
+fn embed_face(
+    models: &mut FaceModels,
+    frame: &RgbImage,
+    crop: &RgbImage,
+    landmarks: Option<[(f32, f32); 5]>,
+) -> Result<Vec<f32>, String> {
+    match landmarks {
+        Some(points) => models.embed(frame, Some(points)),
+        None => models.embed(crop, None),
     }
 }
 
