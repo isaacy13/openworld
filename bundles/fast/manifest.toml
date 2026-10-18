@@ -7,7 +7,7 @@ best_for = "Phones and long video."
 # Locked fixture cutoff. Not taken from LFW, NIST, or a real-face set.
 threshold = 0.55
 estimate_factor = 1.0
-curve = "../../eval/curves/fast.json"
+curve = "curve.json"
 
 [models]
 detector = "SCRFD-0.5GF"

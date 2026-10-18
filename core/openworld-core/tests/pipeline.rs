@@ -93,6 +93,34 @@ fn catalog_rows_name_fast_and_keep_accurate_unmeasured() {
 }
 
 #[test]
+fn a_bundle_folder_copied_on_its_own_keeps_its_curve() {
+    // A catalog is a folder of bundle folders. An install copies those folders,
+    // so a curve kept outside its bundle read "Not measured yet." once copied.
+    let dir = tempfile::tempdir().unwrap();
+    for id in ["fast", "open"] {
+        copy_dir(&repo().join("bundles").join(id), &dir.path().join(id));
+    }
+    let copied = load_bundles(dir.path()).unwrap();
+    for bundle in &copied {
+        assert!(bundle.curve_exists, "{}", bundle.id);
+        assert_ne!(bundle.curve_line, "Not measured yet.", "{}", bundle.id);
+        assert!(!bundle.real_posters_allowed, "{}", bundle.id);
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &to.join(entry.file_name()));
+        } else {
+            fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
+        }
+    }
+}
+
+#[test]
 fn unofficial_manifest_must_say_so() {
     let dir = tempfile::tempdir().unwrap();
     let bundle = dir.path().join("dev");

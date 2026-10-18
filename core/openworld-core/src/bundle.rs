@@ -222,7 +222,9 @@ pub fn load_bundle(dir: &Path) -> Result<Bundle, BundleError> {
 }
 
 fn read_curve(bundle_dir: &Path, curve: &str) -> (bool, bool, String) {
-    if curve.is_empty() {
+    // The curve travels with its bundle folder. A path outside it is not read.
+    let inside = Path::new(curve).components().all(|c| matches!(c, std::path::Component::Normal(_)));
+    if curve.is_empty() || !inside {
         return (false, false, NOT_MEASURED.into());
     }
     let path = bundle_dir.join(curve);
@@ -342,5 +344,20 @@ path = "weights/det.onnx"
             .iter()
             .any(|weight| weight.role == "detector" && license_forbids_shipping(&weight.license)));
         assert!(fast.weights.iter().any(|weight| weight.role == "plate" && !license_forbids_shipping(&weight.license)));
+    }
+
+    #[test]
+    fn a_curve_outside_the_bundle_folder_is_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("b");
+        std::fs::create_dir_all(&bundle).unwrap();
+        let curve = r#"{"schema": "openworld.curve.v1", "picker_line": "Measured.", "real_posters_allowed": true}"#;
+        std::fs::write(dir.path().join("outside.json"), curve).unwrap();
+        std::fs::write(bundle.join("curve.json"), curve).unwrap();
+        let outside = dir.path().join("outside.json");
+        for path in ["../outside.json", outside.to_str().unwrap()] {
+            assert_eq!(read_curve(&bundle, path), (false, false, NOT_MEASURED.into()), "{path}");
+        }
+        assert_eq!(read_curve(&bundle, "curve.json"), (true, true, "Measured.".into()));
     }
 }

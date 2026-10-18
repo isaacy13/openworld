@@ -17,7 +17,7 @@ The published Fast curve is a fixture-marker measurement. `real_posters_allowed`
 
 ## Open
 
-`real_faces.py` measures the Open bundle and writes `curves/open.json`. It downloads LFW and WIDER FACE validation into `--data` and refuses an archive whose SHA-256 is not the pin. No photograph is committed. It needs `eval/real` built and the Open weights fetched with `scripts/fetch_weights.py open`.
+`real_faces.py` measures the Open bundle and writes `bundles/open/curve.json`. It downloads LFW and WIDER FACE validation into `--data` and refuses an archive whose SHA-256 is not the pin. No photograph is committed. It needs `eval/real` built and the Open weights fetched with `scripts/fetch_weights.py open`.
 
 - LFW: the ten standard folds, then every same-person and different-person pair, so a false match rate near one in a million has trials behind it. The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand. The miss rate is reported over all pairs and over one pair per person; the second is what one poster against one photo sees.
 - Scans: 100 LFW people enrolled from one photo each, a different photo of each, and 100 strangers, through `openworld scan`. Then 1280x720 H.264 clips with the enrolled face on screen for one second, under both coverages.

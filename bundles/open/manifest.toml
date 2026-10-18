@@ -5,10 +5,10 @@ version = "0.1.0"
 official = true
 best_for = "A computer, with weights measured on public photos."
 # At or just above the LFW all-pairs score with a false match rate of one in
-# a hundred thousand, measured with eval/real_faces.py. See eval/curves/open.json.
+# a hundred thousand, measured with eval/real_faces.py. See curve.json.
 threshold = 0.51
 estimate_factor = 1.0
-curve = "../../eval/curves/open.json"
+curve = "curve.json"
 
 [models]
 detector = "YuNet"
