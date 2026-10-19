@@ -96,24 +96,12 @@ pub(crate) fn nms(faces: &mut Vec<FaceBox>, iou_threshold: f32) {
     faces.sort_by(|a, b| b.score.total_cmp(&a.score));
     let mut kept: Vec<FaceBox> = Vec::new();
     for face in faces.drain(..) {
-        if kept.iter().any(|other| iou(face.rect, other.rect) >= iou_threshold) {
+        if kept.iter().any(|other| face.rect.iou(other.rect) >= iou_threshold) {
             continue;
         }
         kept.push(face);
     }
     *faces = kept;
-}
-
-fn iou(a: Rect, b: Rect) -> f32 {
-    let x1 = a.x.max(b.x);
-    let y1 = a.y.max(b.y);
-    let x2 = (a.x + a.w).min(b.x + b.w);
-    let y2 = (a.y + a.h).min(b.y + b.h);
-    let iw = x2.saturating_sub(x1);
-    let ih = y2.saturating_sub(y1);
-    let inter = (iw * ih) as f32;
-    let union = (a.w * a.h + b.w * b.h) as f32 - inter;
-    if union <= 0.0 { 0.0 } else { inter / union }
 }
 
 /// Map a box from the square network input back onto the detection image.
@@ -133,7 +121,7 @@ impl Letterbox {
     }
 
     /// Like `fit`, but a picture that already fits keeps its own pixels.
-    /// Enlarging it would only blur the faces the 64 px rule measures.
+    /// Enlarging it would only blur small faces.
     pub fn within(src_w: u32, src_h: u32, dst: u32) -> Self {
         let scale = (dst as f32 / src_w as f32).min(dst as f32 / src_h as f32).min(1.0);
         let pad_x = (dst as f32 - src_w as f32 * scale) / 2.0;

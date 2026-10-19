@@ -10,7 +10,14 @@ pub fn parse_rfc3339(text: &str) -> Option<SystemTime> {
     let year: i32 = text.get(0..4)?.parse().ok()?;
     let month: u32 = text.get(5..7)?.parse().ok()?;
     let day: u32 = text.get(8..10)?.parse().ok()?;
-    if text.as_bytes().get(10) != Some(&b'T') {
+    let bytes = text.as_bytes();
+    if bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') || bytes.get(10) != Some(&b'T') {
+        return None;
+    }
+    if bytes.get(13) != Some(&b':') || bytes.get(16) != Some(&b':') {
+        return None;
+    }
+    if day > days_in_month(year, month) {
         return None;
     }
     let hour: u32 = text.get(11..13)?.parse().ok()?;
@@ -45,6 +52,15 @@ pub fn format_rfc3339(time: SystemTime) -> String {
     let min = (rem % 3600) / 60;
     let sec = rem % 60;
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        4 | 6 | 9 | 11 => 30,
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        _ => 31,
+    }
 }
 
 fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i64> {
@@ -94,5 +110,14 @@ mod tests {
             315_619_200
         );
         assert_eq!(format_rfc3339(early), "1960-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn impossible_dates_and_separators_are_not_times() {
+        assert!(parse_rfc3339("2026-02-31T00:00:00Z").is_none());
+        assert!(parse_rfc3339("2026x10-07T05:09:00Z").is_none());
+        assert!(parse_rfc3339("2026-10-07T05.09.00Z").is_none());
+        assert!(parse_rfc3339("2024-02-29T00:00:00Z").is_some());
+        assert!(parse_rfc3339("2026-02-29T00:00:00Z").is_none());
     }
 }

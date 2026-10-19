@@ -1,14 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::copy::{BATTERY_NOTE, ESTIMATE_CAVEAT, HEAT_NOTE, SUGGEST_COMPUTER};
-use crate::geom::{FACE_COMPARE_PX, FACE_SEEN_PX};
+//! The time a scan will take, before Analyze.
+//!
+//! The detector and embedder are timed on this device at this file's
+//! detection size (a few passes, the median kept), and that time is
+//! multiplied by the frames the coverage will read. Decoding is added at a
+//! rate per megapixel. When the networks cannot be timed the estimate says
+//! it is rough. It is a planning model, not a thermal table.
+
+use crate::copy::{self, Line};
 use crate::hardware::Execution;
+use crate::perception::Timing;
 use serde::{Deserialize, Serialize};
 
 /// Long estimates on a phone suggest a computer. Complete is still allowed.
 const LONG_SECONDS: f64 = 180.0;
-/// Reference: milliseconds per analyzed frame at 640 px long side, Fast, CPU.
-const MS_AT_640_FAST_CPU: f64 = 40.0;
+/// Untimed fallback: milliseconds per detector pass at 640 px on a CPU.
+const ROUGH_DETECT_MS_640: f64 = 40.0;
+const ROUGH_EMBED_MS: f64 = 8.0;
+/// Decoding, milliseconds per megapixel of each decoded frame.
+const DECODE_MS_PER_MP: f64 = 2.5;
+/// Embeddings expected per minute of video: a few faces, each a few frames.
+const EMBEDS_PER_MINUTE: f64 = 60.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,196 +46,160 @@ impl Coverage {
         }
     }
 
-    /// The words of the size-page button, including the period.
-    pub fn label(self) -> &'static str {
-        match self {
-            Coverage::Complete => "Every decoded frame.",
-            Coverage::Measured => "5 frames a second, plus the tracker.",
-        }
+    pub fn line(self) -> Line {
+        Line::of(match self {
+            Coverage::Complete => copy::COVERAGE_COMPLETE,
+            Coverage::Measured => copy::COVERAGE_MEASURED,
+        })
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DetectionSize {
-    Px(u32),
-    Full,
+/// What a phone says about itself. A computer sends none.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Device {
+    /// `phone` or `computer`.
+    #[serde(default = "computer")]
+    pub kind: String,
+    /// The system's thermal state: nominal, fair, serious, critical.
+    #[serde(default)]
+    pub thermal: Option<String>,
+    /// Battery level from 0 to 1.
+    #[serde(default)]
+    pub battery: Option<f32>,
+    #[serde(default)]
+    pub charging: Option<bool>,
 }
 
-impl DetectionSize {
-    pub fn parse(text: &str) -> Option<Self> {
-        match text {
-            "full" => Some(DetectionSize::Full),
-            "320" => Some(DetectionSize::Px(320)),
-            "480" => Some(DetectionSize::Px(480)),
-            "640" => Some(DetectionSize::Px(640)),
-            _ => None,
-        }
-    }
-
-    pub fn as_str(self) -> String {
-        match self {
-            DetectionSize::Full => "full".into(),
-            DetectionSize::Px(px) => px.to_string(),
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            DetectionSize::Px(320) => "320 px on the long side",
-            DetectionSize::Px(480) => "480 px on the long side",
-            DetectionSize::Px(640) => "640 px on the long side",
-            DetectionSize::Full => "Full resolution",
-            DetectionSize::Px(_) => "Custom",
-        }
-    }
+fn computer() -> String {
+    "computer".into()
 }
 
-/// The 64 px rule is applied on the resized image, so on the original it grows
-/// with the resize. Past the 112 px compare size, Full resolution compares faces
-/// that this size leaves out.
-pub fn small_face_note(original_long_side: u32, detection: DetectionSize) -> Option<String> {
-    let DetectionSize::Px(px) = detection else {
-        return None;
-    };
-    if px == 0 || original_long_side <= px {
-        return None;
+impl Device {
+    pub fn phone(&self) -> bool {
+        self.kind == "phone"
     }
-    let smallest = (u64::from(FACE_SEEN_PX) * u64::from(original_long_side)).div_ceil(u64::from(px));
-    (smallest > u64::from(FACE_COMPARE_PX)).then(|| {
-        format!(
-            "At {px} px, a face under {smallest} px in this file is left out. Full resolution compares a face from {FACE_COMPARE_PX} px."
-        )
-    })
-}
-
-/// Smaller than full resolution starts selected.
-pub fn default_detection_size() -> DetectionSize {
-    DetectionSize::Px(640)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FormFactor {
-    Phone,
-    Computer,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Estimate {
     pub seconds: f64,
-    pub human: String,
-    pub detection: String,
-    pub coverage: String,
+    pub human: Line,
     pub frames_analyzed: u64,
+    pub detection_long_side: u32,
+    pub detection_line: Line,
+    pub coverage: String,
+    pub coverage_line: Line,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage_banner: Option<Line>,
+    pub timed: bool,
+    pub notes: Vec<Line>,
     pub suggest_computer: bool,
-    pub suggest_computer_text: Option<String>,
-    pub device_note: Option<String>,
-    pub heat_note: Option<String>,
-    pub battery_note: Option<String>,
-    pub size_note: Option<String>,
-    pub caveat: String,
+    pub caveat: Line,
 }
 
-#[derive(Clone, Debug)]
 pub struct EstimateInput {
     pub frames: u64,
     pub fps: f64,
     pub duration_sec: f64,
     pub original_long_side: u32,
-    pub detection: DetectionSize,
+    pub original_short_side: u32,
+    pub detection_long_side: u32,
     pub coverage: Coverage,
-    pub bundle_factor: f64,
+    pub timing: Option<Timing>,
     pub execution: Execution,
-    pub form_factor: FormFactor,
+    pub device: Device,
     /// The last frame is a motion-photo cover. Measured coverage reads it.
     pub cover: bool,
 }
 
 pub fn estimate(input: &EstimateInput) -> Estimate {
-    let det_long = match input.detection {
-        DetectionSize::Px(px) => px.min(input.original_long_side.max(1)),
-        DetectionSize::Full => input.original_long_side.max(1),
-    };
-    let frames_analyzed = analyzed_frames(input);
-    let provider = match input.execution {
-        Execution::Cpu => 1.0,
-        Execution::Gpu => 0.4,
-        Execution::Neural => 0.2,
-    };
-    let ms = frames_analyzed as f64
-        * MS_AT_640_FAST_CPU
-        * (det_long as f64 / 640.0).powi(2)
-        * provider
-        * input.bundle_factor.max(0.1);
+    let analyzed = analyzed_frames(input);
+    let decoded = input.frames.max(1);
+    let timed = input.timing.is_some();
+    let timing = input.timing.unwrap_or_else(|| rough(input.detection_long_side, input.execution));
+    let megapixels = f64::from(input.original_long_side) * f64::from(input.original_short_side.max(1)) / 1e6;
+    let minutes = if input.duration_sec > 0.0 { input.duration_sec / 60.0 } else { 0.0 };
+    let embeds = (EMBEDS_PER_MINUTE * minutes).max(1.0);
+    let ms = analyzed as f64 * timing.detect_ms + embeds * timing.embed_ms + decoded as f64 * megapixels * DECODE_MS_PER_MP;
     let seconds = ms / 1000.0;
-    let long = seconds >= LONG_SECONDS;
-    let suggest = long && input.form_factor == FormFactor::Phone;
+    let phone = input.device.phone();
+    let suggest = phone && seconds >= LONG_SECONDS;
+    let mut notes = Vec::new();
+    if let Some(note) = input.execution.device_note() {
+        notes.push(Line::of(note));
+    }
+    if phone {
+        notes.push(Line::of(copy::HEAT_NOTE));
+        if matches!(input.device.thermal.as_deref(), Some("serious") | Some("critical")) {
+            notes.push(Line::of(copy::ALREADY_WARM));
+        }
+        if seconds >= LONG_SECONDS || input.device.battery.is_some_and(|b| b < 0.3) && input.device.charging != Some(true) {
+            notes.push(Line::of(copy::BATTERY_NOTE));
+        }
+    }
+    if suggest {
+        notes.push(Line::of(copy::SUGGEST_COMPUTER));
+    }
+    if !timed {
+        notes.push(Line::of(copy::ESTIMATE_ROUGH));
+    }
     Estimate {
         seconds,
         human: human_duration(seconds),
-        detection: input.detection.as_str(),
-        coverage: input.coverage.as_str().to_string(),
-        frames_analyzed,
+        frames_analyzed: analyzed,
+        detection_long_side: input.detection_long_side,
+        detection_line: copy::detection_line(input.detection_long_side, input.original_long_side),
+        coverage: input.coverage.as_str().into(),
+        coverage_line: input.coverage.line(),
+        coverage_banner: (input.coverage == Coverage::Measured).then(|| Line::of(copy::BRIEF_FACE)),
+        timed,
+        notes,
         suggest_computer: suggest,
-        suggest_computer_text: suggest.then(|| SUGGEST_COMPUTER.to_string()),
-        device_note: input.execution.device_note().map(str::to_string),
-        heat_note: (input.form_factor == FormFactor::Phone).then(|| HEAT_NOTE.to_string()),
-        battery_note: (input.form_factor == FormFactor::Phone).then(|| BATTERY_NOTE.to_string()),
-        size_note: small_face_note(input.original_long_side, input.detection),
-        caveat: ESTIMATE_CAVEAT.to_string(),
+        caveat: Line::of(copy::ESTIMATE_CAVEAT),
     }
+}
+
+/// A rough timing when the networks cannot run here: area over 640², by provider.
+fn rough(det_long: u32, execution: Execution) -> Timing {
+    let provider = match execution {
+        Execution::Cpu => 1.0,
+        Execution::Gpu => 0.4,
+        Execution::Neural => 0.25,
+    };
+    let area = (f64::from(det_long.max(1)) / 640.0).powi(2);
+    Timing { detect_ms: ROUGH_DETECT_MS_640 * area * provider, embed_ms: ROUGH_EMBED_MS * provider }
 }
 
 fn analyzed_frames(input: &EstimateInput) -> u64 {
     let frames = input.frames.max(1);
     match input.coverage {
         Coverage::Complete => frames,
-        // The same frames `take_measured_sample` keeps. A rounded duration is
-        // one frame short at 29.97 fps, and that frame changes a 4K plan.
+        // The same frames `take_measured_sample` keeps.
         Coverage::Measured => {
             let kept = crate::geom::sample_indices(frames, input.fps, true);
             let mut n = kept.len() as u64;
-            // The cover is past the last 5 Hz tick. The plan counts that still.
-            if input.cover {
-                let last = frames.saturating_sub(1);
-                if kept.last().copied() != Some(last) {
-                    n = n.saturating_add(1);
-                }
+            if input.cover && kept.last().copied() != Some(frames - 1) {
+                n += 1;
             }
             n.clamp(1, frames)
         }
     }
 }
 
-pub fn human_duration(seconds: f64) -> String {
-    if seconds < 1.0 {
-        return "Less than a second".into();
-    }
-    if seconds < 60.0 {
-        let n = seconds.round() as u64;
-        if n >= 60 {
-            return count(1, "minute", "minutes");
-        }
-        return count(n, "second", "seconds");
-    }
-    if seconds < 60.0 * 60.0 {
-        let n = (seconds / 60.0).round() as u64;
-        if n >= 60 {
-            return count(1, "hour", "hours");
-        }
-        return count(n, "minute", "minutes");
-    }
-    count((seconds / 3600.0).round() as u64, "hour", "hours")
-}
-
-fn count(n: u64, one: &str, many: &str) -> String {
-    let n = n.max(1);
-    if n == 1 {
-        format!("About 1 {one}")
+pub fn human_duration(seconds: f64) -> Line {
+    let (n, unit) = if seconds < 1.0 {
+        return Line::with("duration_under_second", "Less than a second".into(), &[]);
+    } else if seconds < 59.5 {
+        (seconds.round() as u64, "second")
+    } else if seconds < 59.5 * 60.0 {
+        ((seconds / 60.0).round().max(1.0) as u64, "minute")
     } else {
-        format!("About {n} {many}")
-    }
+        ((seconds / 3600.0).round().max(1.0) as u64, "hour")
+    };
+    let n = n.max(1);
+    let text = if n == 1 { format!("About 1 {unit}") } else { format!("About {n} {unit}s") };
+    Line::with(&format!("duration_{unit}s"), text, &[("count", n.into())])
 }
 
 #[cfg(test)]
@@ -235,74 +212,37 @@ mod tests {
             fps: 0.0,
             duration_sec: 0.0,
             original_long_side: 1920,
-            detection: DetectionSize::Px(640),
+            original_short_side: 1080,
+            detection_long_side: 640,
             coverage: Coverage::Complete,
-            bundle_factor: 1.0,
+            timing: Some(Timing { detect_ms: 20.0, embed_ms: 5.0 }),
             execution: Execution::Cpu,
-            form_factor: FormFactor::Computer,
+            device: Device::default(),
             cover: false,
         }
     }
 
     #[test]
-    fn smaller_is_faster_than_full_and_a_photo_is_short() {
-        let mut small = base();
-        small.frames = 300;
-        small.fps = 30.0;
-        small.duration_sec = 10.0;
-        small.detection = DetectionSize::Px(320);
-        let mut mid = small.clone();
-        mid.detection = DetectionSize::Px(640);
-        let mut full = small.clone();
-        full.detection = DetectionSize::Full;
-        let a = estimate(&small).seconds;
-        let b = estimate(&mid).seconds;
-        let c = estimate(&full).seconds;
-        assert!(a < b && b < c, "{a} < {b} < {c}");
+    fn a_photo_is_short_and_a_long_phone_video_suggests_a_computer() {
         let photo = estimate(&base());
         assert!(photo.seconds < 1.0);
-        assert_eq!(photo.human, "Less than a second");
-        assert!(!photo.suggest_computer);
-        let mut one = base();
-        one.frames = 25;
-        assert_eq!(estimate(&one).human, "About 1 second");
-        assert_eq!(human_duration(1.4), "About 1 second");
-        assert_eq!(human_duration(2.0), "About 2 seconds");
-        assert_eq!(human_duration(59.4), "About 59 seconds");
-        assert_eq!(human_duration(59.6), "About 1 minute");
-        assert_eq!(human_duration(60.0), "About 1 minute");
-        assert_eq!(human_duration(89.0), "About 1 minute");
-        assert_eq!(human_duration(90.0), "About 2 minutes");
-        assert_eq!(human_duration(3540.0), "About 59 minutes");
-        assert_eq!(human_duration(3570.0), "About 1 hour");
-        assert_eq!(human_duration(3600.0), "About 1 hour");
-        assert_eq!(human_duration(7200.0), "About 2 hours");
-        assert!(photo.device_note.unwrap().contains("CPU"));
-        assert!(photo.heat_note.is_none());
-    }
-
-    #[test]
-    fn a_long_phone_scan_suggests_a_computer_and_still_explains_heat() {
-        let mut input = base();
-        input.frames = 30 * 60 * 10;
-        input.fps = 30.0;
-        input.duration_sec = 600.0;
-        input.form_factor = FormFactor::Phone;
-        input.detection = DetectionSize::Px(640);
-        let est = estimate(&input);
+        assert_eq!(photo.human.text, "Less than a second");
+        assert!(photo.notes.iter().any(|n| n.is(copy::CPU_NOTE)));
+        assert!(!photo.notes.iter().any(|n| n.is(copy::HEAT_NOTE)));
+        let mut long = base();
+        long.frames = 30 * 60 * 10;
+        long.fps = 30.0;
+        long.duration_sec = 600.0;
+        long.device = Device { kind: "phone".into(), thermal: Some("serious".into()), battery: Some(0.2), charging: Some(false) };
+        let est = estimate(&long);
         assert!(est.suggest_computer);
-        assert!(est.suggest_computer_text.unwrap().contains("complete"));
-        assert!(est.heat_note.is_some());
-        assert!(est.battery_note.is_some());
-        input.execution = Execution::Neural;
-        let neural = estimate(&input);
-        assert!(neural.device_note.is_none());
-        input.execution = Execution::Gpu;
-        assert!(estimate(&input).device_note.unwrap().contains("GPU"));
+        for note in [copy::HEAT_NOTE, copy::ALREADY_WARM, copy::BATTERY_NOTE, copy::SUGGEST_COMPUTER] {
+            assert!(est.notes.iter().any(|n| n.is(note)), "{note:?}");
+        }
     }
 
     #[test]
-    fn measured_analyzes_fewer_frames_than_complete() {
+    fn measured_reads_fewer_frames_and_untimed_is_rough() {
         let mut input = base();
         input.frames = 300;
         input.fps = 30.0;
@@ -310,39 +250,22 @@ mod tests {
         let complete = estimate(&input);
         input.coverage = Coverage::Measured;
         let measured = estimate(&input);
-        assert!(measured.frames_analyzed < complete.frames_analyzed);
+        assert_eq!(measured.frames_analyzed, 50);
         assert!(measured.seconds < complete.seconds);
+        assert!(measured.coverage_banner.is_some());
+        input.timing = None;
+        assert!(estimate(&input).notes.iter().any(|n| n.is(copy::ESTIMATE_ROUGH)));
     }
 
     #[test]
-    fn measured_plan_counts_the_frames_the_scan_keeps() {
-        // 60 frames at 29.97 fps. Rounding the duration to 5 Hz says 10 frames.
-        // The scan keeps the frame on screen at each tick, which is 11.
-        let mut input = base();
-        input.frames = 60;
-        input.fps = 29.97;
-        input.duration_sec = 2.0;
-        input.coverage = Coverage::Measured;
-        input.detection = DetectionSize::Full;
-        input.original_long_side = 3840;
-        let est = estimate(&input);
-        let kept = crate::geom::sample_indices(60, 29.97, true).len() as u64;
-        assert_eq!(kept, 11);
-        assert_eq!(est.frames_analyzed, kept);
-        assert_eq!(est.human, "About 16 seconds");
-    }
-
-    #[test]
-    fn the_size_note_appears_once_full_resolution_would_compare_a_face_this_size_leaves_out() {
-        assert_eq!(small_face_note(640, DetectionSize::Px(640)), None);
-        assert_eq!(small_face_note(1120, DetectionSize::Px(640)), None);
-        assert_eq!(
-            small_face_note(1121, DetectionSize::Px(640)).as_deref(),
-            Some("At 640 px, a face under 113 px in this file is left out. Full resolution compares a face from 112 px.")
-        );
-        assert!(small_face_note(1920, DetectionSize::Px(640)).unwrap().contains("under 192 px"));
-        assert!(small_face_note(4032, DetectionSize::Px(320)).unwrap().contains("under 807 px"));
-        assert_eq!(small_face_note(4032, DetectionSize::Full), None);
-        assert_eq!(estimate(&base()).size_note.as_deref(), small_face_note(1920, DetectionSize::Px(640)).as_deref());
+    fn durations_read_naturally() {
+        let text = |s: f64| human_duration(s).text;
+        assert_eq!(text(1.4), "About 1 second");
+        assert_eq!(text(2.0), "About 2 seconds");
+        assert_eq!(text(59.6), "About 1 minute");
+        assert_eq!(text(90.0), "About 2 minutes");
+        assert_eq!(text(3570.0), "About 1 hour");
+        assert_eq!(text(7200.0), "About 2 hours");
+        assert_eq!(human_duration(7200.0).args["count"], 2);
     }
 }

@@ -7,10 +7,14 @@
 //! sample contributes its high 8 bits. CMYK and full-resolution YCbCr become RGB.
 //! A one-page palette, bilevel, or subsampled TIFF is read as a player shows that
 //! page. A multi-page TIFF whose pages are not all read is refused. Audio is not decoded. Phone, Mac, and Android shells
-//! decode with AVFoundation or MediaCodec and pass the frames through
-//! `load_frame_dir`. That path does not run FFmpeg. It reads the container creation
-//! time from the file, so a clock that disagrees with the file time warns the same
-//! way the desktop probe does.
+//! decode with AVFoundation or MediaCodec and push frames to the engine one at a
+//! time. That path does not run FFmpeg. It reads the container creation time from
+//! the file, so a clock that disagrees with the file time warns the same way the
+//! desktop probe does.
+//!
+//! Untrusted files are read in bounded memory: one frame at a time, headers by
+//! seeking rather than reading the file, and a picture over `MAX_PIXELS` is
+//! refused before it is decoded. FFmpeg reads only local files.
 
 use crate::timeutil::parse_rfc3339;
 use image::metadata::Orientation;
@@ -18,7 +22,6 @@ use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageReader, RgbImage}
 use serde_json::Value;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -27,6 +30,32 @@ use std::time::SystemTime;
 pub enum MediaError {
     #[error("bad codec or unreadable file")]
     BadCodec,
+    #[error("picture too large")]
+    TooLarge,
+}
+
+/// A picture with more pixels than this is refused before it is decoded: 120 megapixels.
+pub const MAX_PIXELS: u64 = 120_000_000;
+/// Pages of a TIFF, or frames of an animated WebP, read before refusing.
+const MAX_STILL_FRAMES: u64 = 10_000;
+/// A container header read into memory is never larger than this.
+const MAX_HEADER_BYTES: u64 = 4 * 1024 * 1024;
+
+fn fits(width: u32, height: u32) -> Result<(), MediaError> {
+    if width == 0 || height == 0 {
+        return Err(MediaError::BadCodec);
+    }
+    if u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(MediaError::TooLarge);
+    }
+    Ok(())
+}
+
+/// A path FFmpeg reads as a local file, even when its name starts with `-` or has a `:`.
+fn ffmpeg_input(path: &Path) -> std::ffi::OsString {
+    let mut arg = std::ffi::OsString::from("file:");
+    arg.push(path.as_os_str());
+    arg
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +106,7 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         return probe_animated_webp(path);
     }
     if let Some(info) = probe_image(path) {
+        fits(info.width, info.height)?;
         return Ok(info);
     }
     probe_video(path)
@@ -117,7 +147,10 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
     }
     let info = probe(path)?;
     if !info.video {
-        let image = open_oriented(path).map_err(|_| MediaError::BadCodec)?;
+        let image = open_oriented(path).map_err(|err| match err {
+            image::ImageError::Limits(_) => MediaError::TooLarge,
+            _ => MediaError::BadCodec,
+        })?;
         let keep_going = on_frame(0, &image);
         return Ok(DecodeStats { frames_decoded: 1, clean: keep_going, probe: info });
     }
@@ -155,17 +188,11 @@ enum MotionVideo {
     Span { start: u64, end: u64 },
 }
 
+/// The clip copied out of a motion photo. Private to this user, removed on drop.
 struct MotionClip {
     path: PathBuf,
+    _file: tempfile::TempPath,
 }
-
-impl Drop for MotionClip {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
-static MOTION_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// A JPEG whose XMP points at a video appended to the file. The video is copied
 /// out so FFmpeg can seek in it. The copy is removed when this value drops.
@@ -175,24 +202,24 @@ fn motion_clip(path: &Path) -> Result<Option<MotionClip>, MediaError> {
         MotionVideo::Broken => return Err(MediaError::BadCodec),
         MotionVideo::Span { start, end } => (start, end),
     };
-    let n = MOTION_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dest = std::env::temp_dir().join(format!("openworld-motion-{}-{n}.mp4", std::process::id()));
+    // A random name, created exclusively with owner-only permissions.
+    let temp = tempfile::Builder::new().prefix("openworld-motion-").suffix(".mp4").tempfile().map_err(|_| MediaError::BadCodec)?;
+    let (mut out, temp) = temp.into_parts();
+    let dest = temp.to_path_buf();
     let mut src = File::open(path).map_err(|_| MediaError::BadCodec)?;
     src.seek(SeekFrom::Start(span.0)).map_err(|_| MediaError::BadCodec)?;
-    let mut out = File::create(&dest).map_err(|_| MediaError::BadCodec)?;
     let mut left = span.1 - span.0;
     let mut buf = [0u8; 65536];
     while left > 0 {
         let want = left.min(buf.len() as u64) as usize;
         let read = src.read(&mut buf[..want]).map_err(|_| MediaError::BadCodec)?;
         if read == 0 {
-            let _ = std::fs::remove_file(&dest);
             return Err(MediaError::BadCodec);
         }
         out.write_all(&buf[..read]).map_err(|_| MediaError::BadCodec)?;
         left -= read as u64;
     }
-    Ok(Some(MotionClip { path: dest }))
+    Ok(Some(MotionClip { path: dest, _file: temp }))
 }
 
 /// `MicroVideoOffset` or a MotionPhoto item length is the video at the end of the file.
@@ -634,11 +661,30 @@ fn xmp_attr_u64(text: &str, name: &str) -> Option<u64> {
     None
 }
 
-/// Every page, each turned by that page's orientation tag.
+/// Every page, each turned by that page's orientation tag. Pages are counted
+/// from their headers; no pixels are decoded to plan the scan.
 fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
-    let pages = read_tiff_pages(path)?;
-    let (width, height) = pages[0].dimensions();
-    let count = pages.len() as u64;
+    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    let mut decoder = tiff::decoder::Decoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
+    let mut count = 0u64;
+    let mut first = None;
+    loop {
+        let (w, h) = decoder.dimensions().map_err(|_| MediaError::BadCodec)?;
+        fits(w, h)?;
+        tiff_samples(decoder.colortype().map_err(|_| MediaError::BadCodec)?)?;
+        if first.is_none() {
+            first = Some(oriented_still_size(w, h, tiff_tag(&mut decoder)));
+        }
+        count += 1;
+        if count > MAX_STILL_FRAMES {
+            return Err(MediaError::TooLarge);
+        }
+        if !decoder.more_images() {
+            break;
+        }
+        decoder.next_image().map_err(|_| MediaError::BadCodec)?;
+    }
+    let (width, height) = first.ok_or(MediaError::BadCodec)?;
     let moving = count > 1;
     Ok(Probe {
         width,
@@ -655,57 +701,56 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
     })
 }
 
+/// One page at a time. A page that does not decode refuses the whole file.
 fn decode_tiff(path: &Path, info: Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
-    let pages = read_tiff_pages(path)?;
+    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    let mut decoder = tiff::decoder::Decoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
     let mut decoded = 0u64;
     let mut clean = true;
-    for page in &pages {
-        if !on_frame(decoded, page) {
-            decoded += 1;
+    loop {
+        let page = read_tiff_page(&mut decoder)?;
+        let keep = on_frame(decoded, &page);
+        decoded += 1;
+        if !keep {
             clean = false;
             break;
         }
-        decoded += 1;
-    }
-    Ok(DecodeStats { frames_decoded: decoded, clean, probe: info })
-}
-
-fn read_tiff_pages(path: &Path) -> Result<Vec<RgbImage>, MediaError> {
-    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
-    let mut decoder = tiff::decoder::Decoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
-    let mut pages = Vec::new();
-    loop {
-        pages.push(read_tiff_page(&mut decoder)?);
         if !decoder.more_images() {
             break;
         }
         decoder.next_image().map_err(|_| MediaError::BadCodec)?;
     }
-    Ok(pages)
+    Ok(DecodeStats { frames_decoded: decoded, clean: clean && decoded == info.frames, probe: info })
 }
 
-fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Result<RgbImage, MediaError> {
-    let (width, height) = decoder.dimensions().map_err(|_| MediaError::BadCodec)?;
-    if width == 0 || height == 0 {
-        return Err(MediaError::BadCodec);
+fn tiff_samples(color: tiff::ColorType) -> Result<(usize, u8), MediaError> {
+    match color {
+        tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => Ok((1, bits)),
+        tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => Ok((3, bits)),
+        tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => Ok((4, bits)),
+        tiff::ColorType::CMYK(8) => Ok((4, 8)),
+        tiff::ColorType::YCbCr(8) => Ok((3, 8)),
+        _ => Err(MediaError::BadCodec),
     }
-    let color = decoder.colortype().map_err(|_| MediaError::BadCodec)?;
-    let (samples, bits) = match color {
-        tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => (1, bits),
-        tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => (3, bits),
-        tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => (4, bits),
-        tiff::ColorType::CMYK(8) => (4, 8),
-        tiff::ColorType::YCbCr(8) => (3, 8),
-        _ => return Err(MediaError::BadCodec),
-    };
-    let tag = decoder
+}
+
+fn tiff_tag<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> u8 {
+    decoder
         .find_tag(tiff::tags::Tag::Orientation)
         .ok()
         .flatten()
         .and_then(|value| value.into_u16().ok())
         .map(|value| value as u8)
         .filter(|value| (1..=8).contains(value))
-        .unwrap_or(1);
+        .unwrap_or(1)
+}
+
+fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Result<RgbImage, MediaError> {
+    let (width, height) = decoder.dimensions().map_err(|_| MediaError::BadCodec)?;
+    fits(width, height)?;
+    let color = decoder.colortype().map_err(|_| MediaError::BadCodec)?;
+    let (samples, bits) = tiff_samples(color)?;
+    let tag = tiff_tag(decoder);
     let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
     let rgb = match (color, decoded) {
         (tiff::ColorType::CMYK(8), tiff::decoder::DecodingResult::U8(bytes)) => cmyk_to_rgb(&bytes, width, height)?,
@@ -790,13 +835,23 @@ fn ycbcr_to_rgb(bytes: &[u8], width: u32, height: u32) -> Result<RgbImage, Media
     RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)
 }
 
+/// The whole file, when it is small enough to hold. A TIFF's directory can be anywhere in it.
+fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>, MediaError> {
+    let len = std::fs::metadata(path).map_err(|_| MediaError::BadCodec)?.len();
+    if len > max {
+        return Err(MediaError::TooLarge);
+    }
+    std::fs::read(path).map_err(|_| MediaError::BadCodec)
+}
+
 /// One page, shown the way a player shows it, when the page reader cannot expand the samples.
 fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
-    let bytes = std::fs::read(path).map_err(|_| MediaError::BadCodec)?;
+    let bytes = read_bounded(path, 512 * 1024 * 1024)?;
     if tiff_page_count(&bytes) != Some(1) {
         return Err(MediaError::BadCodec);
     }
     let (width, height) = tiff_stored_size(&bytes).ok_or(MediaError::BadCodec)?;
+    fits(width, height)?;
     let tag = tiff_orientation_tag(&bytes).unwrap_or(1);
     let (width, height) = oriented_still_size(width, height, tag);
     Ok(Probe {
@@ -815,7 +870,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
 }
 
 fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
-    let bytes = std::fs::read(path).map_err(|_| MediaError::BadCodec)?;
+    let bytes = read_bounded(path, 512 * 1024 * 1024)?;
     if tiff_page_count(&bytes) != Some(1) {
         return Err(MediaError::BadCodec);
     }
@@ -974,11 +1029,8 @@ fn probe_image(path: &Path) -> Option<Probe> {
     if animated_png(path) || animated_webp(path) {
         return None;
     }
-    let rgb = open_oriented(path).ok()?;
-    let (width, height) = rgb.dimensions();
-    if width == 0 || height == 0 {
-        return None;
-    }
+    // The header gives the size. The pixels are decoded once, when the scan reads them.
+    let (width, height) = still_size(path)?;
     Some(Probe {
         width,
         height,
@@ -994,10 +1046,44 @@ fn probe_image(path: &Path) -> Option<Probe> {
     })
 }
 
+fn still_limits() -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(20_000);
+    limits.max_image_height = Some(20_000);
+    limits.max_alloc = Some(MAX_PIXELS * 4 + 64 * 1024 * 1024);
+    limits
+}
+
+/// A still's displayed size from its header, turned by its orientation tag.
+fn still_size(path: &Path) -> Option<(u32, u32)> {
+    let mut reader = ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    reader.no_limits();
+    let mut decoder = reader.into_decoder().ok()?;
+    let (w, h) = decoder.dimensions();
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let mut orientation = decoder.orientation().ok()?;
+    if orientation == Orientation::NoTransforms {
+        orientation = webp_exif_orientation(path).or_else(|| png_exif_orientation(path)).unwrap_or(orientation);
+    }
+    let turned = matches!(
+        orientation,
+        Orientation::Rotate90 | Orientation::Rotate270 | Orientation::Rotate90FlipH | Orientation::Rotate270FlipH
+    );
+    Some(if turned { (h, w) } else { (w, h) })
+}
+
 /// Decodes a still and applies its camera orientation tag when the file carries one.
+/// A picture over `MAX_PIXELS` is refused before its pixels are allocated.
 fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
-    let reader = ImageReader::open(path)?.with_guessed_format()?;
+    let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+    reader.limits(still_limits());
     let mut decoder = reader.into_decoder()?;
+    let (w, h) = decoder.dimensions();
+    if u64::from(w) * u64::from(h) > MAX_PIXELS {
+        return Err(image::ImageError::Limits(image::error::LimitError::from_kind(image::error::LimitErrorKind::DimensionError)));
+    }
     let mut orientation = decoder.orientation()?;
     // The WebP decoder reads a TIFF header at the start of the EXIF chunk.
     // Some files put the JPEG "Exif" marker in front of that header.
@@ -1043,74 +1129,89 @@ fn animated_png(path: &Path) -> bool {
     }
 }
 
+/// Each chunk of a WebP: tag, payload offset, payload size. Read by seeking,
+/// so a large file costs a few small reads.
+fn webp_chunks(path: &Path) -> Option<(File, Vec<([u8; 4], u64, u64)>)> {
+    let mut file = File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut header = [0u8; 12];
+    file.read_exact(&mut header).ok()?;
+    if &header[0..4] != b"RIFF" || &header[8..12] != b"WEBP" {
+        return None;
+    }
+    let mut chunks = Vec::new();
+    let mut pos = 12u64;
+    while pos + 8 <= len {
+        file.seek(SeekFrom::Start(pos)).ok()?;
+        let mut head = [0u8; 8];
+        file.read_exact(&mut head).ok()?;
+        let tag = [head[0], head[1], head[2], head[3]];
+        let size = u64::from(u32::from_le_bytes([head[4], head[5], head[6], head[7]]));
+        let start = pos + 8;
+        if start + size > len || chunks.len() as u64 > MAX_STILL_FRAMES * 2 {
+            return None;
+        }
+        chunks.push((tag, start, size));
+        pos = start + size + (size & 1);
+    }
+    Some((file, chunks))
+}
+
+fn read_at(file: &mut File, offset: u64, len: u64) -> Option<Vec<u8>> {
+    if len > MAX_HEADER_BYTES {
+        return None;
+    }
+    file.seek(SeekFrom::Start(offset)).ok()?;
+    let mut buf = vec![0u8; len as usize];
+    file.read_exact(&mut buf).ok()?;
+    Some(buf)
+}
+
 /// True when a WebP carries an animation chunk or the animation flag.
 fn animated_webp(path: &Path) -> bool {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(_) => return false,
-    };
-    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+    let Some((mut file, chunks)) = webp_chunks(path) else {
         return false;
-    }
-    let mut index = 12usize;
-    while index + 8 <= bytes.len() {
-        let tag = &bytes[index..index + 4];
-        let size = u32::from_le_bytes([bytes[index + 4], bytes[index + 5], bytes[index + 6], bytes[index + 7]]) as usize;
-        let start = index + 8;
-        let end = match start.checked_add(size) {
-            Some(end) if end <= bytes.len() => end,
-            _ => return false,
-        };
-        if tag == b"ANIM" || tag == b"ANMF" {
-            return true;
-        }
-        if tag == b"VP8X" && size >= 1 && bytes[start] & 0x02 != 0 {
-            return true;
-        }
-        index = end + (size & 1);
-    }
-    false
+    };
+    chunks.iter().any(|(tag, start, size)| {
+        tag == b"ANIM" || tag == b"ANMF" || (tag == b"VP8X" && *size >= 1 && read_at(&mut file, *start, 1).is_some_and(|b| b[0] & 0x02 != 0))
+    })
 }
 
-/// One composited picture and how long it stays up, in seconds.
+/// Seconds each animated-WebP picture stays up, from the frame headers.
 /// A duration of 0 is a tenth of a second, which is how a player shows it.
-fn webp_frames(path: &Path) -> Result<Vec<(RgbImage, f64)>, MediaError> {
-    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
-    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
-    if !decoder.has_animation() {
-        return Err(MediaError::BadCodec);
-    }
-    let orientation = webp_exif_orientation(path).unwrap_or(Orientation::NoTransforms);
-    let mut frames = Vec::new();
-    for frame in decoder.into_frames() {
-        let frame = frame.map_err(|_| MediaError::BadCodec)?;
-        let (numer, denom) = frame.delay().numer_denom_ms();
-        let millis = if denom == 0 { 0.0 } else { f64::from(numer) / f64::from(denom) };
-        let seconds = if millis > 0.0 { millis / 1000.0 } else { 0.1 };
-        let mut image = DynamicImage::ImageRgba8(frame.into_buffer());
-        if orientation != Orientation::NoTransforms {
-            image.apply_orientation(orientation);
+fn webp_frame_delays(path: &Path) -> Option<Vec<f64>> {
+    let (mut file, chunks) = webp_chunks(path)?;
+    let mut delays = Vec::new();
+    for (tag, start, size) in chunks {
+        if &tag != b"ANMF" || size < 16 {
+            continue;
         }
-        let shown = image.to_rgb8();
-        if shown.width() == 0 || shown.height() == 0 {
-            return Err(MediaError::BadCodec);
-        }
-        frames.push((shown, seconds));
+        let head = read_at(&mut file, start, 16)?;
+        let millis = u32::from(head[12]) | u32::from(head[13]) << 8 | u32::from(head[14]) << 16;
+        delays.push(if millis == 0 { 0.1 } else { f64::from(millis) / 1000.0 });
     }
-    if frames.is_empty() {
-        return Err(MediaError::BadCodec);
-    }
-    Ok(frames)
+    Some(delays)
 }
 
+/// The canvas size and frame delays, from the headers. No picture is decoded.
 fn probe_animated_webp(path: &Path) -> Result<Probe, MediaError> {
-    webp_probe(&webp_frames(path)?)
-}
-
-fn webp_probe(frames: &[(RgbImage, f64)]) -> Result<Probe, MediaError> {
-    let (width, height) = frames[0].0.dimensions();
-    let count = frames.len() as u64;
-    let duration: f64 = frames.iter().map(|(_, delay)| *delay).sum();
+    let delays = webp_frame_delays(path).filter(|d| !d.is_empty()).ok_or(MediaError::BadCodec)?;
+    let (mut file, chunks) = webp_chunks(path).ok_or(MediaError::BadCodec)?;
+    let (_, start, _) = chunks.iter().find(|(tag, _, size)| tag == b"VP8X" && *size >= 10).ok_or(MediaError::BadCodec)?;
+    let head = read_at(&mut file, *start, 10).ok_or(MediaError::BadCodec)?;
+    let width = 1 + (u32::from(head[4]) | u32::from(head[5]) << 8 | u32::from(head[6]) << 16);
+    let height = 1 + (u32::from(head[7]) | u32::from(head[8]) << 8 | u32::from(head[9]) << 16);
+    fits(width, height)?;
+    let count = delays.len() as u64;
+    if count > MAX_STILL_FRAMES {
+        return Err(MediaError::TooLarge);
+    }
+    let turned = matches!(
+        webp_exif_orientation(path),
+        Some(Orientation::Rotate90 | Orientation::Rotate270 | Orientation::Rotate90FlipH | Orientation::Rotate270FlipH)
+    );
+    let (width, height) = if turned { (height, width) } else { (width, height) };
+    let duration: f64 = delays.iter().sum();
     let moving = count > 1;
     let fps = if duration > 0.0 { count as f64 / duration } else { 0.0 };
     if moving && !(fps > 0.0) {
@@ -1131,69 +1232,66 @@ fn webp_probe(frames: &[(RgbImage, f64)]) -> Result<Probe, MediaError> {
     })
 }
 
+/// Every composited picture, one at a time.
 fn decode_animated_webp(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
-    let frames = webp_frames(path)?;
-    let info = webp_probe(&frames)?;
+    let info = probe_animated_webp(path)?;
+    let file = File::open(path).map_err(|_| MediaError::BadCodec)?;
+    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file)).map_err(|_| MediaError::BadCodec)?;
+    if !decoder.has_animation() {
+        return Err(MediaError::BadCodec);
+    }
+    let orientation = webp_exif_orientation(path).unwrap_or(Orientation::NoTransforms);
     let mut decoded = 0u64;
     let mut clean = true;
-    for (image, _) in &frames {
-        if !on_frame(decoded, image) {
-            decoded += 1;
+    for frame in decoder.into_frames() {
+        let frame = frame.map_err(|_| MediaError::BadCodec)?;
+        let mut image = DynamicImage::ImageRgba8(frame.into_buffer());
+        if orientation != Orientation::NoTransforms {
+            image.apply_orientation(orientation);
+        }
+        let keep = on_frame(decoded, &image.to_rgb8());
+        decoded += 1;
+        if !keep {
             clean = false;
             break;
         }
-        decoded += 1;
     }
-    Ok(DecodeStats { frames_decoded: decoded, clean, probe: info })
+    Ok(DecodeStats { frames_decoded: decoded, clean: clean && decoded == info.frames, probe: info })
 }
 
 /// Orientation from a WebP EXIF chunk. The payload is a TIFF header, sometimes
 /// behind the six-byte marker a JPEG uses.
 fn webp_exif_orientation(path: &Path) -> Option<Orientation> {
-    let bytes = std::fs::read(path).ok()?;
-    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
-        return None;
-    }
-    let mut index = 12usize;
-    while index + 8 <= bytes.len() {
-        let tag = &bytes[index..index + 4];
-        let size = u32::from_le_bytes([bytes[index + 4], bytes[index + 5], bytes[index + 6], bytes[index + 7]]) as usize;
-        let start = index + 8;
-        let end = start.checked_add(size)?;
-        if end > bytes.len() {
-            return None;
-        }
-        if tag == b"EXIF" {
-            return orientation_in_exif(&bytes[start..end]);
-        }
-        index = end + (size & 1);
-    }
-    None
+    let (mut file, chunks) = webp_chunks(path)?;
+    let (_, start, size) = chunks.into_iter().find(|(tag, _, _)| tag == b"EXIF")?;
+    orientation_in_exif(&read_at(&mut file, start, size)?)
 }
 
 /// Orientation from a PNG eXIf chunk. The payload is a TIFF header, sometimes
-/// behind the six-byte marker a JPEG uses.
+/// behind the six-byte marker a JPEG uses. Chunks are walked by seeking.
 fn png_exif_orientation(path: &Path) -> Option<Orientation> {
-    let bytes = std::fs::read(path).ok()?;
-    if bytes.len() < 8 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" {
+    let mut file = File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut signature = [0u8; 8];
+    file.read_exact(&mut signature).ok()?;
+    if &signature != b"\x89PNG\r\n\x1a\n" {
         return None;
     }
-    let mut index = 8usize;
-    while index + 12 <= bytes.len() {
-        let len = u32::from_be_bytes(bytes[index..index + 4].try_into().ok()?) as usize;
-        let tag = &bytes[index + 4..index + 8];
-        let start = index + 8;
-        let end = start.checked_add(len)?;
-        if end + 4 > bytes.len() {
+    let mut pos = 8u64;
+    while pos + 12 <= len {
+        file.seek(SeekFrom::Start(pos)).ok()?;
+        let mut head = [0u8; 8];
+        file.read_exact(&mut head).ok()?;
+        let size = u64::from(u32::from_be_bytes([head[0], head[1], head[2], head[3]]));
+        let start = pos + 8;
+        if start + size + 4 > len {
             return None;
         }
-        if tag == b"eXIf" {
-            return orientation_in_exif(&bytes[start..end]);
+        match &head[4..8] {
+            b"eXIf" => return orientation_in_exif(&read_at(&mut file, start, size)?),
+            b"IEND" => return None,
+            _ => pos = start + size + 4,
         }
-        if tag == b"IEND" {
-            return None;
-        }
-        index = end + 4;
     }
     None
 }
@@ -1286,7 +1384,8 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
             "-of",
             "json",
         ])
-        .arg(path)
+        .args(["-protocol_whitelist", "file"])
+        .arg(ffmpeg_input(path))
         .output()
         .map_err(|_| MediaError::BadCodec)?;
     if !output.status.success() {
@@ -1359,8 +1458,13 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (Some(_), None) => true,
         (None, _) => false,
     };
+    let shown_packets = read.as_ref().map(|read| read.shown);
     let stored = match (nb, packets) {
         (Some(listed), Some(counted)) if counted > 0 && counted < listed => Some(counted),
+        // A header that counts fewer pictures than the file stores is not the
+        // file. The pictures a player lists are. Trusting the header would stop
+        // the decode early and call the rest of the file scanned.
+        (Some(listed), Some(counted)) if counted > listed && shown_packets.is_some_and(|shown| shown > listed) => shown_packets,
         (Some(listed), _) => Some(listed),
         (None, packets) => packets,
     };
@@ -1412,7 +1516,8 @@ fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
             "-of",
             "json",
         ])
-        .arg(path)
+        .args(["-protocol_whitelist", "file"])
+        .arg(ffmpeg_input(path))
         .output()
         .map_err(|_| MediaError::BadCodec)?;
     if !output.status.success() {
@@ -1474,7 +1579,8 @@ fn video_packets(path: &Path, shown: usize) -> Option<Packets> {
             "-of",
             "csv=p=0",
         ])
-        .arg(path)
+        .args(["-protocol_whitelist", "file"])
+        .arg(ffmpeg_input(path))
         .output()
         .ok()?;
     if !output.status.success() {
@@ -1582,7 +1688,7 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
     let frame_bytes = rgb_frame_len(info.width, info.height).ok_or(MediaError::BadCodec)?;
     let mut command = Command::new("ffmpeg");
     let mapped = format!("0:v:{}", info.shown_stream);
-    command.args(["-v", "error", "-i"]).arg(path);
+    command.args(["-v", "error", "-xerror", "-protocol_whitelist", "file", "-i"]).arg(ffmpeg_input(path));
     // The same track the probe measured. The default map can be a different one.
     command.args(["-map", &mapped]);
     if info.square_pixels {
@@ -1600,58 +1706,75 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| MediaError::BadCodec)?;
+    // FFmpeg blocks when its error pipe fills. Read it on its own thread, keeping the tail.
+    let stderr = child.stderr.take().ok_or(MediaError::BadCodec)?;
+    let errors = std::thread::spawn(move || {
+        let mut tail = Vec::new();
+        let mut reader = BufReader::new(stderr);
+        let mut chunk = [0u8; 4096];
+        while let Ok(n) = reader.read(&mut chunk) {
+            if n == 0 {
+                break;
+            }
+            tail.extend_from_slice(&chunk[..n]);
+            if tail.len() > 16 * 1024 {
+                tail.drain(..tail.len() - 16 * 1024);
+            }
+        }
+        tail
+    });
     let mut stdout = child.stdout.take().ok_or(MediaError::BadCodec)?;
     let mut decoded = 0u64;
     let mut stopped = false;
-    let mut capped = false;
+    let mut extra = 0u64;
+    let mut torn = false;
+    let mut buf = vec![0u8; frame_bytes];
     loop {
-        let mut buf = vec![0u8; frame_bytes];
         let mut filled = 0;
         while filled < frame_bytes {
             match stdout.read(&mut buf[filled..]) {
                 Ok(0) => break,
                 Ok(n) => filled += n,
                 Err(_) => {
-                    let _ = child.kill();
-                    return Err(MediaError::BadCodec);
+                    torn = true;
+                    break;
                 }
             }
         }
-        if filled == 0 {
+        if filled == 0 || torn {
             break;
         }
         if filled != frame_bytes {
-            let _ = child.kill();
-            return Err(MediaError::BadCodec);
-        }
-        // A one-frame GIF can make FFmpeg repeat the picture. Those repeats are not frames of the file.
-        if info.frames_exact && info.frames > 0 && decoded >= info.frames {
-            capped = true;
-            let _ = child.kill();
+            torn = true;
             break;
         }
-        let image = RgbImage::from_raw(info.width, info.height, buf).ok_or(MediaError::BadCodec)?;
+        // FFmpeg can repeat a one-frame GIF's picture. Those repeats are not
+        // pictures of the file, but a count the probe got wrong would hide real
+        // ones, so a picture past the count is drained and makes the scan incomplete.
+        if info.frames_exact && info.frames > 0 && decoded >= info.frames {
+            extra += 1;
+            continue;
+        }
+        let image = RgbImage::from_raw(info.width, info.height, std::mem::take(&mut buf)).ok_or(MediaError::BadCodec)?;
         let keep = on_frame(decoded, &image);
+        buf = image.into_raw();
         decoded += 1;
         if !keep {
             stopped = true;
-            let _ = child.kill();
             break;
         }
     }
-    let status = if stopped || capped {
-        let _ = child.wait();
-        true
-    } else {
-        child.wait().map(|s| s.success()).unwrap_or(false)
-    };
-    if decoded == 0 || !status && !stopped {
-        if decoded == 0 {
-            return Err(MediaError::BadCodec);
-        }
-        return Ok(DecodeStats { frames_decoded: decoded, clean: false, probe: info.clone() });
+    if stopped || torn {
+        let _ = child.kill();
     }
-    Ok(DecodeStats { frames_decoded: decoded, clean: !stopped, probe: info.clone() })
+    let finished = child.wait().map(|status| status.success()).unwrap_or(false);
+    let _ = errors.join();
+    if decoded == 0 && !stopped {
+        return Err(MediaError::BadCodec);
+    }
+    let repeats_of_one = info.frames == 1 && decoded == 1;
+    let clean = !stopped && !torn && finished && (extra == 0 || repeats_of_one);
+    Ok(DecodeStats { frames_decoded: decoded, clean, probe: info.clone() })
 }
 
 /// Rotation from the track matrix or from a display-orientation message, in degrees.
@@ -1785,27 +1908,6 @@ fn json_u32(value: Option<&Value>) -> Option<u32> {
     None
 }
 
-/// Ordered stills already decoded by a platform shell or a test.
-/// The digits in the name are the decode index, so `frame_1000000.png` stays
-/// after `frame_999999.png`. A grouped mark in the name is not part of the index.
-/// One display time, in seconds, per decoded frame. The phone writes this next to the frames.
-pub const PRESENTATION_FILE: &str = "presentation.txt";
-
-pub fn read_presentation(dir: &Path) -> Option<Vec<f64>> {
-    let text = std::fs::read_to_string(dir.join(PRESENTATION_FILE)).ok()?;
-    let delays = text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(|line| line.parse::<f64>())
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-    if delays.is_empty() || delays.iter().any(|delay| !delay.is_finite() || *delay < 0.0) {
-        return None;
-    }
-    Some(delays)
-}
-
 /// Per-picture display times. A GIF uses its own blocks. A video uses the
 /// timestamps a player shows. A still has none.
 pub fn picture_delays(path: &Path) -> Option<Vec<f64>> {
@@ -1819,13 +1921,8 @@ pub fn picture_delays(path: &Path) -> Option<Vec<f64>> {
 }
 
 /// Seconds each animated-WebP picture stays up. A still has none.
-/// A duration of 0 is a tenth of a second, which is how a player shows it.
 fn webp_delays(path: &Path) -> Option<Vec<f64>> {
-    let frames = webp_frames(path).ok()?;
-    if frames.len() < 2 {
-        return None;
-    }
-    Some(frames.into_iter().map(|(_, delay)| delay).collect())
+    webp_frame_delays(path).filter(|delays| delays.len() >= 2)
 }
 
 /// Seconds each stored picture stays up, from the gaps between display times.
@@ -1850,7 +1947,8 @@ fn video_frame_delays(path: &Path) -> Option<Vec<f64>> {
             "-of",
             "json",
         ])
-        .arg(path)
+        .args(["-protocol_whitelist", "file"])
+        .arg(ffmpeg_input(path))
         .output()
         .ok()?;
     if !output.status.success() {
@@ -1910,6 +2008,9 @@ pub fn gif_delays(path: &Path) -> Option<Vec<f64>> {
     let mut header = [0u8; 6];
     file.read_exact(&mut header).ok()?;
     if &header != b"GIF87a" && &header != b"GIF89a" {
+        return None;
+    }
+    if file.metadata().ok()?.len() > 256 * 1024 * 1024 {
         return None;
     }
     let mut bytes = header.to_vec();
@@ -1976,46 +2077,6 @@ fn skip_gif_subblocks(data: &[u8], start: usize) -> Option<usize> {
         }
     }
     None
-}
-
-pub fn load_frame_dir(dir: &Path) -> Result<Vec<RgbImage>, MediaError> {
-    if !dir.is_dir() {
-        return Err(MediaError::BadCodec);
-    }
-    let mut names = Vec::new();
-    for entry in std::fs::read_dir(dir).map_err(|_| MediaError::BadCodec)? {
-        let path = entry.map_err(|_| MediaError::BadCodec)?.path();
-        let ext = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if ext == "png" || ext == "jpg" || ext == "jpeg" {
-            names.push(path);
-        }
-    }
-    names.sort_by(|left, right| frame_order_key(left).cmp(&frame_order_key(right)));
-    if names.is_empty() {
-        return Err(MediaError::BadCodec);
-    }
-    let mut frames = Vec::with_capacity(names.len());
-    for path in names {
-        let image = open_oriented(&path).map_err(|_| MediaError::BadCodec)?;
-        frames.push(image);
-    }
-    Ok(frames)
-}
-
-/// Text order puts `frame_1000000.png` before `frame_999999.png`.
-fn frame_order_key(path: &Path) -> (u64, String) {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("")
-        .to_string();
-    let digits: String = name.chars().filter(|c| c.is_ascii_digit()).collect();
-    let index = digits.parse::<u64>().unwrap_or(u64::MAX);
-    (index, name)
 }
 
 /// The container clock the desktop probe reports as `creation_time`. A still has none.
@@ -2098,7 +2159,7 @@ fn matroska_created(file: &mut File) -> Option<SystemTime> {
     file.seek(SeekFrom::Start(0)).ok()?;
     let mut data = vec![0u8; len as usize];
     file.read_exact(&mut data).ok()?;
-    let ns = dateutc(&data, 0, data.len())?;
+    let ns = dateutc(&data, 0, data.len(), 0)?;
     let secs = ns.div_euclid(1_000_000_000);
     // DateUTC counts nanoseconds from 2001-01-01.
     // DateUTC counts nanoseconds from 2001-01-01. A date before 1970 is still a clock.
@@ -2106,7 +2167,12 @@ fn matroska_created(file: &mut File) -> Option<SystemTime> {
     crate::timeutil::system_time_from_unix(unix)
 }
 
-fn dateutc(data: &[u8], mut pos: usize, end: usize) -> Option<i64> {
+/// The `DateUTC` element, found in the header, segment, and info levels only.
+/// A file that nests those levels deeper than a real one does is not read.
+fn dateutc(data: &[u8], mut pos: usize, end: usize, depth: u32) -> Option<i64> {
+    if depth > 4 {
+        return None;
+    }
     let end = end.min(data.len());
     while pos + 2 <= end {
         let (id, id_len) = ebml_id(data, pos)?;
@@ -2132,7 +2198,7 @@ fn dateutc(data: &[u8], mut pos: usize, end: usize) -> Option<i64> {
             body.saturating_add(size as usize).min(end)
         };
         if matches!(id, 0x1A45DFA3 | 0x18538067 | 0x1549A966) {
-            if let Some(ns) = dateutc(data, body, child_end) {
+            if let Some(ns) = dateutc(data, body, child_end, depth + 1) {
                 return Some(ns);
             }
         }
@@ -2175,6 +2241,18 @@ fn ebml_size(data: &[u8], pos: usize) -> Option<(u64, usize, bool)> {
     let width = len * 7;
     let unknown = width < 64 && value == (1u64 << width) - 1;
     Some((value, len, unknown))
+}
+
+/// Every page of a TIFF, for tests.
+#[cfg(test)]
+fn read_tiff_pages(path: &Path) -> Result<Vec<RgbImage>, MediaError> {
+    let info = probe_tiff(path)?;
+    let mut pages = Vec::new();
+    decode_tiff(path, info, &mut |_, page| {
+        pages.push(page.clone());
+        true
+    })?;
+    Ok(pages)
 }
 
 #[cfg(test)]
@@ -2894,7 +2972,7 @@ mod tests {
         let _ = fs::remove_file(&path);
         match probed {
             Ok(info) => assert!(info.video, "an animated webp was read as one still"),
-            Err(super::MediaError::BadCodec) => {}
+            Err(_) => {}
         }
         assert!(super::animated_webp(&write_bytes("webpanim2", &bytes)));
     }
@@ -2972,7 +3050,7 @@ mod tests {
         let now = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
         let warnings = crate::scan::media_warnings(Some(now), Some(mkv_before), now);
         assert!(
-            warnings.iter().any(|line| line == crate::copy::TIMESTAMP_DISAGREE),
+            warnings.iter().any(|line| line.is(crate::copy::TIMESTAMP_DISAGREE)),
             "{warnings:?}"
         );
         fs::write(dir.path().join("still.png"), []).unwrap();
@@ -3002,33 +3080,6 @@ mod tests {
         }
         bytes.push(0x3B);
         assert_eq!(super::gif_delays_in(&bytes), Some(vec![0.04, 0.1, 0.04]));
-    }
-
-    #[test]
-    fn a_later_frame_with_more_digits_stays_after_the_earlier_frame() {
-        let dir = std::env::temp_dir().join(format!("ow-frame-order-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        let mut early = RgbImage::new(1, 1);
-        early.put_pixel(0, 0, image::Rgb([1, 2, 3]));
-        let mut late = RgbImage::new(1, 1);
-        late.put_pixel(0, 0, image::Rgb([4, 5, 6]));
-        early.save(dir.join("frame_999999.png")).unwrap();
-        late.save(dir.join("frame_1000000.png")).unwrap();
-        let frames = super::load_frame_dir(&dir).unwrap();
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].get_pixel(0, 0), &image::Rgb([1, 2, 3]));
-        assert_eq!(frames[1].get_pixel(0, 0), &image::Rgb([4, 5, 6]));
-        let _ = fs::remove_dir_all(&dir);
-        let grouped = std::env::temp_dir().join(format!("ow-frame-group-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&grouped);
-        fs::create_dir_all(&grouped).unwrap();
-        early.save(grouped.join("frame_999,999.png")).unwrap();
-        late.save(grouped.join("frame_1,000,000.png")).unwrap();
-        let frames = super::load_frame_dir(&grouped).unwrap();
-        let _ = fs::remove_dir_all(&grouped);
-        assert_eq!(frames[0].get_pixel(0, 0), &image::Rgb([1, 2, 3]));
-        assert_eq!(frames[1].get_pixel(0, 0), &image::Rgb([4, 5, 6]));
     }
 
     fn movie_clock(created: u32) -> Vec<u8> {

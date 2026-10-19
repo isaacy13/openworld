@@ -1,300 +1,428 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! C entry point for the iPhone, Mac, and Android shells.
-//! The shells decode frames and pass a directory. They do not detect or compare.
+//! The C interface the phone and desktop shells link (`include/openworld.h`).
+//!
+//! `ow_call` answers one typed JSON request. A scan whose frames the shell
+//! decodes itself is a job: start it, push each decoded frame in order (or
+//! skip the ones `ow_job_wants` declines), then finish it with how decoding
+//! ended. A stop token ends the job from any thread: Cancel, the device
+//! getting hot, the battery, or the app leaving the screen. The scan then
+//! reports Incomplete, never a clearance.
+//!
+//! No panic crosses this boundary. Every returned string is freed with
+//! `ow_string_free`.
 
-use crate::estimate::{Coverage, DetectionSize, FormFactor};
-use crate::hardware::resolve_execution;
-use crate::scan::{scan_path, MediaFacts, ScanRequest};
-use serde_json::Value;
-use std::ffi::{CStr, CString, c_void};
-use std::os::raw::c_char;
-use std::path::PathBuf;
+use crate::copy::Line;
+use crate::engine::{DecodeEnd, Event, StopFlag};
+use crate::invoke;
+use crate::scan::{open_pushed_job, Job, ScanRequest};
+use image::RgbImage;
+use serde::Deserialize;
+use std::ffi::{c_char, c_void, CStr, CString};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::SystemTime;
+
+pub type OwEventFn = extern "C" fn(json: *const c_char, user: *mut c_void);
+
+pub struct OwJob {
+    job: Option<Job>,
+    events: Option<(OwEventFn, usize)>,
+    rgb: Vec<u8>,
+}
+
+pub struct OwStop(StopFlag);
+
+fn to_c(text: String) -> *mut c_char {
+    CString::new(text.replace('\0', "")).map(CString::into_raw).unwrap_or(std::ptr::null_mut())
+}
+
+fn from_c(ptr: *const c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(ptr) }.to_str().ok().map(str::to_string)
+}
+
+fn emit(events: Option<(OwEventFn, usize)>) -> impl FnMut(Event) {
+    move |event: Event| {
+        if let Some((callback, user)) = events {
+            if let Ok(line) = serde_json::to_string(&event) {
+                if let Ok(text) = CString::new(line) {
+                    callback(text.as_ptr(), user as *mut c_void);
+                }
+            }
+        }
+    }
+}
+
+fn panicked() -> String {
+    invoke::refusal(Line::with("internal", "The scan library failed. Refusing.".into(), &[])).to_string()
+}
+
+/// Answer one request. Returns JSON. Scan events, if any, go to `on_event`.
+#[no_mangle]
+pub extern "C" fn ow_call(request: *const c_char, on_event: Option<OwEventFn>, user: *mut c_void) -> *mut c_char {
+    let events = on_event.map(|f| (f, user as usize));
+    let answer = catch_unwind(AssertUnwindSafe(|| {
+        let text = from_c(request).unwrap_or_default();
+        invoke::call(&text, None, &mut emit(events)).to_string()
+    }));
+    to_c(answer.unwrap_or_else(|_| panicked()))
+}
+
+/// Start a scan of frames the shell will push. The request is a scan request
+/// with `media` set. On refusal this returns null and writes the refusal JSON
+/// to `refusal`, which the caller frees.
+#[no_mangle]
+pub extern "C" fn ow_job_start(request: *const c_char, on_event: Option<OwEventFn>, user: *mut c_void, refusal: *mut *mut c_char) -> *mut OwJob {
+    let started = catch_unwind(AssertUnwindSafe(|| {
+        let text = from_c(request).unwrap_or_default();
+        let scan = scan_request(&text).map_err(|line| invoke::refusal(line).to_string())?;
+        if !(scan.missing || scan.wanted) {
+            return Err(invoke::refusal(Line::of(crate::copy::CHOOSE_CLASS)).to_string());
+        }
+        open_pushed_job(&scan, SystemTime::now()).map_err(|report| invoke::refusal(report.headline).to_string())
+    }));
+    let write = |message: String| {
+        if !refusal.is_null() {
+            unsafe { *refusal = to_c(message) };
+        }
+    };
+    match started {
+        Ok(Ok(job)) => Box::into_raw(Box::new(OwJob { job: Some(job), events: on_event.map(|f| (f, user as usize)), rgb: Vec::new() })),
+        Ok(Err(message)) => {
+            write(message);
+            std::ptr::null_mut()
+        }
+        Err(_) => {
+            write(panicked());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// A versioned scan request: `{"v": 1, ...ScanRequest}`.
+fn scan_request(text: &str) -> Result<ScanRequest, Line> {
+    let mut value: serde_json::Value = serde_json::from_str(text).map_err(|_| Line::of(crate::copy::R_BAD_REQUEST))?;
+    let object = value.as_object_mut().ok_or_else(|| Line::of(crate::copy::R_BAD_REQUEST))?;
+    if object.remove("v").and_then(|v| v.as_u64()) != Some(invoke::API_VERSION) {
+        return Err(Line::of(crate::copy::R_BAD_REQUEST));
+    }
+    serde_json::from_value(value).map_err(|_| Line::of(crate::copy::R_BAD_REQUEST))
+}
+
+fn with_job(job: *mut OwJob, f: impl FnOnce(&mut OwJob) -> bool) -> i32 {
+    if job.is_null() {
+        return 0;
+    }
+    let job = unsafe { &mut *job };
+    i32::from(catch_unwind(AssertUnwindSafe(|| f(job))).unwrap_or(false))
+}
+
+/// 1 when frame `index` will be analyzed. A 0 means: skip it, without copying it.
+#[no_mangle]
+pub extern "C" fn ow_job_wants(job: *mut OwJob, index: u64) -> i32 {
+    with_job(job, |j| j.job.as_mut().is_some_and(|job| job.engine().wants(index)))
+}
+
+/// Count frame `index` as decoded and not analyzed. Only after `ow_job_wants` said 0.
+#[no_mangle]
+pub extern "C" fn ow_job_skip(job: *mut OwJob, index: u64) -> i32 {
+    with_job(job, |j| j.job.as_mut().is_some_and(|job| job.engine().skip(index)))
+}
+
+/// Pixel layouts for `ow_job_push_pixels`.
+pub const OW_RGBA: u32 = 0;
+pub const OW_BGRA: u32 = 1;
+pub const OW_RGB: u32 = 2;
+
+/// Push frame `index`, packed pixels. `rotation` is 0, 90, 180, or 270 degrees
+/// clockwise: how far to turn the stored picture so it is shown upright.
+/// Returns 0 when the scan has stopped; finish it then.
+#[no_mangle]
+pub extern "C" fn ow_job_push_pixels(
+    job: *mut OwJob,
+    index: u64,
+    pixels: *const u8,
+    width: u32,
+    height: u32,
+    stride: u32,
+    layout: u32,
+    rotation: u32,
+) -> i32 {
+    with_job(job, |j| {
+        let bpp = if layout == OW_RGB { 3 } else { 4 };
+        let Some(len) = (stride as usize).checked_mul(height as usize) else {
+            return false;
+        };
+        if pixels.is_null() || width == 0 || height == 0 || (stride as usize) < width as usize * bpp {
+            return false;
+        }
+        let src = unsafe { std::slice::from_raw_parts(pixels, len) };
+        let mut rgb = std::mem::take(&mut j.rgb);
+        rgb.clear();
+        rgb.reserve(width as usize * height as usize * 3);
+        for row in src.chunks(stride as usize).take(height as usize) {
+            for px in row[..width as usize * bpp].chunks_exact(bpp) {
+                match layout {
+                    OW_BGRA => rgb.extend_from_slice(&[px[2], px[1], px[0]]),
+                    _ => rgb.extend_from_slice(&px[..3]),
+                }
+            }
+        }
+        push(j, index, rgb, width, height, rotation)
+    })
+}
+
+/// Push frame `index` as 8-bit YUV 4:2:0 planes, as MediaCodec and
+/// AVFoundation hand them out. `uv_step` is the byte step between chroma
+/// samples in a row (1 planar, 2 interleaved). `full_range` is 1 for 0-255
+/// luma. `bt709` is 1 for HD and newer video, 0 for BT.601.
+#[no_mangle]
+pub extern "C" fn ow_job_push_yuv420(
+    job: *mut OwJob,
+    index: u64,
+    y: *const u8,
+    y_stride: u32,
+    u: *const u8,
+    v: *const u8,
+    uv_stride: u32,
+    uv_step: u32,
+    width: u32,
+    height: u32,
+    full_range: i32,
+    bt709: i32,
+    rotation: u32,
+) -> i32 {
+    with_job(job, |j| {
+        if y.is_null() || u.is_null() || v.is_null() || width == 0 || height == 0 || uv_step == 0 || (y_stride as usize) < width as usize {
+            return false;
+        }
+        let (cw, ch) = (width.div_ceil(2) as usize, height.div_ceil(2) as usize);
+        let y_len = y_stride as usize * (height as usize - 1) + width as usize;
+        let uv_len = uv_stride as usize * (ch - 1) + (cw - 1) * uv_step as usize + 1;
+        let (yp, up, vp) = unsafe {
+            (std::slice::from_raw_parts(y, y_len), std::slice::from_raw_parts(u, uv_len), std::slice::from_raw_parts(v, uv_len))
+        };
+        let mut rgb = std::mem::take(&mut j.rgb);
+        rgb.clear();
+        rgb.reserve(width as usize * height as usize * 3);
+        // Fixed-point coefficients, scaled by 1024.
+        let (kr, kgu, kgv, kb) = if bt709 != 0 { (1613, 192, 479, 1901) } else { (1436, 352, 731, 1815) };
+        for row in 0..height as usize {
+            let yrow = &yp[row * y_stride as usize..];
+            let crow = (row / 2) * uv_stride as usize;
+            for col in 0..width as usize {
+                let c = crow + (col / 2) * uv_step as usize;
+                let (mut l, cb, cr) = (i32::from(yrow[col]), i32::from(up[c]) - 128, i32::from(vp[c]) - 128);
+                let (cb, cr) = if full_range != 0 {
+                    (cb, cr)
+                } else {
+                    l = ((l - 16) * 1192) >> 10;
+                    ((cb * 1166) >> 10, (cr * 1166) >> 10)
+                };
+                let r = l + ((kr * cr) >> 10);
+                let g = l - ((kgu * cb + kgv * cr) >> 10);
+                let b = l + ((kb * cb) >> 10);
+                rgb.extend_from_slice(&[r.clamp(0, 255) as u8, g.clamp(0, 255) as u8, b.clamp(0, 255) as u8]);
+            }
+        }
+        push(j, index, rgb, width, height, rotation)
+    })
+}
+
+fn push(j: &mut OwJob, index: u64, rgb: Vec<u8>, width: u32, height: u32, rotation: u32) -> bool {
+    let Some(image) = RgbImage::from_raw(width, height, rgb) else {
+        return false;
+    };
+    let image = match rotation % 360 {
+        90 => image::imageops::rotate90(&image),
+        180 => image::imageops::rotate180(&image),
+        270 => image::imageops::rotate270(&image),
+        _ => image,
+    };
+    let mut events = emit(j.events);
+    let Some(job) = j.job.as_mut() else {
+        return false;
+    };
+    let keep = job.engine().push(index, &image, &mut events);
+    j.rgb = image.into_raw();
+    keep
+}
+
+/// A handle that stops this job from any thread. Free it with `ow_stop_free`.
+#[no_mangle]
+pub extern "C" fn ow_job_stop_token(job: *mut OwJob) -> *mut OwStop {
+    if job.is_null() {
+        return std::ptr::null_mut();
+    }
+    let job = unsafe { &*job };
+    match &job.job {
+        Some(inner) => Box::into_raw(Box::new(OwStop(inner.stop.clone()))),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// `reason` is "cancel", "heat", "battery", or "background".
+#[no_mangle]
+pub extern "C" fn ow_stop(token: *mut OwStop, reason: *const c_char) {
+    if token.is_null() {
+        return;
+    }
+    let token = unsafe { &*token };
+    token.0.stop(StopFlag::parse(&from_c(reason).unwrap_or_default()));
+}
+
+#[no_mangle]
+pub extern "C" fn ow_stop_free(token: *mut OwStop) {
+    if !token.is_null() {
+        drop(unsafe { Box::from_raw(token) });
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct EndRequest {
+    /// The decoder reached the end of the pictures without an error.
+    #[serde(default)]
+    clean: bool,
+}
+
+/// End the job and free it. `end` is `{"clean": true}` when the decoder
+/// reached the end without an error. Returns the report JSON.
+#[no_mangle]
+pub extern "C" fn ow_job_finish(job: *mut OwJob, end: *const c_char) -> *mut c_char {
+    if job.is_null() {
+        return to_c(panicked());
+    }
+    let owned = unsafe { Box::from_raw(job) };
+    let answer = catch_unwind(AssertUnwindSafe(move || {
+        let mut owned = owned;
+        let end: EndRequest = from_c(end).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let Some(job) = owned.job.take() else {
+            return panicked();
+        };
+        let declared = job.declared_frames;
+        let report = job.finish(DecodeEnd { clean: end.clean, declared_frames: declared, reason: None }, &mut emit(owned.events));
+        let mut value = serde_json::to_value(&report).unwrap_or_default();
+        value["ok"] = (!report.is_refused()).into();
+        value.to_string()
+    }));
+    to_c(answer.unwrap_or_else(|_| panicked()))
+}
+
+/// Free a job without a report. Its result folder stays until `delete` or `sweep`.
+#[no_mangle]
+pub extern "C" fn ow_job_free(job: *mut OwJob) {
+    if !job.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(job) })));
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn ow_string_free(ptr: *mut c_char) {
-    if ptr.is_null() {
-        return;
-    }
-    unsafe {
-        drop(CString::from_raw(ptr));
+    if !ptr.is_null() {
+        drop(unsafe { CString::from_raw(ptr) });
     }
 }
 
-/// Shell argument list as `{"argv":[...]}`. Same JSON the CLI prints. The caller frees with `ow_string_free`.
-#[no_mangle]
-pub extern "C" fn ow_command(request: *const c_char) -> *mut c_char {
-    ow_command_progress(request, None, std::ptr::null_mut())
-}
-
-pub type OwProgressFn = Option<extern "C" fn(*const c_char, *mut c_void)>;
-
-/// `ow_command`, and when argv contains `--progress` each crop JSON line is passed to `progress` before the report returns.
-/// The callback runs on the caller's thread. `user` is not retained after this function returns.
-#[no_mangle]
-pub extern "C" fn ow_command_progress(
-    request: *const c_char,
-    progress: OwProgressFn,
-    user: *mut c_void,
-) -> *mut c_char {
-    let report = std::panic::catch_unwind(|| {
-        if request.is_null() {
-            return r#"{"status":"refused","summary":"The scan request was empty. Refusing."}"#.to_string();
-        }
-        let text = unsafe { CStr::from_ptr(request) }.to_string_lossy();
-        crate::invoke::invoke_json_progress(&text, &mut |event| {
-            let Some(progress) = progress else {
-                return;
-            };
-            let Ok(line) = serde_json::to_string(&event) else {
-                return;
-            };
-            let Ok(c_line) = CString::new(line) else {
-                return;
-            };
-            progress(c_line.as_ptr(), user);
-        })
-    })
-    .unwrap_or_else(|_| r#"{"status":"refused","summary":"The scan stopped. Refusing.","message":"The scan stopped. Refusing."}"#.to_string());
-    CString::new(report)
-        .unwrap_or_else(|_| CString::new("").unwrap())
-        .into_raw()
-}
-
-/// Scan request JSON in, scan report JSON out. The caller frees the result with `ow_string_free`.
-#[no_mangle]
-pub extern "C" fn ow_scan_request(request: *const c_char) -> *mut c_char {
-    let report = std::panic::catch_unwind(|| scan_from_json(request)).unwrap_or_else(|_| {
-        r#"{"status":"refused","summary":"The scan stopped. Refusing.","message":"The scan stopped. Refusing."}"#.to_string()
-    });
-    CString::new(report)
-        .unwrap_or_else(|_| CString::new("").unwrap())
-        .into_raw()
-}
-
-fn scan_from_json(request: *const c_char) -> String {
-    if request.is_null() {
-        return r#"{"status":"refused","summary":"The scan request was empty. Refusing."}"#.into();
-    }
-    let text = unsafe { CStr::from_ptr(request) }.to_string_lossy();
-    let value: Value = match serde_json::from_str(&text) {
-        Ok(value) => value,
-        Err(_) => {
-            return r#"{"status":"refused","summary":"The scan request was not JSON. Refusing."}"#
-                .into()
-        }
-    };
-    let req = match request_from_value(&value) {
-        Ok(req) => req,
-        Err(message) => {
-            return serde_json::json!({"status":"refused","summary": message, "message": message})
-                .to_string();
-        }
-    };
-    let report = scan_path(&req, &mut |_| {});
-    serde_json::to_string(&report)
-        .unwrap_or_else(|_| r#"{"status":"incomplete","summary":"Incomplete."}"#.into())
-}
-
-fn request_from_value(value: &Value) -> Result<ScanRequest, String> {
-    let input = PathBuf::from(value.get("input").and_then(|v| v.as_str()).unwrap_or(""));
-    let bundles = PathBuf::from(value.get("bundles").and_then(|v| v.as_str()).unwrap_or(""));
-    let bundle = value
-        .get("bundle")
-        .and_then(|v| v.as_str())
-        .unwrap_or("fast")
-        .to_string();
-    let posters = PathBuf::from(value.get("posters").and_then(|v| v.as_str()).unwrap_or(""));
-    let out = PathBuf::from(value.get("out").and_then(|v| v.as_str()).unwrap_or(""));
-    let long_side = value
-        .get("long_side")
-        .and_then(|v| v.as_str())
-        .unwrap_or("640");
-    let coverage = value
-        .get("coverage")
-        .and_then(|v| v.as_str())
-        .unwrap_or("complete");
-    let form = value
-        .get("form_factor")
-        .and_then(|v| v.as_str())
-        .unwrap_or("computer");
-    let provider = value
-        .get("provider")
-        .and_then(|v| v.as_str())
-        .unwrap_or("cpu");
-    let detection =
-        DetectionSize::parse(long_side).ok_or(crate::copy::BAD_DETECTION_SIZE)?;
-    let coverage = Coverage::parse(coverage).ok_or(crate::copy::BAD_COVERAGE)?;
-    let form_factor = match form {
-        "phone" => FormFactor::Phone,
-        "computer" => FormFactor::Computer,
-        _ => return Err(crate::copy::BAD_FORM_FACTOR.into()),
-    };
-    let frames_dir = value
-        .get("frames")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from);
-    let media = value
-        .get("media")
-        .and_then(|v| v.as_object())
-        .map(|media| MediaFacts {
-            width: media.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-            height: media.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-            fps: media.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            frames: media.get("frames").and_then(|v| v.as_u64()).unwrap_or(0),
-            duration_sec: media
-                .get("duration_sec")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
-            video: media
-                .get("video")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            container_unix: media.get("container_unix").and_then(|v| v.as_u64()),
-        });
-    Ok(ScanRequest {
-        input,
-        bundles_dir: bundles,
-        bundle_id: bundle,
-        posters_dir: posters,
-        out_dir: out,
-        detection,
-        coverage,
-        form_factor,
-        execution: resolve_execution(provider),
-        missing: true,
-        wanted: true,
-        abort_after_frames: None,
-        frames_dir,
-        media,
-        now: SystemTime::now(),
-    })
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "fixture"))]
 mod tests {
     use super::*;
     use std::ffi::CString;
 
-    #[test]
-    fn a_missing_file_is_a_refusal_from_the_library_entry() {
-        let request = serde_json::json!({
-            "input": "/tmp/openworld-missing-file.png",
-            "bundles": format!("{}/../../bundles", env!("CARGO_MANIFEST_DIR")),
-            "bundle": "fast",
-            "posters": "/tmp/openworld-missing-posters",
-            "out": "/tmp/openworld-missing-out",
-            "long_side": "640",
-            "coverage": "complete",
-            "form_factor": "computer"
-        });
-        let c = CString::new(request.to_string()).unwrap();
-        let ptr = ow_scan_request(c.as_ptr());
-        let text = unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned();
+    fn answer(ptr: *mut c_char) -> serde_json::Value {
+        let text = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap().to_string();
         ow_string_free(ptr);
-        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(value["status"], "refused");
-        assert_ne!(value["summary"], "No candidate is not a clearance.");
+        serde_json::from_str(&text).unwrap()
+    }
+
+    extern "C" fn count_events(_json: *const c_char, user: *mut c_void) {
+        unsafe { *(user as *mut u32) += 1 };
+    }
+
+    fn setup() -> (tempfile::TempDir, String, String) {
+        let root = tempfile::tempdir().unwrap();
+        let posters = root.path().join("posters");
+        crate::posters::write_fixture_pack(&posters, SystemTime::now()).unwrap();
+        let bundles = env!("CARGO_MANIFEST_DIR").to_string() + "/../../bundles";
+        (root, posters.to_string_lossy().into(), bundles)
     }
 
     #[test]
-    fn a_bad_request_refuses_before_a_scan() {
-        for text in [
-            "{",
-            r#"{"long_side":"100"}"#,
-            r#"{"long_side":"640","coverage":"sometimes"}"#,
-            r#"{"long_side":"640","coverage":"complete","form_factor":"tablet"}"#,
-        ] {
-            let c = CString::new(text).unwrap();
-            let ptr = ow_scan_request(c.as_ptr());
-            let body = unsafe { CStr::from_ptr(ptr) }
-                .to_string_lossy()
-                .into_owned();
-            ow_string_free(ptr);
-            assert!(body.contains("refused"), "{body}");
-            assert!(!body.contains("No candidate is not a clearance."), "{body}");
+    fn a_pushed_scan_finds_the_demo_marker_and_reports_once() {
+        let (root, posters, bundles) = setup();
+        let out = root.path().join("result");
+        let request = serde_json::json!({
+            "v": 1, "input": "", "bundles": bundles, "posters": posters, "out": out,
+            "media": {"width": 640, "height": 480, "frames": 1}
+        });
+        let request = CString::new(request.to_string()).unwrap();
+        let mut events = 0u32;
+        let mut refusal = std::ptr::null_mut();
+        let job = ow_job_start(request.as_ptr(), Some(count_events), &mut events as *mut u32 as *mut c_void, &mut refusal);
+        assert!(!job.is_null(), "{}", answer(refusal));
+        let scene = crate::fixture::demo_scene().image;
+        let rgba: Vec<u8> = scene.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+        assert_eq!(ow_job_wants(job, 0), 1);
+        assert_eq!(ow_job_push_pixels(job, 0, rgba.as_ptr(), 640, 480, 640 * 4, OW_RGBA, 0), 1);
+        let end = CString::new(r#"{"clean":true}"#).unwrap();
+        let report = answer(ow_job_finish(job, end.as_ptr()));
+        assert_eq!(report["status"], "complete", "{report}");
+        assert_eq!(report["headline"]["code"], "possible_candidate");
+        assert_eq!(report["candidates"].as_array().unwrap().len(), 1);
+        assert!(events >= 2);
+    }
+
+    #[test]
+    fn fewer_frames_than_promised_is_incomplete_and_a_stop_says_why() {
+        let (root, posters, bundles) = setup();
+        for (stop, code) in [(None, "not_fully_decoded"), (Some("heat"), "stopped_heat")] {
+            let out = root.path().join(format!("r-{code}"));
+            let request = serde_json::json!({
+                "v": 1, "bundles": bundles, "posters": posters, "out": out,
+                "media": {"width": 64, "height": 48, "frames": 1800, "fps": 30.0, "video": true}
+            });
+            let request = CString::new(request.to_string()).unwrap();
+            let job = ow_job_start(request.as_ptr(), None, std::ptr::null_mut(), std::ptr::null_mut());
+            assert!(!job.is_null());
+            let token = ow_job_stop_token(job);
+            let gray = vec![200u8; 64 * 48 * 3];
+            assert_eq!(ow_job_push_pixels(job, 0, gray.as_ptr(), 64, 48, 64 * 3, OW_RGB, 0), 1);
+            if let Some(reason) = stop {
+                let reason = CString::new(reason).unwrap();
+                ow_stop(token, reason.as_ptr());
+                assert_eq!(ow_job_push_pixels(job, 1, gray.as_ptr(), 64, 48, 64 * 3, OW_RGB, 0), 0);
+            }
+            ow_stop_free(token);
+            let end = CString::new(r#"{"clean":true}"#).unwrap();
+            let report = answer(ow_job_finish(job, end.as_ptr()));
+            assert_eq!(report["status"], "incomplete");
+            assert_eq!(report["reason"]["code"], code);
+            assert!(report["disclosure"].as_array().unwrap().iter().all(|l| l["code"] != "no_clearance"));
         }
     }
 
     #[test]
-    fn a_platform_frame_request_scans_from_the_c_entry() {
-        let dir = tempfile::tempdir().unwrap();
-        let posters = dir.path().join("posters");
-        crate::posters::write_fixture_pack(
-            &posters,
-            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
-        )
-        .unwrap();
-        let frames = dir.path().join("frames");
-        std::fs::create_dir_all(&frames).unwrap();
-        let input = dir.path().join("in.png");
-        image::RgbImage::new(32, 32).save(&input).unwrap();
-        std::fs::copy(&input, frames.join("frame_000000.png")).unwrap();
-        let bundles = format!("{}/../../bundles", env!("CARGO_MANIFEST_DIR"));
+    fn yuv_gray_is_gray_and_bad_input_is_refused() {
+        let (root, posters, bundles) = setup();
         let request = serde_json::json!({
-            "input": input,
-            "bundles": bundles,
-            "bundle": "fast",
-            "posters": posters,
-            "out": dir.path().join("out"),
-            "long_side": "full",
-            "coverage": "measured",
-            "form_factor": "phone",
-            "provider": "gpu",
-            "frames": frames,
-            "media": {
-                "width": 32,
-                "height": 32,
-                "fps": 0.0,
-                "frames": 1,
-                "duration_sec": 0.0,
-                "video": false,
-                "container_unix": 1_000_000_000u64
-            }
+            "v": 1, "bundles": bundles, "posters": posters, "out": root.path().join("yuv"),
+            "media": {"width": 4, "height": 2, "frames": 1}
         });
-        let c = CString::new(request.to_string()).unwrap();
-        let ptr = ow_scan_request(c.as_ptr());
-        let body = unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned();
-        ow_string_free(ptr);
-        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(value["status"], "complete", "{body}");
-        assert_eq!(value["summary"], "No candidate is not a clearance.");
-        assert_eq!(value["coverage"], "measured");
-    }
-
-    #[test]
-    fn a_scan_request_refuses_a_zero_size_before_it_reads_the_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let input = dir.path().join("in.png");
-        image::RgbImage::new(16, 16).save(&input).unwrap();
-        let out = dir.path().join("out");
-        let request = serde_json::json!({
-            "input": input,
-            "bundles": format!("{}/../../bundles", env!("CARGO_MANIFEST_DIR")),
-            "bundle": "fast",
-            "posters": dir.path().join("missing-pack"),
-            "out": &out,
-            "long_side": "640",
-            "coverage": "complete",
-            "form_factor": "computer",
-            "media": { "width": 0, "height": 16, "frames": 1, "video": false }
-        });
-        let c = CString::new(request.to_string()).unwrap();
-        let ptr = ow_scan_request(c.as_ptr());
-        let body = unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned();
-        ow_string_free(ptr);
-        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(value["status"], "refused", "{body}");
-        assert_eq!(value["refusal"], "bad_codec", "{body}");
-        assert_eq!(value["summary"], "Bad codec or unreadable file. Refusing.");
-        assert!(!out.exists());
-        assert!(input.is_file());
+        let request = CString::new(request.to_string()).unwrap();
+        let job = ow_job_start(request.as_ptr(), None, std::ptr::null_mut(), std::ptr::null_mut());
+        let y = [128u8; 8];
+        let uv = [128u8; 2];
+        assert_eq!(ow_job_push_yuv420(job, 0, y.as_ptr(), 4, uv.as_ptr(), uv.as_ptr(), 2, 1, 4, 2, 1, 1, 0), 1);
+        let unsafe_job = unsafe { &*job };
+        assert!(unsafe_job.rgb.chunks(3).all(|p| p == [128, 128, 128]));
+        assert_eq!(ow_job_push_yuv420(job, 1, std::ptr::null(), 4, uv.as_ptr(), uv.as_ptr(), 2, 1, 4, 2, 1, 1, 0), 0);
+        ow_job_free(job);
+        let bad = CString::new("{\"v\":1}").unwrap();
+        let mut refusal = std::ptr::null_mut();
+        assert!(ow_job_start(bad.as_ptr(), None, std::ptr::null_mut(), &mut refusal).is_null());
+        assert_eq!(answer(refusal)["ok"], false);
+        assert!(ow_job_start(std::ptr::null(), None, std::ptr::null_mut(), std::ptr::null_mut()).is_null());
     }
 }

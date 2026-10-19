@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::copy::{CPU_NOTE, GPU_NOTE};
+use crate::copy::{Copy, CPU_NOTE, GPU_NOTE};
 use serde::{Deserialize, Serialize};
 
 /// What actually loaded. There is no reliable "has NPU?" bit.
@@ -22,7 +22,7 @@ impl Execution {
     }
 
     /// CPU gets a before-Analyze note. GPU gets a shorter note. Neural gets none.
-    pub fn device_note(self) -> Option<&'static str> {
+    pub fn device_note(self) -> Option<Copy> {
         match self {
             Execution::Cpu => Some(CPU_NOTE),
             Execution::Gpu => Some(GPU_NOTE),
@@ -54,19 +54,6 @@ pub fn execution_from_provider(provider: &str) -> Execution {
     }
 }
 
-/// The warning follows the provider that loaded.
-/// A name on the command line is not that provider.
-pub fn resolve_execution(_requested: &str) -> Execution {
-    loaded_execution()
-}
-
-/// ONNX Runtime is linked. This build's prebuilt runtime loads the CPU provider.
-/// Apple, Windows, and Android builds register CoreML, CUDA or DirectML, and NNAPI or QNN
-/// when those providers are in the runtime that actually loads.
-pub fn loaded_execution() -> Execution {
-    crate::onnx_exec::active_execution()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,10 +66,8 @@ mod tests {
         assert_eq!(execution_from_provider("NnapiExecutionProvider"), Execution::Gpu);
         assert_eq!(execution_from_provider("CoreMLExecutionProvider"), Execution::Neural);
         assert_eq!(execution_from_provider("QNNExecutionProvider"), Execution::Neural);
-        assert!(Execution::Cpu.device_note().unwrap().contains("CPU"));
-        assert!(Execution::Gpu.device_note().unwrap().contains("GPU"));
+        assert!(Execution::Cpu.device_note().unwrap().1.contains("CPU"));
+        assert!(Execution::Gpu.device_note().unwrap().1.contains("GPU"));
         assert!(Execution::Neural.device_note().is_none());
-        assert_eq!(resolve_execution("CUDAExecutionProvider"), loaded_execution());
-        assert_eq!(loaded_execution(), Execution::Cpu);
     }
 }

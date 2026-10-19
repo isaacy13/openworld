@@ -18,8 +18,26 @@ serde_json = "1.0.134"
 sha2 = "0.10.8"
 thiserror = "1.0.69"
 toml = "0.8.23"
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "copy-dylibs", "api-27", "tls-rustls"] }
+# ONNX Runtime is loaded at run time from a pinned library (scripts/fetch_ort.py).
+# Nothing is downloaded while building. api-24 keeps the DirectML runtime usable.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "api-24"] }
 ndarray = "0.17"
+tempfile = "3.14.0"
+
+[features]
+default = ["fixture", "ort-dynamic"]
+# Synthetic fiducial markers for demos and tests. An official release build leaves it out
+# and refuses a fixture poster pack.
+fixture = []
+# Raw scores in results, for eval/ only. Never in a shipped build.
+eval = []
+ort-dynamic = ["ort/load-dynamic"]
+coreml = ["ort/coreml"]
+nnapi = ["ort/nnapi"]
+directml = ["ort/directml"]
+cuda = ["ort/cuda"]
 
 [dev-dependencies]
-tempfile = "3.14.0"
+
+[build-dependencies]
+sha2 = "0.10.8"

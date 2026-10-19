@@ -33,7 +33,16 @@ pub trait Transport {
     fn get(&mut self, url: &str) -> Result<Vec<u8>, String>;
 }
 
-/// `real_posters_allowed` comes from the Fast curve. The fixture curve leaves it false.
+/// The only transport in this build. Nothing here reaches the network.
+pub struct NoNetwork;
+
+impl Transport for NoNetwork {
+    fn get(&mut self, _url: &str) -> Result<Vec<u8>, String> {
+        Err("real FBI photos stay off".into())
+    }
+}
+
+/// `real_posters_allowed` comes from an official bundle's curve. None allows it yet.
 pub fn update_posters(real_posters_allowed: bool, transport: &mut dyn Transport) -> Result<DraftPack, UpdateError> {
     if !real_posters_allowed {
         return Err(UpdateError::RealPostersOff);
@@ -63,9 +72,14 @@ pub fn classify_list(body: &[u8]) -> Result<Vec<DraftPoster>, UpdateError> {
 }
 
 /// Missing and wanted are classes, not names. ECAP, unidentified remains, and
-/// unnamed Seeking Information are skipped. A named Seeking Information poster
-/// is kept as wanted.
+/// unnamed Seeking Information are skipped, and so is a poster the source marks
+/// resolved. A named Seeking Information poster is kept as wanted.
 pub fn classify_item(item: &Value) -> Option<DraftPoster> {
+    // A poster the source marks resolved is dropped: captured, located, recovered, deceased, surrendered.
+    let status = item.get("status").and_then(|v| v.as_str()).unwrap_or("").to_ascii_lowercase();
+    if ["captured", "located", "recovered", "deceased", "surrendered", "found", "resolved"].iter().any(|s| status.contains(s)) {
+        return None;
+    }
     let classification = item.get("poster_classification").and_then(|v| v.as_str()).unwrap_or("");
     let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("").trim();
     let class_up = classification.to_ascii_uppercase();
@@ -138,7 +152,9 @@ mod tests {
                 {"uid":"e","title":"CHILD EXAMPLE","poster_classification":"ECAP","url":"https://www.fbi.gov/wanted/child"},
                 {"uid":"u","title":"UNIDENTIFIED REMAINS","poster_classification":"Seeking Information","url":"https://www.fbi.gov/wanted/remains"},
                 {"uid":"s","title":"SEEKING INFORMATION","poster_classification":"Seeking Information","url":"https://www.fbi.gov/wanted/seek"},
-                {"uid":"n","title":"CASEY EXAMPLE","poster_classification":"Seeking Information","url":"https://www.fbi.gov/wanted/casey"}
+                {"uid":"n","title":"CASEY EXAMPLE","poster_classification":"Seeking Information","url":"https://www.fbi.gov/wanted/casey"},
+                {"uid":"c","title":"CAUGHT EXAMPLE","poster_classification":"Wanted","status":"captured","url":"https://www.fbi.gov/wanted/caught"},
+                {"uid":"l","title":"LOCATED EXAMPLE","poster_classification":"Missing","status":"located","url":"https://www.fbi.gov/wanted/located"}
             ]
         }"#;
         let mut transport = Scripted(body.to_vec(), false);

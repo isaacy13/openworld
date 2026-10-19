@@ -18,3 +18,4 @@ apple/.build/
 apple/.swiftpm/
 apple/Package.resolved
 bundles/*/weights/
+/third_party/

@@ -3,13 +3,6 @@
 use image::{Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 
-/// A face enters the inventory at this short side on the detection image.
-pub const FACE_SEEN_PX: u32 = 64;
-/// A face is compared only when the original-frame crop is at least this short side.
-pub const FACE_COMPARE_PX: u32 = 112;
-pub const PLATE_MIN_WIDTH: u32 = 80;
-pub const PLATE_MIN_HEIGHT: u32 = 40;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rect {
     pub x: u32,
@@ -51,8 +44,9 @@ impl Rect {
         }
     }
 
+    /// The part of this box inside a `width` by `height` picture. A box wholly outside is `None`.
     pub fn clamp(self, width: u32, height: u32) -> Option<Rect> {
-        if self.w == 0 || self.h == 0 || width == 0 || height == 0 {
+        if self.w == 0 || self.h == 0 || width == 0 || height == 0 || self.x >= width || self.y >= height {
             return None;
         }
         let x = self.x.min(width.saturating_sub(1));
@@ -95,50 +89,9 @@ impl FrameMap {
     }
 }
 
-/// Resize so the long side is `long_side`. Never upscales.
-/// Integer factors use a point sample so fixture markers stay aligned.
-pub fn resize_long_side(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) {
-    let (w, h) = src.dimensions();
-    let long = w.max(h);
-    if long_side == 0 || long <= long_side || long_side >= long {
-        return (src.clone(), FrameMap::identity());
-    }
-    if long % long_side == 0 {
-        let factor = long / long_side;
-        let nw = (w / factor).max(1);
-        let nh = (h / factor).max(1);
-        let mut dst = RgbImage::new(nw, nh);
-        for y in 0..nh {
-            for x in 0..nw {
-                dst.put_pixel(x, y, *src.get_pixel(x * factor, y * factor));
-            }
-        }
-        return (dst, FrameMap::uniform(factor as f32));
-    }
-    let scale = long_side as f32 / long as f32;
-    let nw = ((w as f32 * scale).round() as u32).max(1);
-    let nh = ((h as f32 * scale).round() as u32).max(1);
-    let mut dst = RgbImage::new(nw, nh);
-    for y in 0..nh {
-        for x in 0..nw {
-            let sx = ((x as f32 + 0.5) / nw as f32 * w as f32).floor() as u32;
-            let sy = ((y as f32 + 0.5) / nh as f32 * h as f32).floor() as u32;
-            dst.put_pixel(x, y, *src.get_pixel(sx.min(w - 1), sy.min(h - 1)));
-        }
-    }
-    // Each axis is rounded on its own. A tall frame's height scale is not its width scale,
-    // and the short side of a wide face is that height.
-    (
-        dst,
-        FrameMap {
-            det_to_orig_x: w as f32 / nw as f32,
-            det_to_orig_y: h as f32 / nh as f32,
-        },
-    )
-}
-
-/// Like `resize_long_side`, with an area filter. A detector reads camera
-/// pixels, and a point sample of a large frame aliases the faces it looks for.
+/// Resize so the long side is `long_side`, with an area filter. Never enlarges.
+/// A detector reads camera pixels, and a point sample of a large frame aliases
+/// the faces it looks for.
 pub fn resize_long_side_smooth(src: &RgbImage, long_side: u32) -> (RgbImage, FrameMap) {
     let (w, h) = src.dimensions();
     let long = w.max(h);
@@ -154,13 +107,7 @@ pub fn resize_long_side_smooth(src: &RgbImage, long_side: u32) -> (RgbImage, Fra
 
 pub fn crop(img: &RgbImage, rect: Rect) -> Option<RgbImage> {
     let rect = rect.clamp(img.width(), img.height())?;
-    let mut out = RgbImage::new(rect.w, rect.h);
-    for y in 0..rect.h {
-        for x in 0..rect.w {
-            out.put_pixel(x, y, *img.get_pixel(rect.x + x, rect.y + y));
-        }
-    }
-    Some(out)
+    Some(image::imageops::crop_imm(img, rect.x, rect.y, rect.w, rect.h).to_image())
 }
 
 pub fn paint(canvas: &mut RgbImage, sprite: &RgbImage, x: u32, y: u32) {
@@ -310,43 +257,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sixty_four_on_a_640_preview_maps_to_a_large_original() {
-        let mut src = blank(3840, 2160);
-        src.put_pixel(600, 300, Rgb([0, 0, 0]));
-        let (dst, map) = resize_long_side(&src, 640);
-        assert_eq!(dst.dimensions(), (640, 360));
-        assert_eq!(map.det_to_orig_x, 6.0);
-        assert_eq!(map.det_to_orig_y, 6.0);
-        let det = Rect { x: 100, y: 50, w: 64, h: 64 };
-        let orig = map.to_original(det);
-        assert_eq!(orig.w, 384);
-        assert!(orig.short() >= FACE_COMPARE_PX);
-        assert!(det.short() >= FACE_SEEN_PX);
-    }
-
-    #[test]
     fn a_wide_face_on_a_tall_frame_keeps_the_short_side() {
         // Height is the long side, so the two axes do not share one scale.
-        // A wide face's short side is its height. Mapping that height by the
-        // width scale reports 111 px and skips a comparison the original crop can take.
-        let (_dst, map) = resize_long_side(&blank(241, 322), 320);
+        let (_dst, map) = resize_long_side_smooth(&blank(241, 322), 320);
         let det = Rect { x: 0, y: 0, w: 120, h: 111 };
         let orig = map.to_original(det);
-        assert!(
-            orig.short() >= FACE_COMPARE_PX,
-            "short side {} from {}x{}",
-            orig.short(),
-            orig.w,
-            orig.h
-        );
+        assert!(orig.short() >= 112, "short side {} from {}x{}", orig.short(), orig.w, orig.h);
     }
 
     #[test]
-    fn full_res_64_fails_the_compare_gate() {
-        let det = Rect { x: 0, y: 0, w: 64, h: 64 };
-        let orig = FrameMap::identity().to_original(det);
-        assert!(det.short() >= FACE_SEEN_PX);
-        assert!(orig.short() < FACE_COMPARE_PX);
+    fn a_box_outside_the_picture_is_not_a_box() {
+        assert_eq!(Rect { x: 500, y: 0, w: 10, h: 10 }.clamp(100, 100), None);
+        assert_eq!(Rect { x: 95, y: 0, w: 10, h: 10 }.clamp(100, 100), Some(Rect { x: 95, y: 0, w: 5, h: 10 }));
     }
 
     fn kept(fps: f64, frames: u64) -> Vec<u64> {

@@ -2,35 +2,43 @@
 
 //! On-device scan for OpenWorld.
 //!
-//! Shells in `apple/`, `android/`, and `desktop/` call this library (or the
-//! `openworld` CLI, which is a thin wrapper). They do not detect, track, or compare.
+//! Shells in `apple/`, `android/`, and `desktop/` call this library through
+//! `ffi` (or, on a computer, link it directly). They do not detect, track, or
+//! compare. The `openworld` CLI is a thin wrapper over the same calls.
 
+pub mod arcface;
 pub mod bundle;
 pub mod copy;
 pub mod decode;
-pub mod embed;
+pub mod engine;
 pub mod estimate;
-pub mod arcface;
 pub mod ffi;
-pub mod fiducial;
+#[cfg(feature = "fixture")]
+pub mod fixture;
 pub mod geom;
 pub mod hardware;
 pub mod invoke;
-pub mod onnx_exec;
+#[cfg(feature = "fixture")]
 pub mod measure;
+pub mod onnx_exec;
+pub mod outdir;
+pub mod perception;
 pub mod posters;
+pub mod quality;
+pub mod report;
+pub mod runtime;
 pub mod scan;
 pub mod scrfd;
-pub mod scene;
 pub mod timeutil;
 pub mod track;
 pub mod update;
 pub mod yunet;
 
 pub use bundle::{load_bundles, Bundle};
-pub use estimate::{estimate, Coverage, DetectionSize, FormFactor};
-pub use hardware::{execution_from_provider, loaded_execution, resolve_execution, Execution};
-pub use invoke::{invoke_argv, invoke_json};
-pub use measure::measure_fast;
-pub use posters::{load_pack, write_fixture_pack, PosterPack};
-pub use scan::{delete_output, leave_prompt, media_warnings, scan_path, MediaFacts, ScanReport, ScanRequest};
+pub use copy::Line;
+pub use engine::{DecodeEnd, Engine, Event, StopFlag, StopReason};
+pub use estimate::{Coverage, Device, Estimate};
+pub use hardware::{execution_from_provider, Execution};
+pub use posters::{load_pack, PosterPack};
+pub use report::{ScanReport, Status, TrackStatus};
+pub use scan::{delete_output, estimate_for, leave_prompt, media_warnings, scan_path, MediaFacts, ScanRequest};
