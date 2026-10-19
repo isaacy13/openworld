@@ -1,30 +1,62 @@
 # Measurements
 
-`measure_fast.py` runs the `openworld measure` command and writes the Fast curve. The script only counts. The scan is the Rust library.
+`real_faces.py` measures the Fast bundle (YuNet 2023mar + SFace 2021dec) on public face photos and writes its curve, `bundles/fast/curve.json`. The scan is the Rust library. The scripts only count.
 
-The curve reports, at the locked cutoff:
+Real FBI posters stay off. The curve says `real_posters_allowed: false`, and nothing here turns them on.
 
-- True positive: same fixture identity, score at or above the cutoff.
-- False negative: same fixture identity, score below the cutoff.
-- False positive: different fixture identity, score at or above the cutoff.
-- True negative: different fixture identity, score below the cutoff.
+## What is measured
 
-Each rate has a count, a trial count, and a 95% Wilson interval. Genuine trials are 16 fixture identities at 10 placements. Impostor trials are 160 pairs, and each probe identity differs from its poster. A trial that is not compared is refused instead of being counted as a true negative. Score min, median, and max are published for both sets.
+- **Cutoff.** Every same-person and every different-person pair of LFW photos (about 87 million pairs), faces enlarged 2x. The measured cutoff is the lowest score whose false match rate (FMR) is at or under one in a million. The run fails if the manifest threshold is under it.
+- **FMR and FNMR** at the manifest threshold, at FMR 1e-3 to 1e-6, and in a table every 0.02. Each rate has its count, its trials, a Wilson interval, and an identity bootstrap interval (people are resampled, not pairs, because one person's photos are in many pairs). The false matches also report how many people and photos are behind them.
+- **Miss rate.** The headline is one pair per person: each person's first two compared photos. That is what one poster against one photo sees. The all-pairs miss rate is weighted toward people with many photos.
+- **Quality gates.** The share of LFW photos whose center face is compared, and the count for each gate code (`why_small`, `why_pose`, `why_blur`, `why_exposure`, `why_confidence`, `why_unaligned`), at 2x and at native size. The face nearest the middle of the photo is the labeled person; when it fails a gate, another face is never used in its place.
+- **Held out.** CALFW (cross-age) and CPLFW (cross-pose), 6,000 pairs each, at the manifest threshold, unchanged. A same-person pair without a compared face is a miss. A different-person pair without one is reported as not compared, never as a true negative.
+- **Scans.** Stills through `openworld scan`: enrolled people found, a wrong poster, strangers carded. The scores the scan reports must equal the library's cosines within 1e-4. Then H.264 clips: the enrolled face on screen for one second while it drifts and grows, under `complete` and `measured`; stranger clips (the false match rate of a multi-frame template); and a two-frame appearance, which must never be a candidate (`too_brief`).
+- **Phone files.** A JPEG stored sideways with its orientation tag, a 12-megapixel photo with a 560 px face and one with a 190 px face, and a portrait clip stored on its side with a display rotation. The detection size is automatic, so both 12-megapixel files should be found.
+- **Detection.** WIDER FACE validation recall for labeled faces of 112 px and up on the original image (the compare size), 64 to 112 px, and 64 px and up on the detection image, each split by occlusion.
+- **Hardware.** The machine, the provider (CPU), and `openworld bench`: timings per provider and how far an accelerated provider's scores drift from the CPU's.
+- **Chance per scan.** Expected false candidates = FMR x posters x compared faces, for 50, 200, and 1,000 posters and 10, 100, and 1,000 faces, with the upper bound. `chance.fmr_at_cutoff` drives the line each scan prints.
 
-The same run still reports false match rate, false non-match rate, detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second. Plate text is counted apart from faces: a published plate that matches, a different plate, and a plate with nothing published.
+The photos are downloaded into `--data` and refused unless their SHA-256 matches the pins in `real_faces.py`. No photo is committed. Only counts, rates, and thresholds are written.
 
-The published Fast curve is a fixture-marker measurement. `real_posters_allowed` is false.
+## Run
 
-## Open
+```sh
+python3 scripts/fetch_ort.py                 # pinned ONNX Runtime
+python3 scripts/fetch_weights.py fast        # pinned YuNet and SFace
+cargo build --release --manifest-path core/Cargo.toml -p openworld-cli --features eval
+cargo build --release --manifest-path eval/real/Cargo.toml
+python3 eval/real_faces.py --bin core/target/release/openworld \
+  --eval-bin eval/real/target/release/openworld-eval --out /tmp/fast-curve.json
+```
 
-`real_faces.py` measures the Open bundle and writes `bundles/open/curve.json`. It downloads LFW and WIDER FACE validation into `--data` and refuses an archive whose SHA-256 is not the pin. No photograph is committed. It needs `eval/real` built and the Open weights fetched with `scripts/fetch_weights.py open`.
+`--features eval` puts each track's poster scores in the result. Never ship that build. `eval/real` (`openworld-eval`) prints the library's vectors and builds the evaluation poster pack; it is not shipped, and the `openworld` command still has no way to turn a photo into a poster.
 
-- LFW: the ten standard folds, then every same-person and different-person pair, so a false match rate near one in a million has trials behind it. The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand. The miss rate is reported over all pairs and over one pair per person; the second is what one poster against one photo sees.
-- Scans: 100 LFW people enrolled from one photo each, a different photo of each, and 100 strangers, through `openworld scan`. Then 1280x720 H.264 clips with the enrolled face on screen for one second, under both coverages.
-- Phone files: each enrolled person whose plain still was found, in the files a phone makes. A JPEG stored a quarter turn off with the orientation tag that shows it upright. A 12-megapixel photo with a large face, and one with a face the size of one in a group photo, at 640 and at full resolution. A portrait H.264 clip stored on its side with a display rotation. The face and poster are the ones that already matched, so a miss here is the decode, the turn, or the detection size. A group-photo face at 640 is expected to be left out. The check fails if a 12-megapixel photo missed at 640 comes without the warning that names the faces left out.
-- Held out: CALFW and CPLFW, 6,000 pairs each, read from a Hugging Face mirror at a pinned commit and checked against one digest over the pairs file and every photo. The LFW cutoff is applied unchanged. A same-person pair with a photo that has no compared face counts as a miss.
-- WIDER FACE: detection recall for labeled faces 72 px and up on the detection image, and detections that land on no labeled face.
+Copy the full run's output to `bundles/fast/curve.json` and rebuild: the library pins an official bundle's curve by its SHA-256 at build time.
 
-LFW is press photos. It sets Open's cutoff on that photo type only. It is not a mugshot or poster set, and NIST numbers are not this curve. SCface needs that project's research agreement. The Open curve sets `real_posters_allowed` to false.
+CI runs a fixed sample against the published curve:
 
-`--people`, `--wider-images`, `--scan-people`, `--video-people`, and `--variant-people` take a fixed sample; the held-out sets use their first fold. With `--check`, a sample passes when each published rate lies inside the sample's 95% interval. The full run instead has to clear fixed floors, and the manifest cutoff has to sit at or within 0.01 above the measured one.
+```sh
+python3 eval/real_faces.py --bin core/target/release/openworld \
+  --eval-bin eval/real/target/release/openworld-eval \
+  --people 300 --wider-images 500 --scan-people 30 --video-people 5 \
+  --check bundles/fast/curve.json > /dev/null
+```
+
+It fails unless the score at FMR 1e-4 is within 0.01 of the published one, every sampled rate's 95% interval holds the published rate (LFW false matches included), no stranger still or clip gets a card, and the scan's scores equal the library's. A full run fails on the last two and when the manifest threshold is under the measured cutoff. It still writes the curve first.
+
+`python3 -m unittest discover -s eval -p 'test_*.py'` tests the counting on synthetic numbers.
+
+## What the numbers mean
+
+The base rate matters more than the rate. A scan compares every face with every poster. At an FMR of one in a million, 1,000 posters and 1,000 faces are a million comparisons: about one false candidate from chance alone. The curve's `chance.per_scan` table gives the numbers and their upper bounds. A candidate is not an identification.
+
+They do not mean:
+
+- LFW, CALFW, and CPLFW are celebrity press photos. They are not mugshots, posters, CCTV, or NIST. NIST FRTE numbers are not this curve.
+- LFW has no demographic labels, so there is no subgroup analysis. Rates by age, sex, or skin tone are not measured.
+- LFW faces are enlarged from about 94 px. This is faces near the 112 px compare size.
+- The clips are stills moved on a gray screen, not real footage.
+- The rates are on the CPU. Another provider is described only as far as `openworld bench` shows its scores match.
+
+`open-curve-2026-10-18.json` is the earlier Open bundle's curve, measured on the old pipeline at cutoff 0.51. It is kept for reference. It is not comparable with this one.
