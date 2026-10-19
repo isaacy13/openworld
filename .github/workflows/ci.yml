@@ -363,13 +363,19 @@ jobs:
       - name: iPhone app for the simulator
         working-directory: apple
         run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorld -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      # The Mac run keeps each test movie it makes; the simulator copies one only when its
+      # own encoders fail (apple/Tests/OpenWorldDecoderTests/MediaMaker.swift).
       - name: Mac app, kit and decoder tests on the linked core, launch smoke test
         working-directory: apple
+        env:
+          TEST_RUNNER_OPENWORLD_TEST_MEDIA: ${{ runner.temp }}/test-media
         run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorldMac -destination 'platform=macOS,arch=arm64' test
       - name: the iOS simulators on this runner
         run: xcrun simctl list devices available
       - name: kit and decoder tests on an iOS simulator
         working-directory: apple
+        env:
+          TEST_RUNNER_OPENWORLD_TEST_MEDIA: ${{ runner.temp }}/test-media
         run: |
           udid="$(python3 scripts/pick-simulator.py)"
           xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorldTests -destination "id=$udid" CODE_SIGNING_ALLOWED=NO test

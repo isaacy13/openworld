@@ -103,6 +103,11 @@ enum MediaMaker {
     /// A QuickTime movie of gray pictures through AVAssetWriter: H.264, else Motion JPEG
     /// where this machine has no H.264 encoder. `transform` is the display transform.
     /// Returns the codec used.
+    ///
+    /// With `OPENWORLD_TEST_MEDIA` set (CI sets it for the Mac and the simulator runs), each
+    /// movie made is also kept there, and a machine whose encoders all fail copies the same
+    /// movie from there instead: the iOS simulator's encoder can stall for a whole run, and
+    /// the decoders, not the encoder, are under test.
     @discardableResult
     static func movie(
         at url: URL, width: Int, height: Int, count: Int, keyFrameInterval: Int = 10,
@@ -112,15 +117,33 @@ enum MediaMaker {
         // together, so H.264 also gets a few tries before the fallback.
         movieLock.lock()
         defer { movieLock.unlock() }
+        let kept = ProcessInfo.processInfo.environment["OPENWORLD_TEST_MEDIA"].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+                .appendingPathComponent("\(width)x\(height)-\(count)-k\(keyFrameInterval)-\(url.lastPathComponent)")
+        }
+        let fm = FileManager.default
         var failures: [String] = []
         for codec in [AVVideoCodecType.h264, .h264, .h264, .jpeg] {
-            try? FileManager.default.removeItem(at: url)
+            try? fm.removeItem(at: url)
             do {
                 try write(url, codec: codec, width: width, height: height, count: count, keyFrameInterval: keyFrameInterval, transform: transform, picture: picture)
+                // Best effort: a copy that cannot be kept is not this movie's failure.
+                if let kept, !fm.fileExists(atPath: kept.path) {
+                    try? fm.createDirectory(at: kept.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    if (try? fm.copyItem(at: url, to: kept)) != nil {
+                        try? codec.rawValue.write(to: kept.appendingPathExtension("codec"), atomically: true, encoding: .utf8)
+                    }
+                }
                 return codec
             } catch {
                 failures.append("\(codec.rawValue): \(error)")
             }
+        }
+        if let kept, let codec = try? String(contentsOf: kept.appendingPathExtension("codec"), encoding: .utf8) {
+            try? fm.removeItem(at: url)
+            try fm.copyItem(at: kept, to: url)
+            print("made here failed (\(failures.joined(separator: "; "))); copied \(kept.lastPathComponent)")
+            return AVVideoCodecType(rawValue: codec)
         }
         throw MakeFailure.writer(failures.joined(separator: "; "))
     }
