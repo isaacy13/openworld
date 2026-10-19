@@ -1,0 +1,5 @@
+module OpenWorldCore [system] {
+    header "shim.h"
+    link "openworld_core"
+    export *
+}

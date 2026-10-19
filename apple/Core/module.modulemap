@@ -1,0 +1,4 @@
+module OpenWorldCore {
+    header "openworld.h"
+    export *
+}

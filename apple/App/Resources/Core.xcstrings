@@ -1,0 +1,1050 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "already_warm": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone is already warm. The scan may stop early."
+          }
+        }
+      }
+    },
+    "bad_codec": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bad codec or unreadable file. Refusing."
+          }
+        }
+      }
+    },
+    "bad_hash": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack hash does not match. Refusing."
+          }
+        }
+      }
+    },
+    "bad_request": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scan request was not understood. Refusing."
+          }
+        }
+      }
+    },
+    "bad_vectors": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack vectors are not valid for this bundle. Refusing."
+          }
+        }
+      }
+    },
+    "band_above": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearly past the locked cutoff."
+          }
+        }
+      }
+    },
+    "band_near": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just past the locked cutoff."
+          }
+        }
+      }
+    },
+    "band_well": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Far past the locked cutoff."
+          }
+        }
+      }
+    },
+    "battery_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A long scan uses a lot of battery."
+          }
+        }
+      }
+    },
+    "below_cutoff": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Below the locked cutoff. Not a candidate."
+          }
+        }
+      }
+    },
+    "brief_face": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A brief face can be missed."
+          }
+        }
+      }
+    },
+    "bundle_not_found": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That bundle is not in the catalog. Refusing."
+          }
+        }
+      }
+    },
+    "bundle_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scores are not comparable across bundles. Results name the bundle you pick."
+          }
+        }
+      }
+    },
+    "cancelled": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You stopped the scan before every frame was analyzed."
+          }
+        }
+      }
+    },
+    "catalog": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bundle catalog could not be read. Refusing."
+          }
+        }
+      }
+    },
+    "chance_unknown": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How often a stranger passes this cutoff is not measured yet."
+          }
+        }
+      }
+    },
+    "choose_class": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose missing, wanted, or both."
+          }
+        }
+      }
+    },
+    "classes_both": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing and wanted."
+          }
+        }
+      }
+    },
+    "classes_missing": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing."
+          }
+        }
+      }
+    },
+    "classes_wanted": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wanted."
+          }
+        }
+      }
+    },
+    "coverage_complete": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every decoded frame."
+          }
+        }
+      }
+    },
+    "coverage_measured": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 frames a second, plus the tracker."
+          }
+        }
+      }
+    },
+    "cpu_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This scan runs on the CPU. It will be slower, warmer, and use more battery."
+          }
+        }
+      }
+    },
+    "delete_failed": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The result could not be deleted."
+          }
+        }
+      }
+    },
+    "delete_foreign": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refusing to delete a directory that is not an OpenWorld result."
+          }
+        }
+      }
+    },
+    "deleted": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted."
+          }
+        }
+      }
+    },
+    "embedder_mismatch": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack was made with another embedder. Refusing."
+          }
+        }
+      }
+    },
+    "estimate_caveat": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a planning estimate, not a thermal measurement."
+          }
+        }
+      }
+    },
+    "estimate_rough": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model could not be timed on this device, so this estimate is rough."
+          }
+        }
+      }
+    },
+    "expired_pack": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack is expired. Refusing."
+          }
+        }
+      }
+    },
+    "face_unscored": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This face could not be scored."
+          }
+        }
+      }
+    },
+    "fixture_markers": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo posters. These are synthetic markers, not faces."
+          }
+        }
+      }
+    },
+    "fixture_off": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build does not read demo posters. Refusing."
+          }
+        }
+      }
+    },
+    "future_pack": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack is dated in the future. Check this device's clock. Refusing."
+          }
+        }
+      }
+    },
+    "gpu_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This scan runs on the GPU and may warm the device."
+          }
+        }
+      }
+    },
+    "heat_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone may get hot. If heat or the system stops the scan, the result is Incomplete."
+          }
+        }
+      }
+    },
+    "incomplete": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incomplete."
+          }
+        }
+      }
+    },
+    "leave_missing": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678)."
+          }
+        }
+      }
+    },
+    "leave_wanted": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov."
+          }
+        }
+      }
+    },
+    "leaving": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are leaving OpenWorld."
+          }
+        }
+      }
+    },
+    "missing_pack": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack is missing. Refusing."
+          }
+        }
+      }
+    },
+    "missing_program": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scan program is not on this device. Refusing."
+          }
+        }
+      }
+    },
+    "missing_weights": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bundle weights are not installed, or their SHA-256 is not pinned. Refusing."
+          }
+        }
+      }
+    },
+    "no_agency": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld does not contact an agency."
+          }
+        }
+      }
+    },
+    "no_camera": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a file you already have. There is no camera."
+          }
+        }
+      }
+    },
+    "no_class": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No class was on."
+          }
+        }
+      }
+    },
+    "no_clearance": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No candidate is not a clearance."
+          }
+        }
+      }
+    },
+    "no_fps": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decoder did not report a frame rate. Refusing."
+          }
+        }
+      }
+    },
+    "no_training": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld does not train on this file."
+          }
+        }
+      }
+    },
+    "nobody_enrolled": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nobody is enrolled."
+          }
+        }
+      }
+    },
+    "not_compared": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not compared."
+          }
+        }
+      }
+    },
+    "not_fully_decoded": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file was not fully decoded."
+          }
+        }
+      }
+    },
+    "not_identification": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A candidate is not an identification."
+          }
+        }
+      }
+    },
+    "not_measured": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not measured yet."
+          }
+        }
+      }
+    },
+    "not_real_proof": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device does not mean the file is real."
+          }
+        }
+      }
+    },
+    "not_sending": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld is not sending a report."
+          }
+        }
+      }
+    },
+    "nothing_uploaded": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is uploaded."
+          }
+        }
+      }
+    },
+    "old_file": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is older than about 30 days."
+          }
+        }
+      }
+    },
+    "old_pack": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The posters are more than 7 days old. Update the posters. Refusing."
+          }
+        }
+      }
+    },
+    "on_device": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file stays on this device."
+          }
+        }
+      }
+    },
+    "only_fbi": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld only opens an FBI page."
+          }
+        }
+      }
+    },
+    "out_create": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The output directory could not be created. Refusing."
+          }
+        }
+      }
+    },
+    "out_foreign": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That folder is not empty and is not an OpenWorld result. Choose an empty folder. Refusing."
+          }
+        }
+      }
+    },
+    "out_overlap": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The result folder cannot hold the file, the posters, or the bundles. Refusing."
+          }
+        }
+      }
+    },
+    "out_replace": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The output directory could not be replaced. Refusing."
+          }
+        }
+      }
+    },
+    "possible_candidate": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possible candidate. Not an identification."
+          }
+        }
+      }
+    },
+    "posters_stale": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The posters were fetched more than a day ago."
+          }
+        }
+      }
+    },
+    "real_posters_off": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Real FBI photos stay off. No bundle has a curve that allows them."
+          }
+        }
+      }
+    },
+    "result_unwritten": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The result could not be written."
+          }
+        }
+      }
+    },
+    "runtime": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ONNX Runtime did not load. Refusing."
+          }
+        }
+      }
+    },
+    "stopped_background": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app left the screen, so the scan stopped."
+          }
+        }
+      }
+    },
+    "stopped_battery": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The battery ran low, so the scan stopped."
+          }
+        }
+      }
+    },
+    "stopped_heat": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The device got too hot, so the scan stopped."
+          }
+        }
+      }
+    },
+    "suggest_computer": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A computer will finish this sooner. You can still run a complete scan on this phone."
+          }
+        }
+      }
+    },
+    "timestamps_disagree": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file timestamps disagree."
+          }
+        }
+      }
+    },
+    "too_brief": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On screen too briefly to be a candidate. Not a clearance."
+          }
+        }
+      }
+    },
+    "too_large": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This picture is too large to scan safely. Refusing."
+          }
+        }
+      }
+    },
+    "unauthenticated": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is not authenticated."
+          }
+        }
+      }
+    },
+    "unknown_perception": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack perception is not recognized. Refusing."
+          }
+        }
+      }
+    },
+    "unreadable": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file could not be read. Refusing."
+          }
+        }
+      }
+    },
+    "unreadable_pack": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack could not be read. Refusing."
+          }
+        }
+      }
+    },
+    "why_blur": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The face is too blurred."
+          }
+        }
+      }
+    },
+    "why_confidence": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The detector was not sure this is a face."
+          }
+        }
+      }
+    },
+    "why_exposure": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The face is too dark or too bright."
+          }
+        }
+      }
+    },
+    "why_pose": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The face is turned too far from the camera."
+          }
+        }
+      }
+    },
+    "why_small": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The face is under 112 pixels across in the original file."
+          }
+        }
+      }
+    },
+    "why_unaligned": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The eyes, nose, and mouth could not be found."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
