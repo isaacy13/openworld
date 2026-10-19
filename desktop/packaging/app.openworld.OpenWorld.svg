@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- A picture frame with a lens over it, in the accent blue. -->
+  <rect x="8" y="12" width="112" height="104" rx="22" fill="#2F5D8C"/>
+  <rect x="24" y="30" width="64" height="52" rx="8" fill="none" stroke="#FFFFFF" stroke-width="6"/>
+  <path d="M30 76 l16 -18 l12 12 l8 -8 l16 14" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="82" cy="78" r="18" fill="#2F5D8C" stroke="#FFFFFF" stroke-width="7"/>
+  <path d="M95 91 l14 14" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+</svg>
