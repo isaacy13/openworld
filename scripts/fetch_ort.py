@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Download the ONNX Runtime shared library the core loads, and keep only pinned bytes.
 
-The wheel is fetched from PyPI and kept only when its SHA-256 matches the pin
-below (the digest PyPI publishes for that file). The library inside it is
-copied to third_party/onnxruntime/<platform>/. Nothing is trusted because it
+Every pin is in core/openworld-core/onnxruntime.pins, the file the core's
+build script reads too. The wheel is fetched from PyPI and kept only when its
+SHA-256 matches the wheel pin (the digest PyPI publishes for that file). Each
+file taken out of it is kept only when its own SHA-256 matches its pin, and is
+written to third_party/onnxruntime/<platform>/. Nothing is trusted because it
 came from a known address.
 
 The core finds the library through OPENWORLD_ORT_LIB, then next to the
-program, then in that folder (see core/openworld-core/src/runtime.rs).
+program, then in that folder (see core/openworld-core/src/runtime.rs), and
+refuses it unless its SHA-256 is the `library` pin for the platform it was
+built for.
 """
 
 import argparse
@@ -21,35 +25,35 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PINS_FILE = ROOT / "core" / "openworld-core" / "onnxruntime.pins"
+KINDS = ("wheel", "library", "companion")
 
-# platform: (wheel file name, sha256 published by PyPI, library inside the wheel)
-PINS = {
-    "linux-x86_64": (
-        "onnxruntime-1.28.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-        "0a83bdb70d143cede762b677789bf2a7acca54b3fb82565601d5c30695aa933c",
-        "libonnxruntime.so",
-    ),
-    "linux-aarch64": (
-        "onnxruntime-1.28.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
-        "4e81a23df16e7acb9d51b06d30cc098e49315ef9180f97bc2221d167b4b04d9c",
-        "libonnxruntime.so",
-    ),
-    "windows-x86_64": (
-        "onnxruntime-1.28.0-cp312-cp312-win_amd64.whl",
-        "c35064f9b3c43c81c5d5d282091401d0f1ff22796d93ccade4ea2ece5e137ab8",
-        "onnxruntime.dll",
-    ),
-    "windows-x86_64-directml": (
-        "onnxruntime_directml-1.24.4-cp312-cp312-win_amd64.whl",
-        "f2ecb68b7b7b259d2ef3112ae760149f9b5a1e7c0fbb73d539da6250a648a614",
-        "onnxruntime.dll",
-    ),
-    "macos-arm64": (
-        "onnxruntime-1.28.0-cp312-cp312-macosx_14_0_arm64.whl",
-        "26ff0fdd06efb6c155bae95387a09db1a2be89c7a03e4d0bffd5a171cc2826da",
-        "libonnxruntime.dylib",
-    ),
-}
+
+def read_pins(path: Path = PINS_FILE) -> dict:
+    """{platform: {"wheel": (sha, name), "files": [(kind, sha, name, member), ...]}}"""
+    pins: dict = {}
+    for number, raw in enumerate(path.read_text().splitlines(), 1):
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        fields = line.split()
+        if len(fields) != 5 or fields[1] not in KINDS:
+            raise SystemExit(f"{path.name}:{number}: expected 'platform kind sha256 name member'. Refusing.")
+        name, kind, sha, leaf, member = fields
+        if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            raise SystemExit(f"{path.name}:{number}: {sha} is not a lowercase SHA-256. Refusing.")
+        entry = pins.setdefault(name, {"wheel": None, "files": []})
+        if kind == "wheel":
+            if entry["wheel"] is not None:
+                raise SystemExit(f"{path.name}:{number}: {name} has two wheels. Refusing.")
+            entry["wheel"] = (sha, leaf)
+        else:
+            entry["files"].append((kind, sha, leaf, member))
+    for name, entry in pins.items():
+        libraries = [f for f in entry["files"] if f[0] == "library"]
+        if entry["wheel"] is None or len(libraries) != 1:
+            raise SystemExit(f"{path.name}: {name} needs one wheel and one library line. Refusing.")
+    return pins
 
 
 def host_platform() -> str:
@@ -70,51 +74,66 @@ def wheel_url(wheel: str) -> str:
     raise SystemExit(f"{wheel} is not listed on PyPI. Refusing.")
 
 
-def fetch(name: str, out_root: Path) -> Path:
-    wheel, want, library = PINS[name]
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def library_path(name: str, out_root: Path, pins: dict) -> Path:
+    leaf = next(f[2] for f in pins[name]["files"] if f[0] == "library")
+    return out_root / name / leaf
+
+
+def fetch(name: str, out_root: Path, pins: dict) -> Path:
+    want_wheel, wheel = pins[name]["wheel"]
+    files = pins[name]["files"]
     target_dir = out_root / name
-    target = target_dir / library
-    stamp = target_dir / "wheel.sha256"
-    if target.is_file() and stamp.is_file() and stamp.read_text().strip() == want:
+    target = library_path(name, out_root, pins)
+    if all((target_dir / leaf).is_file() and sha256_file(target_dir / leaf) == sha for _, sha, leaf, _ in files):
         print(f"{name}: already pinned")
         return target
     with urllib.request.urlopen(wheel_url(wheel), timeout=300) as response:
         body = response.read()
     got = hashlib.sha256(body).hexdigest()
-    if got != want:
-        raise SystemExit(f"{name}: SHA-256 {got} is not the pin {want}. Refusing.")
-    target_dir.mkdir(parents=True, exist_ok=True)
+    if got != want_wheel:
+        raise SystemExit(f"{name}: wheel SHA-256 {got} is not the pin {want_wheel}. Refusing.")
     with zipfile.ZipFile(io.BytesIO(body)) as archive:
-        members = [m for m in archive.namelist() if m.startswith("onnxruntime/capi/")]
-        wanted = [m for m in members if Path(m).name.startswith(library.split(".")[0]) or "providers_shared" in m]
-        if not any(Path(m).name.startswith(library) for m in wanted):
-            raise SystemExit(f"{name}: {library} is not in {wheel}. Refusing.")
-        for member in wanted:
-            data = archive.read(member)
-            leaf = Path(member).name
-            # The Linux wheel names the file with its version. The loader asks for the plain name.
-            if leaf.startswith("libonnxruntime.so."):
-                leaf = "libonnxruntime.so"
-            elif leaf.startswith("libonnxruntime.") and leaf.endswith(".dylib") and leaf != "libonnxruntime.dylib":
-                leaf = "libonnxruntime.dylib"
-            (target_dir / leaf).write_bytes(data)
-    stamp.write_text(want + "\n")
-    print(f"{name}: pinned {want}")
+        extracted = []
+        for kind, want, leaf, member in files:
+            try:
+                data = archive.read(member)
+            except KeyError:
+                raise SystemExit(f"{name}: {member} is not in {wheel}. Refusing.") from None
+            got = hashlib.sha256(data).hexdigest()
+            if got != want:
+                raise SystemExit(f"{name}: {member} SHA-256 {got} is not the {kind} pin {want}. Refusing.")
+            extracted.append((leaf, data))
+    # Written only after every file matched, so a refusal leaves nothing half-done.
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for leaf, data in extracted:
+        (target_dir / leaf).write_bytes(data)
+    print(f"{name}: pinned {next(f[1] for f in files if f[0] == 'library')}")
     return target
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("platform", nargs="?", default=None, help=f"one of {', '.join(PINS)}; the host when empty")
+    pins = read_pins()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("platform", nargs="?", default=None, help=f"one of {', '.join(pins)}; the host when empty")
+    parser.add_argument("--all", action="store_true", help="fetch and check every pinned platform")
     parser.add_argument("--out", default=str(ROOT / "third_party" / "onnxruntime"))
     parser.add_argument("--print-path", action="store_true", help="print the library path on the last line")
     args = parser.parse_args()
-    name = args.platform or host_platform()
-    if name not in PINS:
-        raise SystemExit(f"No pinned ONNX Runtime for {name}. Refusing.")
-    path = fetch(name, Path(args.out))
+    names = list(pins) if args.all else [args.platform or host_platform()]
+    for name in names:
+        if name not in pins:
+            raise SystemExit(f"No pinned ONNX Runtime for {name}. Refusing.")
+    paths = [fetch(name, Path(args.out), pins) for name in names]
     if args.print_path:
-        print(path)
+        print(paths[-1])
 
 
 if __name__ == "__main__":

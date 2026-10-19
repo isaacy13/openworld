@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Pins the official bundle manifests into the library, and names the
-//! pinned ONNX Runtime that `scripts/fetch_ort.py` placed for development.
+//! Pins the official bundle manifests into the library, builds in the one
+//! ONNX Runtime library digest this target may load (from `onnxruntime.pins`),
+//! and names the copy `scripts/fetch_ort.py` placed for development.
 
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -11,7 +12,7 @@ fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo = manifest_dir.join("../..");
     pin_official_bundles(&repo.join("bundles"));
-    name_dev_runtime(&repo.join("third_party/onnxruntime"));
+    pin_runtime(&manifest_dir.join("onnxruntime.pins"), &repo.join("third_party/onnxruntime"));
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -49,19 +50,54 @@ fn pin_official_bundles(root: &Path) {
     fs::write(out, body).unwrap();
 }
 
-fn name_dev_runtime(root: &Path) {
+/// The ONNX Runtime pin for the target, from `onnxruntime.pins` (the file
+/// `scripts/fetch_ort.py` reads too), and the copy that script placed for development.
+fn pin_runtime(pins: &Path, root: &Path) {
+    println!("cargo:rerun-if-changed={}", pins.display());
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_DIRECTML");
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-    let (platform, lib) = match (os.as_str(), arch.as_str()) {
-        ("linux", "x86_64") => ("linux-x86_64", "libonnxruntime.so"),
-        ("linux", "aarch64") => ("linux-aarch64", "libonnxruntime.so"),
-        ("windows", "x86_64") => ("windows-x86_64", "onnxruntime.dll"),
-        ("macos", "aarch64") => ("macos-arm64", "libonnxruntime.dylib"),
-        _ => return,
+    let directml = std::env::var_os("CARGO_FEATURE_DIRECTML").is_some();
+    let platform = match (os.as_str(), arch.as_str()) {
+        ("linux", "x86_64") => Some("linux-x86_64"),
+        ("linux", "aarch64") => Some("linux-aarch64"),
+        ("windows", "x86_64") if directml => Some("windows-x86_64-directml"),
+        ("windows", "x86_64") => Some("windows-x86_64"),
+        ("macos", "aarch64") => Some("macos-arm64"),
+        // Android loads the library from its signed APK; iOS links it statically.
+        _ => None,
     };
-    let path = root.join(platform).join(lib);
-    println!("cargo:rerun-if-changed={}", path.display());
-    if let Ok(path) = path.canonicalize() {
-        println!("cargo:rustc-env=OPENWORLD_ORT_DEV={}", path.display());
+    let text = fs::read_to_string(pins).unwrap_or_else(|err| panic!("{}: {err}", pins.display()));
+    let library = platform.map(|platform| library_pin(&text, platform).unwrap_or_else(|| panic!("onnxruntime.pins has no library line for {platform}")));
+    let quote = |v: Option<&str>| v.map(|v| format!("Some(\"{v}\")")).unwrap_or_else(|| "None".into());
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("ort_pin.rs");
+    let body = format!(
+        "/// The `onnxruntime.pins` platform this build loads ONNX Runtime for, if any.\npub const ORT_PLATFORM: Option<&str> = {};\n/// The only SHA-256 of the ONNX Runtime library this build loads.\npub const ORT_LIBRARY_SHA256: Option<&str> = {};\n",
+        quote(platform),
+        quote(library.as_ref().map(|(sha, _)| sha.as_str())),
+    );
+    fs::write(out, body).unwrap();
+    if let (Some(platform), Some((_, leaf))) = (platform, library) {
+        let path = root.join(platform).join(leaf);
+        println!("cargo:rerun-if-changed={}", path.display());
+        if let Ok(path) = path.canonicalize() {
+            println!("cargo:rustc-env=OPENWORLD_ORT_DEV={}", path.display());
+        }
     }
+}
+
+/// (sha256, installed file name) of the `library` line for `platform`.
+fn library_pin(text: &str, platform: &str) -> Option<(String, String)> {
+    let mut found = None;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() == 5 && fields[0] == platform && fields[1] == "library" {
+            let sha = fields[2];
+            assert!(sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)), "onnxruntime.pins: {sha} is not a lowercase SHA-256");
+            assert!(found.is_none(), "onnxruntime.pins has two library lines for {platform}");
+            found = Some((sha.to_string(), fields[3].to_string()));
+        }
+    }
+    found
 }

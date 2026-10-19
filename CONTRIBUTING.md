@@ -26,5 +26,8 @@ The desktop app is in `desktop/` (`cargo run --manifest-path desktop/Cargo.toml`
 - Match the surrounding code: short plain comments, clear names.
 - Write commit messages that say what changed and why, in a sentence.
 - CI must be green: the core tests and clippy, the self-test, the sampled real-photo check, and the shells that your change touches.
+- A new or changed `uses:` in a workflow: run `python3 scripts/pin_actions.py` to pin it to a commit SHA. CI runs `--check`.
+- A new or changed Android dependency or plugin: the CI android job regenerates `android/gradle/verification-metadata.xml` and fails with the new file when it differs. Review it and commit it. Do not edit hashes by hand.
+- A new ONNX Runtime: change `core/openworld-core/onnxruntime.pins` only, with digests from PyPI and from the files in the checked wheels (`python3 scripts/fetch_ort.py --all` re-checks every one).
 
 Security issues go through [SECURITY.md](SECURITY.md), not public issues.

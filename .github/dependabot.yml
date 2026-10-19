@@ -1,5 +1,7 @@
 version: 2
 updates:
+  # Actions are pinned to commit SHAs with the tag as a comment (scripts/pin_actions.py).
+  # Dependabot updates the SHA and the comment together.
   - package-ecosystem: github-actions
     directory: /
     schedule:

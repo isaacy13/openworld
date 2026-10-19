@@ -71,7 +71,15 @@ All three follow one design: [docs/ux.md](docs/ux.md).
 
 ## Checking a release
 
-There is no release yet. When one exists, compare the file you downloaded with the SHA-256 published on that GitHub release, then check its signature against the public key pinned in [keys/](keys/). A checksum shipped next to a binary is not the check. This README does not invent a digest.
+There is no release yet, so there is no digest to print here. This README does not invent one.
+
+A release is built by [`.github/workflows/release.yml`](.github/workflows/release.yml) from a `v*` tag. Each file on the release page has a build-provenance attestation, and the page lists the files in `SHA256SUMS`. Before you run a file:
+
+1. Check where it was built. With the [GitHub CLI](https://cli.github.com/), `gh attestation verify <file> --repo isaacy13/openworld` must say the file was built by this repository's release workflow, and name the tag and commit. If it fails, do not run the file.
+2. Check its SHA-256. Run `sha256sum <file>` (on macOS, `shasum -a 256 <file>`; on Windows, `Get-FileHash <file>`), and compare the result with the digest GitHub shows for that file on the release page, and with the digest this README will give for the current release. `SHA256SUMS` lists the same digests and is attested too. A checksum file that ships beside a binary is not the check on its own.
+3. Check the signature. No release signing key is pinned yet (see [keys/](keys/README.md)), so releases are not signed with one. Files named `-unsigned` were built without the owner's signing key.
+
+The archive holds the program, the ONNX Runtime library it loads (the core refuses any library whose SHA-256 is not the pin in [`core/openworld-core/onnxruntime.pins`](core/openworld-core/onnxruntime.pins)), and the bundle catalog. Weights are fetched with `scripts/fetch_weights.py`, and their SHA-256 is pinned in each bundle's manifest. CycloneDX SBOMs (`*.cdx.json`) list the Rust crates and the Gradle artifacts each build used.
 
 ## Contributing
 

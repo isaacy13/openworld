@@ -1,0 +1,370 @@
+name: release
+# A `v*` tag builds every release file, lists them in SHA256SUMS, writes SBOMs, attests the
+# build provenance of every file, and attaches them all to a draft GitHub release for the
+# owner to review and publish. Signing keys are never in the repository: each signing step
+# reads the owner's repository secrets and, when they are absent, says so and leaves the
+# file unsigned (and named so).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.97.0
+
+# No build cache is restored here: a release is built from the tagged source and the pinned
+# downloads only.
+jobs:
+  cli:
+    name: CLI (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            exe: openworld
+          - os: windows-latest
+            platform: windows-x86_64
+            exe: openworld.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: source date
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: pinned ONNX Runtime
+        run: python scripts/fetch_ort.py "${{ matrix.platform }}"
+      # Default features, like every app: the demo markers stay in while real FBI posters are
+      # off (docs/decisions.md section 1). A release that turns real posters on drops `fixture`.
+      - run: cargo build --release --locked --manifest-path core/Cargo.toml -p openworld-cli
+      - name: sign the Windows program (when the owner's certificate is in the secrets)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE_PFX_BASE64) {
+            Write-Output "::notice::No Windows signing certificate in the repository secrets (WINDOWS_CERTIFICATE_PFX_BASE64, WINDOWS_CERTIFICATE_PASSWORD). openworld.exe is not signed."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "release.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+          $url = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+          # Only OpenWorld's own program. onnxruntime.dll keeps Microsoft's bytes: the core checks its pin.
+          & $signtool.FullName sign /fd SHA256 /tr $url /td SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD core\target\release\openworld.exe
+          $code = $LASTEXITCODE
+          Remove-Item $pfx
+          if ($code -ne 0) { exit 1 }
+      - name: pack
+        env:
+          TAG: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+          EXE: ${{ matrix.exe }}
+        run: python scripts/package_release.py --name "openworld-cli-$TAG-$PLATFORM" --platform "$PLATFORM" --program "core/target/release/$EXE" --out dist --keep
+      - name: Fast weights for the smoke test, kept only when the pinned SHA-256 matches
+        run: python scripts/fetch_weights.py fast
+      # bench loads the ONNX Runtime packed beside the program, which the core checks against its pin.
+      - name: the packed program loads its catalog and its pinned ONNX Runtime
+        env:
+          TAG: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+          EXE: ${{ matrix.exe }}
+        run: |
+          program="dist/openworld-cli-$TAG-$PLATFORM/$EXE"
+          "$program" --version
+          "$program" --json bundles
+          "$program" --bundles bundles --json bench
+          rm -rf "dist/openworld-cli-$TAG-$PLATFORM"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-cli-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  desktop-linux:
+    name: Desktop (linux-x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev
+      - name: source date
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: pinned ONNX Runtime
+        run: python3 scripts/fetch_ort.py linux-x86_64
+      - run: cargo build --release --locked --manifest-path desktop/Cargo.toml
+      # Linux files are not signed with a key; their provenance attestation is the check.
+      - name: pack
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/package_release.py --name "openworld-desktop-$TAG-linux-x86_64" --platform linux-x86_64 --program desktop/target/release/openworld-desktop --out dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-desktop-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      NDK_VERSION: 27.2.12479018
+      BUILD_TOOLS: 35.0.0
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Gradle dependency verification is set up
+        run: |
+          if [ ! -f android/gradle/verification-metadata.xml ]; then
+            echo "::error::android/gradle/verification-metadata.xml is not committed, so Gradle would not verify what it downloads. The ci workflow's android job generates it. Refusing to build a release."
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager --install "platforms;android-35" "build-tools;${BUILD_TOOLS}" "ndk;${NDK_VERSION}" "cmake;3.22.1"
+      - name: Fast weights, kept only when the pinned SHA-256 matches
+        run: python3 scripts/fetch_weights.py fast
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          validate-wrappers: true
+          cache-disabled: true
+      - name: release APK (dependency verification enforced)
+        working-directory: android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          ./gradlew assembleRelease --stacktrace
+      - name: sign (when the owner's upload key is in the secrets)
+        env:
+          TAG: ${{ github.ref_name }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p dist
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          unsigned=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          # Native libraries stay uncompressed and 16 KB aligned for Android 15 devices.
+          "$tools/zipalign" -f -P 16 4 "$unsigned" "$RUNNER_TEMP/aligned.apk"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::notice::No Android signing key in the repository secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). The APK is not signed."
+            cp "$RUNNER_TEMP/aligned.apk" "dist/openworld-android-$TAG-unsigned.apk"
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/release.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          trap 'rm -f "$keystore"' EXIT
+          "$tools/apksigner" sign --ks "$keystore" --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "dist/openworld-android-$TAG.apk" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify --verbose "dist/openworld-android-$TAG.apk"
+      - name: SBOM of the Gradle build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/gradle_sbom.py --version "$TAG" --out "dist/openworld-android-$TAG.cdx.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-android
+          path: dist/*
+          if-no-files-found: error
+
+  apple:
+    name: Apple XCFramework and macOS CLI
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: source date
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      # The core for iOS and the Mac app, with ONNX Runtime linked statically from Microsoft's
+      # archive pinned by SHA-256 in that script.
+      - name: core and ONNX Runtime XCFrameworks
+        run: apple/scripts/build-core.sh
+      - name: pinned ONNX Runtime for the CLI
+        run: python scripts/fetch_ort.py macos-arm64
+      - run: cargo build --release --locked --manifest-path core/Cargo.toml -p openworld-cli
+      - name: signing keychain (when the owner's certificate is in the secrets)
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "::notice::No Apple signing certificate in the repository secrets (APPLE_CERTIFICATE_P12_BASE64, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY). The macOS CLI and the XCFramework are not signed."
+            echo "APPLE_SIGN=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          pass="$(openssl rand -hex 24)"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security import "$RUNNER_TEMP/release.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/release.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" > /dev/null
+          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          echo "APPLE_SIGN=1" >> "$GITHUB_ENV"
+          echo "APPLE_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: sign OpenWorld's own files
+        if: env.APPLE_SIGN == '1'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # libonnxruntime.dylib keeps Microsoft's bytes: the core checks its pin. No hardened
+          # runtime here: its library validation would refuse a dylib another team signed.
+          # Notarizing the CLI is not set up.
+          codesign --force --timestamp --keychain "$APPLE_KEYCHAIN" -s "$APPLE_SIGNING_IDENTITY" core/target/release/openworld
+          codesign --force --timestamp --keychain "$APPLE_KEYCHAIN" -s "$APPLE_SIGNING_IDENTITY" apple/build/OpenWorldCore.xcframework
+          codesign --verify --verbose core/target/release/openworld apple/build/OpenWorldCore.xcframework
+      - name: pack
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python scripts/package_release.py --name "openworld-cli-$TAG-macos-arm64" --platform macos-arm64 --program core/target/release/openworld --out dist --keep
+          python scripts/fetch_weights.py fast
+          "dist/openworld-cli-$TAG-macos-arm64/openworld" --version
+          "dist/openworld-cli-$TAG-macos-arm64/openworld" --bundles bundles --json bench
+          rm -rf "dist/openworld-cli-$TAG-macos-arm64"
+          # ditto keeps the framework's symlinks and signature.
+          ditto -c -k --sequesterRsrc --keepParent apple/build/OpenWorldCore.xcframework "dist/OpenWorldCore-$TAG.xcframework.zip"
+      - name: remove the signing keychain
+        if: always() && env.APPLE_KEYCHAIN != ''
+        run: security delete-keychain "$APPLE_KEYCHAIN" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-apple
+          path: dist/*
+          if-no-files-found: error
+
+  sbom:
+    name: SBOM (Rust workspaces)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-cyclonedx@0.5.9
+      - name: CycloneDX for core/ and desktop/, every target
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          cargo cyclonedx --manifest-path core/Cargo.toml --format json --spec-version 1.5 --target all
+          cargo cyclonedx --manifest-path desktop/Cargo.toml --format json --spec-version 1.5 --target all
+          for bom in core/openworld-core/openworld-core.cdx.json core/openworld-cli/openworld-cli.cdx.json desktop/openworld-desktop.cdx.json; do
+            name="$(basename "$bom" .cdx.json)"
+            mv "$bom" "dist/$name-$TAG.cdx.json"
+          done
+          ls -l dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-sbom-rust
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Checksums, attestations, draft release
+    needs: [cli, desktop-linux, android, apple, sbom]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS of the built files
+        working-directory: dist
+        run: |
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: dist/*
+      - name: release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "Draft. Real FBI posters stay off; these builds scan against the demo poster pack."
+            echo
+            echo "Check a file before running it:"
+            echo
+            echo '```sh'
+            echo "gh attestation verify <file> --repo $REPO"
+            echo "sha256sum <file>   # compare with the digest GitHub shows for that file on this page"
+            echo '```'
+            echo
+            echo "SHA256SUMS lists every file and is attested too. A checksum file that ships beside a binary is not the check on its own; the attestation is."
+            echo "Files named \`-unsigned\` were built without the owner's signing key."
+          } > "$RUNNER_TEMP/notes.md"
+      - name: draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --draft --prerelease --verify-tag --title "OpenWorld $TAG" --notes-file "$RUNNER_TEMP/notes.md" dist/*
