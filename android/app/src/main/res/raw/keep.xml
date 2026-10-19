@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Line translations and shell codes are looked up by name at run time. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/core_*,@string/refuse_*,@string/scan_killed,@string/import_*,@string/share_not_file,@string/scan_busy,@string/open_failed" />
