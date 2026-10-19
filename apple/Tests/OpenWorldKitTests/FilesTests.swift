@@ -35,7 +35,8 @@ final class FilesTests: XCTestCase {
         let busy = Inbox.folder(in: container).appendingPathComponent("busy")
         try FileManager.default.createDirectory(at: busy, withIntermediateDirectories: true)
         try Data().write(to: busy.appendingPathComponent(".partial"))
-        XCTAssertEqual(Inbox.pending(in: container), [stored])
+        // macOS lists /var as /private/var: compare the files, not the spelling.
+        XCTAssertEqual(Inbox.pending(in: container).map { $0.resolvingSymlinksInPath() }, [stored.resolvingSymlinksInPath()])
 
         let imports = root.appendingPathComponent("imports")
         let file = try Importer.adopt(stored, into: imports)

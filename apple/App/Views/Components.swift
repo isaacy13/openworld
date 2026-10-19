@@ -129,6 +129,7 @@ struct Chip: View {
         .foregroundStyle(tone?.text ?? Color.primary)
         .background(Capsule().fill(tone?.fill ?? Color.secondary.opacity(0.12)))
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(text)
     }
 }
 
