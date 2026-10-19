@@ -158,10 +158,11 @@ fn an_avi_whose_headers_claim_five_frames_of_a_hundred_is_read_to_the_end() {
     let report = lab.scan(&lying);
     eprintln!("lying AVI: {}", describe(&report));
     assert_not_a_silent_clearance(&report);
-    if report.status == Status::Complete {
-        assert_candidate(&report, MISSING_POSTER);
-        assert_eq!(report.counts.frames_decoded, 100, "{probed:?} {}", describe(&report));
-    }
+    // Every stored picture is scanned, so the marker on frames 51 to 55 is found.
+    // The header that disagrees keeps the scan from reading as complete.
+    assert_eq!(report.counts.frames_decoded, 100, "{probed:?} {}", describe(&report));
+    assert!(report.candidates.iter().any(|c| c.poster.id == MISSING_POSTER), "{}", describe(&report));
+    assert_eq!(report.status, Status::Incomplete, "{}", describe(&report));
     // Measured coverage reads the marker's frames too.
     let measured = lab.scan_measured(&lying);
     assert_not_a_silent_clearance(&measured);
@@ -305,7 +306,7 @@ fn many_pages() -> Vec<u8> {
 }
 
 #[test]
-#[ignore = "library bug: decode.rs probe() drops probe_tiff's TooLarge and falls back to probe_tiff_player, which answers BadCodec for any multi-page file"]
+
 fn a_tiff_with_more_pages_than_a_scan_reads_is_refused_as_too_large() {
     let lab = Lab::new();
     let many = lab.write("many.tif", &many_pages());

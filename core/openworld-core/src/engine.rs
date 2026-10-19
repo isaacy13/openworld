@@ -147,8 +147,12 @@ struct TrackState {
     last: u64,
     face_px: u32,
     quality_frames: u32,
-    quality_first_t: f64,
-    quality_last_t: f64,
+    /// First and last frame that passed the gates. Their distance is measured in
+    /// frames, so exactly one second at any rate is one second.
+    quality_first: u64,
+    quality_last: u64,
+    /// A still among the frames: a motion photo's cover. It decides like a still.
+    still_seen: bool,
     rejects: [u32; 6],
     top: Vec<Entry>,
     /// The best frame, encoded, for the evidence picture of a candidate, and its rank.
@@ -307,6 +311,15 @@ impl Engine {
         crate::geom::take_measured_sample(index, &mut self.next_tick, self.cfg.fps)
     }
 
+    fn seconds_between(&self, first: u64, last: u64) -> f64 {
+        let frames = last.saturating_sub(first) as f64;
+        if self.cfg.fps > 0.0 && self.cfg.fps.is_finite() {
+            frames / self.cfg.fps
+        } else {
+            frames
+        }
+    }
+
     fn time_of(&self, index: u64) -> f64 {
         if self.cfg.fps > 0.0 && self.cfg.fps.is_finite() {
             index as f64 / self.cfg.fps
@@ -327,8 +340,9 @@ impl Engine {
                     last: index,
                     face_px: 0,
                     quality_frames: 0,
-                    quality_first_t: t,
-                    quality_last_t: t,
+                    quality_first: index,
+                    quality_last: index,
+                    still_seen: false,
                     rejects: [0; 6],
                     top: Vec::new(),
                     best_frame: None,
@@ -349,10 +363,11 @@ impl Engine {
             }
         };
         if state.quality_frames == 0 {
-            state.quality_first_t = t;
+            state.quality_first = index;
         }
         state.quality_frames += 1;
-        state.quality_last_t = t;
+        state.quality_last = index;
+        state.still_seen |= self.cfg.cover_index == Some(index);
         let Some(slot) = keep_slot(&state.top, t, measured.rank) else {
             return Ok(());
         };
@@ -433,7 +448,8 @@ impl Engine {
         passing.sort_by(|a, b| b.1.total_cmp(&a.1));
         let brief = self.cfg.video
             && state.quality_frames < MIN_QUALITY_FRAMES
-            && state.quality_last_t - state.quality_first_t < MIN_SECONDS;
+            && !state.still_seen
+            && self.seconds_between(state.quality_first, state.quality_last) < MIN_SECONDS;
         if passing.is_empty() {
             item.status = TrackStatus::BelowCutoff;
             item.label = Line::of(copy::BELOW_CUTOFF);

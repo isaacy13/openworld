@@ -359,6 +359,8 @@ fn every_page_of_a_tiff_is_scanned() {
     for report in [lab.scan(&pages), lab.scan_measured(&pages)] {
         assert_eq!(report.counts.frames_decoded, 2, "{}", describe(&report));
         let track = assert_passed_at(&report, 1);
+        // A page is its own picture, so it decides like a still.
+        assert_eq!(track.status, TrackStatus::Candidate, "{}", describe(&report));
         assert_eq!(track.frames.text, "Frame 2.");
         assert!(report.tracks.iter().all(|t| t.first_frame == 1), "{}", describe(&report));
     }
@@ -810,7 +812,8 @@ fn a_motion_photo_cover_is_scanned_after_its_clip() {
     let photo = lab.write("cover.jpg", &jpeg_with_xmp(&marked_cover(2), xmp.as_bytes(), &clip));
     let report = lab.scan(&photo);
     assert_eq!(report.counts.frames_decoded, 3, "{}", describe(&report));
-    assert_passed_at(&report, 2);
+    // The cover is a still: a face on it alone decides like a still.
+    assert_eq!(assert_passed_at(&report, 2).status, TrackStatus::Candidate, "{}", describe(&report));
 }
 
 #[test]

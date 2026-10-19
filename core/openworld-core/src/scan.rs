@@ -198,6 +198,8 @@ pub fn open_job(req: &ScanRequest, fps: f64, video: bool, warnings: Vec<Line>, n
     let bundle = require_bundle(&req.bundles, &req.bundle)?;
     let pack = load_pack(&req.posters, now).map_err(report::refused_line)?;
     let perception = perception_for(&bundle, &pack, req.accelerate).map_err(report::refused_line)?;
+    // Every refusal comes before the result folder is touched.
+    pack.check_vectors(perception.dim()).map_err(report::refused_line)?;
     let protect: Vec<&Path> = [req.input.as_path(), req.posters.as_path(), req.bundles.as_path()].into_iter().filter(|p| !p.as_os_str().is_empty()).collect();
     outdir::prepare(&req.out, &protect).map_err(report::refused_line)?;
     let stop = StopFlag::default();
@@ -264,7 +266,9 @@ pub fn scan_path(req: &ScanRequest, stop: Option<&StopFlag>, events: &mut dyn Fn
         Err(err) => return media_refusal(err),
     };
     let warnings = media_warnings(mtime_of(req), probed.container_created, now);
-    let mut job = match open_job(req, probed.fps, probed.video, warnings, now) {
+    // TIFF pages are separate pictures: each decides like a still.
+    let video = probed.video && !probed.pages;
+    let mut job = match open_job(req, probed.fps, video, warnings, now) {
         Ok(job) => job,
         Err(report) => return report,
     };

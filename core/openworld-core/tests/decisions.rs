@@ -401,7 +401,7 @@ fn a_video_face_needs_three_gated_frames_or_one_second() {
 }
 
 #[test]
-#[ignore = "library bug: engine.rs `brief` compares index/fps times in f64; frames 12 and 42 at 30 fps are 0.9999999999999999 s apart, so a face on screen exactly one second is called too brief"]
+
 fn a_face_exactly_one_second_apart_is_across_one_second() {
     // 42/30 - 12/30 is not 1.0 in f64, while 40/30 - 10/30 is. Both pairs are 30 frames apart.
     let report = feed(&clip_with(&[12, 42]), Feed::default());

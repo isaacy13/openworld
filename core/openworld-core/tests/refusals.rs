@@ -137,7 +137,7 @@ fn the_poster_pack_must_be_whole_fresh_and_valid() {
 }
 
 #[test]
-#[ignore = "library bug: scan.rs open_job calls outdir::prepare before Engine::new runs pack.check_vectors, so a bad_vectors refusal empties an earlier result and leaves a marked folder sweep never removes"]
+
 fn a_pack_refused_for_its_vectors_leaves_the_result_folder_alone() {
     let lab = Lab::new();
     let input = lab.png("scene.png", &openworld_core::fixture::demo_scene().image);

@@ -75,6 +75,8 @@ pub struct Probe {
     pub shown_stream: usize,
     /// The last frame is the JPEG cover of a motion photo. Measured coverage reads it.
     pub motion_cover: bool,
+    /// Every frame is its own picture, as the pages of a TIFF are.
+    pub pages: bool,
 }
 
 #[derive(Debug)]
@@ -89,10 +91,10 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
         return Err(MediaError::BadCodec);
     }
     if is_tiff(path) {
-        if let Ok(info) = probe_tiff(path) {
-            return Ok(info);
-        }
-        return probe_tiff_player(path);
+        return match probe_tiff(path) {
+            Err(MediaError::BadCodec) => probe_tiff_player(path),
+            other => other,
+        };
     }
     // A motion photo is a still plus a video. The scan reads both. The
     // cover is one more picture after the clip, so the clip's frame numbers stay.
@@ -114,10 +116,11 @@ pub fn probe(path: &Path) -> Result<Probe, MediaError> {
 
 pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
     if is_tiff(path) {
-        if let Ok(info) = probe_tiff(path) {
-            return decode_tiff(path, info, &mut on_frame);
-        }
-        return decode_tiff_player(path, &mut on_frame);
+        return match probe_tiff(path) {
+            Ok(info) => decode_tiff(path, info, &mut on_frame),
+            Err(MediaError::BadCodec) => decode_tiff_player(path, &mut on_frame),
+            Err(err) => Err(err),
+        };
     }
     if let Some(clip) = motion_clip(path)? {
         let info = probe_video(&clip.path)?;
@@ -691,6 +694,7 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
         square_pixels: false,
         shown_stream: 0,
         motion_cover: false,
+        pages: moving,
     })
 }
 
@@ -882,6 +886,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
         square_pixels: false,
         shown_stream: 0,
         motion_cover: false,
+        pages: false,
     })
 }
 
@@ -904,6 +909,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         square_pixels: false,
         shown_stream: 0,
         motion_cover: false,
+        pages: false,
     };
     let mut frame = None;
     let stats = decode_video(path, &stored, &mut |_, image| {
@@ -938,6 +944,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
             square_pixels: false,
             shown_stream: 0,
             motion_cover: false,
+            pages: false,
         },
     })
 }
@@ -1059,6 +1066,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         square_pixels: false,
         shown_stream: 0,
         motion_cover: false,
+        pages: false,
     })
 }
 
@@ -1248,6 +1256,7 @@ fn probe_animated_webp(path: &Path) -> Result<Probe, MediaError> {
         square_pixels: false,
         shown_stream: 0,
         motion_cover: false,
+        pages: false,
     })
 }
 
@@ -1518,6 +1527,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         square_pixels,
         shown_stream: shown,
         motion_cover: false,
+        pages: false,
     })
 }
 
@@ -1767,10 +1777,10 @@ fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbIm
             torn = true;
             break;
         }
-        // FFmpeg can repeat a one-frame GIF's picture. Those repeats are not
-        // pictures of the file, but a count the probe got wrong would hide real
-        // ones, so a picture past the count is drained and makes the scan incomplete.
-        if info.frames_exact && info.frames > 0 && decoded >= info.frames {
+        // FFmpeg can repeat a one-frame GIF's picture; those repeats are not pictures
+        // of the file. Past any other count the pictures are real and are scanned:
+        // the count that disagrees then makes the scan incomplete.
+        if info.frames_exact && info.frames == 1 && decoded >= 1 {
             extra += 1;
             continue;
         }
@@ -2301,6 +2311,7 @@ mod tests {
             square_pixels: false,
             shown_stream: 0,
             motion_cover: false,
+            pages: false,
         };
         let result = super::decode_video(std::path::Path::new("missing-frame"), &info, &mut |_, _| true);
         assert!(matches!(result, Err(super::MediaError::BadCodec)));
