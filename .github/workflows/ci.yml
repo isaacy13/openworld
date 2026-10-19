@@ -35,7 +35,7 @@ jobs:
         run: python3 scripts/pin_actions.py --check
       - name: script tests (pins, action pinning, release tools)
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg strace
       - name: pinned ONNX Runtime
         run: python3 scripts/fetch_ort.py
       - name: the in-app licenses list is current
@@ -53,6 +53,12 @@ jobs:
         run: core/target/release/openworld --bundles bundles --json selftest
       - name: demo scan
         run: core/target/release/openworld --bundles bundles demo --out "$RUNNER_TEMP/demo"
+      # Every connect and send of the scan and its child processes (FFmpeg) is traced.
+      - name: a scan opens no network connection
+        run: |
+          strace -f -qq -e trace=connect,sendto,sendmsg -o "$RUNNER_TEMP/egress.txt" \
+            core/target/release/openworld --bundles bundles demo --out "$RUNNER_TEMP/egress"
+          if grep -E "AF_INET6?" "$RUNNER_TEMP/egress.txt"; then echo "The scan opened a network connection."; exit 1; fi
       - name: the Apple catalog of core sentences is current
         run: python3 scripts/core_strings.py core/target/release/openworld --check
 

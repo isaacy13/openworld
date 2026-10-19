@@ -12,6 +12,7 @@ The layout is the one the core and the apps look for:
     <name>/onnxruntime-*.txt        ONNX Runtime's license and notices
     <name>/bundles/*/manifest.toml  the catalog (and curve.json where one exists)
     <name>/LICENSE, README.md
+    <name>/THIRD-PARTY.txt          every third-party license (docs/legal/third-party.txt)
 
 Weights are not packed (`scripts/fetch_weights.py`). Every ONNX Runtime file is checked
 against core/openworld-core/onnxruntime.pins again here, so a stale third_party/ folder
@@ -63,6 +64,7 @@ def stage(name: str, platform: str, programs: list, ort_root: Path, staging: Pat
             shutil.copy2(curve, folder / "curve.json")
     for doc in ("LICENSE", "README.md"):
         shutil.copy2(ROOT / doc, top / doc)
+    shutil.copy2(ROOT / "docs/legal/third-party.txt", top / "THIRD-PARTY.txt")
     return top
 
 
