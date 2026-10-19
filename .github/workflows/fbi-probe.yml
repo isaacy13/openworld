@@ -1,0 +1,19 @@
+name: fbi-probe
+# Temporary: which User-Agent does api.fbi.gov accept from a GitHub runner? Removed after one run.
+on:
+  push:
+    paths: [".github/workflows/fbi-probe.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          url='https://api.fbi.gov/wanted/v1/list?page=1&pageSize=1'
+          for ua in "" "OpenWorld/0.1.0" "OpenWorld/0.1.0 (OneX Engineering)" "OpenWorld/0.1.0 (+https://github.com/isaacy13/openworld)" "openworld-eval (+https://github.com/isaacy13/openworld)" "OpenWorld/0.1.0 (https://github.com/isaacy13/openworld)" "openworld-eval/1"; do
+            if [ -z "$ua" ]; then code=$(curl -sS -o /dev/null -w '%{http_code}' "$url"); else code=$(curl -sS -o /dev/null -w '%{http_code}' -A "$ua" "$url"); fi
+            echo "$code  ${ua:-curl default}"
+            sleep 2
+          done
+          curl -sS -o /dev/null -w '%{http_code}  photo host\n' -A "OpenWorld/0.1.0" https://www.fbi.gov/wanted
