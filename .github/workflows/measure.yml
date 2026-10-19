@@ -32,8 +32,16 @@ jobs:
       - run: python scripts/fetch_weights.py fast
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/openworld-eval
+          # The same paths as earlier runs, so their cached archives restore.
+          path: |
+            ~/.cache/openworld-eval/lfw.tgz
+            ~/.cache/openworld-eval/pairs.txt
+            ~/.cache/openworld-eval/WIDER_val.zip
+            ~/.cache/openworld-eval/wider_face_split.zip
+            ~/.cache/openworld-eval/calfw
+            ~/.cache/openworld-eval/cplfw
           key: public-faces-${{ hashFiles('eval/real_faces.py') }}
+          restore-keys: public-faces-
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli --features eval --target-dir target-eval
       - run: cargo build --release --manifest-path eval/real/Cargo.toml
       - name: full measurement

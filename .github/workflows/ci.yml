@@ -95,8 +95,16 @@ jobs:
       # The archives are pinned by SHA-256 in eval/real_faces.py. Photos are never committed.
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/openworld-eval
+          # The same paths as earlier runs, so their cached archives restore.
+          path: |
+            ~/.cache/openworld-eval/lfw.tgz
+            ~/.cache/openworld-eval/pairs.txt
+            ~/.cache/openworld-eval/WIDER_val.zip
+            ~/.cache/openworld-eval/wider_face_split.zip
+            ~/.cache/openworld-eval/calfw
+            ~/.cache/openworld-eval/cplfw
           key: public-faces-${{ hashFiles('eval/real_faces.py') }}
+          restore-keys: public-faces-
       - name: statistics unit tests
         run: python -m unittest discover -s eval -p 'test_*.py'
       # The eval build writes raw scores, so it gets its own target folder.
