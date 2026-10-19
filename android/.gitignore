@@ -1,0 +1,3 @@
+# Built by the buildRustCore task from core/openworld-core.
+app/src/main/jniLibs/
+app/.cxx/
