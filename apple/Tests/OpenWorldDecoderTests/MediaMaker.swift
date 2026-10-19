@@ -108,8 +108,12 @@ enum MediaMaker {
         at url: URL, width: Int, height: Int, count: Int, keyFrameInterval: Int = 10,
         transform: CGAffineTransform = .identity, picture: (Int) -> [UInt8]
     ) throws -> AVVideoCodecType {
+        // One movie at a time: a simulator's shared encoder can stall when tests encode
+        // together, so H.264 also gets a few tries before the fallback.
+        movieLock.lock()
+        defer { movieLock.unlock() }
         var failures: [String] = []
-        for codec in [AVVideoCodecType.h264, .jpeg] {
+        for codec in [AVVideoCodecType.h264, .h264, .h264, .jpeg] {
             try? FileManager.default.removeItem(at: url)
             do {
                 try write(url, codec: codec, width: width, height: height, count: count, keyFrameInterval: keyFrameInterval, transform: transform, picture: picture)
@@ -120,6 +124,8 @@ enum MediaMaker {
         }
         throw MakeFailure.writer(failures.joined(separator: "; "))
     }
+
+    private static let movieLock = NSLock()
 
     private static func write(
         _ url: URL, codec: AVVideoCodecType, width: Int, height: Int, count: Int, keyFrameInterval: Int,

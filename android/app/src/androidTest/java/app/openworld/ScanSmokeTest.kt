@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.printToString
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -59,7 +60,8 @@ class ScanSmokeTest {
         val install = string(R.string.posters_install_demo)
         val badge = string(R.string.posters_demo_badge)
         waitFor("No demo install button or badge", STARTUP_MS) { shown(install) || shown(badge) }
-        if (!shown(badge)) compose.onNodeWithText(install).performClick()
+        // The footer can sit below the fold: a tap off screen lands nowhere.
+        if (!shown(badge)) compose.onNodeWithText(install).performScrollTo().performClick()
         waitFor("No demo badge after installing", STARTUP_MS) { shown(badge) }
 
         // The still goes through the app's own path: PNG on disk, BitmapFactory, RGBA push.
