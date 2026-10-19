@@ -44,14 +44,17 @@ interface Device {
     fun watch(onStop: (String) -> Unit): AutoCloseable
 }
 
-/** Survives the process, so a scan the system killed shows as Incomplete on the next launch. */
+/**
+ * Survives the process, so a scan the system killed shows as Incomplete on the next launch.
+ * One mark per result folder: a scan ends only its own.
+ */
 interface ScanMarker {
     fun begin(out: File)
 
-    fun end()
+    fun end(out: File)
 
-    /** The result folder of a scan that never ended. */
-    fun leftover(): File?
+    /** The result folders of scans that never ended and are not running in this process. */
+    fun leftovers(): List<File>
 }
 
 /** Shell refusal and notice codes, shown from R.string by the same name. */

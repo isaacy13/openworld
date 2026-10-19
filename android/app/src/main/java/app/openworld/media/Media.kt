@@ -18,7 +18,10 @@ data class MediaInfo(
     val rotation: Int = 0,
     /** Recording time, Unix seconds, for the file card. The core reads its own from the file. */
     val recordedUnix: Long? = null,
-    /** A JPEG that also holds a short video. Only the still is scanned here. */
+    /**
+     * A JPEG that also holds a short video. Only the still is scanned here; the core sees the clip
+     * in the file and ends the scan Incomplete (`motion_clip_unread`), never complete.
+     */
     val motionPhoto: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject()

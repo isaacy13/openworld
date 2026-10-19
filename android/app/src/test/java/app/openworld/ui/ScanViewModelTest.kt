@@ -91,7 +91,19 @@ class ScanViewModelTest {
         assertEquals(3, request.getJSONObject("media").getLong("frames"))
         assertEquals("phone", request.getJSONObject("device").getString("kind"))
         assertFalse(request.has("out"))
-        assertEquals(9, review.disclosure.size)
+        // The disclosure and the file's warnings are the core's, from the estimate.
+        assertEquals(FakeCore.DISCLOSURE, review.disclosure.map { it.code })
+        assertTrue(review.warnings.isEmpty())
+    }
+
+    @Test
+    fun theFileWarningsComeFromTheCoresEstimate() = runTest(dispatcher) {
+        val vm = model()
+        vm.openImported(file.copy(mtimeUnix = 1_000_000_000L))
+        advanceUntilIdle()
+        val review = vm.screen() as ScanState.Review
+        assertEquals(1_000_000_000L, core.calls.last { it.getString("op") == "estimate" }.getLong("file_mtime_unix"))
+        assertEquals(listOf("old_file"), review.warnings.map { it.code })
     }
 
     @Test
@@ -137,7 +149,8 @@ class ScanViewModelTest {
         val request = core.starts.single()
         assertFalse(request.has("op"))
         assertTrue(request.getString("out").startsWith(File(root, "results").path))
-        assertNull(marker.leftover())
+        assertEquals(listOf(File(request.getString("out"))), marker.begun)
+        assertTrue(marker.marks.isEmpty())
         assertTrue(device.closed)
         assertEquals(listOf(file), imports.deleted)
     }
@@ -205,7 +218,7 @@ class ScanViewModelTest {
     @Test
     fun aScanTheSystemKilledShowsAsIncompleteOnTheNextLaunch() = runTest(dispatcher) {
         val leftover = File(root, "results/2026-10-19T10-00-00Z")
-        marker.path = leftover
+        marker.marks += leftover
         val vm = model()
         val done = vm.screen() as ScanState.Done
         assertEquals(Status.INCOMPLETE, done.report.status)
@@ -213,7 +226,26 @@ class ScanViewModelTest {
         assertTrue(done.report.disclosure.none { it.code == "no_clearance" })
         val delete = core.calls.single { it.getString("op") == "delete" }
         assertEquals(leftover.path, delete.getString("out"))
-        assertNull(marker.leftover())
+        assertTrue(marker.marks.isEmpty())
+    }
+
+    @Test
+    fun aScanStillRunningInThisProcessIsNotKilledAndKeepsItsMark() = runTest(dispatcher) {
+        // An earlier screen's scan, still running after the screen was recreated.
+        val other = File(root, "results/2026-10-19T09-00-00Z")
+        marker.begin(other)
+        val vm = model()
+        assertTrue(vm.screen() is ScanState.Start)
+        assertNull(vm.state.value.message)
+        assertTrue(core.calls.none { it.getString("op") == "delete" })
+
+        vm.openImported(file)
+        advanceUntilIdle()
+        vm.analyze()
+        advanceUntilIdle()
+        assertTrue(vm.screen() is ScanState.Done)
+        // This scan ended only its own mark.
+        assertEquals(setOf(other), marker.marks)
     }
 
     @Test
