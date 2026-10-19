@@ -14,6 +14,8 @@ Every piece of data OpenWorld touches, where it lives, and when it goes away. No
 | Poster pack (snapshot, vectors, poster photos) | Update posters (off), or the demo pack | App data, `posters/` | Refused after 7 days; replaced on update. |
 | Bundle weights | The app bundle / `fetch_weights.py` | App data, `bundles/` | With the app. |
 | Settings (last bundle and coverage) | The shell | Platform preferences | With the app. |
+| Accepted terms version (`legal`) | The first-run screen's Continue | Platform preferences | With the app. Never sent. |
+| Policies and licenses | The library (`docs/legal/`) | Inside the app | With the app. Reading them uses no network. |
 
 ## What is never collected
 

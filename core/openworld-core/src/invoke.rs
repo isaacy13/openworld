@@ -42,6 +42,10 @@ pub enum Call {
     Sweep { root: PathBuf },
     /// Every sentence, by code, and the disclosure for a report a shell makes itself.
     Copy {},
+    /// The first-run lines, the terms version to accept, and the built-in documents' titles.
+    Legal {},
+    /// One built-in policy or the licenses, as paragraphs.
+    LegalDocument { id: String },
     Version {},
 }
 
@@ -128,6 +132,8 @@ pub fn run(call: Call, stop: Option<&StopFlag>, events: &mut dyn FnMut(Event)) -
         Call::Sweep { root } => json!({ "ok": true, "removed": crate::outdir::sweep(&root, std::time::SystemTime::now()) }),
         // A report a shell makes itself (a scan the system killed) is never complete.
         Call::Copy {} => json!({ "ok": true, "copy": copy::product_copy(), "disclosure": crate::report::disclosure(false) }),
+        Call::Legal {} => crate::legal::summary(),
+        Call::LegalDocument { id } => crate::legal::document(&id).unwrap_or_else(refusal),
         Call::Version {} => json!({
             "ok": true,
             "api": API_VERSION,
@@ -170,6 +176,18 @@ mod tests {
         assert!(disclosure.iter().all(|line| line["code"] != copy::NO_CLEARANCE.0 && line["text"].is_string()));
         assert_eq!(ask(r#"{"v":1,"op":"nope"}"#)["refusal"], "bad_request");
         assert_eq!(ask(r#"{"v":1,"op":"copy","nope":1}"#)["refusal"], "bad_request");
+    }
+
+    #[test]
+    fn legal_names_the_version_and_reads_each_document() {
+        let legal = ask(r#"{"v":1,"op":"legal"}"#);
+        assert_eq!(legal["version"], crate::legal::VERSION);
+        assert_eq!(legal["accept"]["code"], copy::ACCEPT_TERMS.0);
+        assert_eq!(legal["first_run"][0]["code"], copy::WELCOME.0);
+        let terms = ask(r#"{"v":1,"op":"legal_document","id":"terms"}"#);
+        assert_eq!(terms["title"]["code"], copy::DOC_TERMS.0);
+        assert!(terms["paragraphs"].as_array().unwrap().len() > 10);
+        assert_eq!(ask(r#"{"v":1,"op":"legal_document","id":"x"}"#)["refusal"], copy::R_NO_DOCUMENT.0);
         // A misspelled option is refused, not ignored.
         assert_eq!(ask(r#"{"v":1,"op":"leave","url":"https://www.fbi.gov/x","ur":"y"}"#)["refusal"], "bad_request");
         assert_eq!(ask(r#"{"v":1,"op":"leave","url":"https://www.fbi.gov/x"}"#)["url"], "https://www.fbi.gov/x");

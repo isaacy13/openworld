@@ -38,6 +38,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: pinned ONNX Runtime
         run: python3 scripts/fetch_ort.py
+      - name: the in-app licenses list is current
+        run: python3 scripts/notices.py --check
       - name: licenses and advisories
         run: cargo deny --manifest-path core/Cargo.toml check licenses bans sources advisories
       - name: clippy

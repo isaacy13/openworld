@@ -24,6 +24,7 @@ pub mod fixture;
 pub mod geom;
 pub mod hardware;
 pub mod invoke;
+pub mod legal;
 #[cfg(feature = "fixture")]
 pub mod measure;
 #[cfg(feature = "network")]

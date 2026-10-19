@@ -42,4 +42,19 @@ done
 GDK_PIXBUF_MODULEDIR="$out/lib/gdk-pixbuf-2.0/2.10.0/loaders" gdk-pixbuf-query-loaders \
   | sed "s|$(cygpath -m "$out")/||g" > "$out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 
+# The license files of every MSYS2 package a copied file came from, and the package list.
+mkdir -p "$out/share/licenses"
+find "$out" -type f \( -name '*.dll' -o -name '*.exe' \) ! -name openworld-desktop.exe -printf '%f\n' | sort -u | while read -r leaf; do
+  if [ -f "$prefix/bin/$leaf" ]; then pacman -Qqo "$prefix/bin/$leaf" 2>/dev/null || true; fi
+done | sort -u > "$out/share/licenses/packages.txt"
+while read -r package; do
+  pacman -Ql "$package" | awk '{print $2}' | { grep "^$prefix/share/licenses/." || true; } | while read -r file; do
+    if [ -f "$file" ]; then
+      mkdir -p "$out/share/licenses/$(dirname "${file#"$prefix"/share/licenses/}")"
+      cp "$file" "$out/share/licenses/${file#"$prefix"/share/licenses/}"
+    fi
+  done
+done < "$out/share/licenses/packages.txt"
+cp docs/legal/third-party.txt "$out/share/licenses/openworld-third-party.txt"
+
 echo "bundled into $out"

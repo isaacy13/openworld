@@ -109,6 +109,19 @@ pub const DISCLOSURE: &[Copy] = &[
     NETWORK_NOTE,
 ];
 
+// First run and the policies (`legal`).
+pub const WELCOME: Copy = ("welcome", "OpenWorld compares faces in a photo or video you already have with public FBI missing-person and wanted-person posters, on this device.");
+pub const DO_NOT_APPROACH: Copy = ("do_not_approach", "Do not approach, follow, confront, or try to hold anyone. If someone is in immediate danger, call 911.");
+pub const ADULTS_US: Copy = ("adults_us", "For adults in the United States.");
+pub const ACCEPT_TERMS: Copy = ("accept_terms", "By continuing, you agree to the Terms of Use, including binding individual arbitration and a class-action waiver, and to the Privacy Policy and the Biometric Data Policy.");
+pub const TERMS_CHANGED: Copy = ("terms_changed", "The terms have changed. Read them, then continue to keep using OpenWorld.");
+pub const DOC_TERMS: Copy = ("doc_terms", "Terms of Use");
+pub const DOC_PRIVACY: Copy = ("doc_privacy", "Privacy Policy");
+pub const DOC_BIOMETRIC: Copy = ("doc_biometric", "Biometric Data Policy");
+pub const DOC_HEALTH_DATA: Copy = ("doc_health_data", "Consumer Health Data Privacy Policy");
+pub const DOC_LICENSES: Copy = ("doc_licenses", "Licenses");
+pub const FIRST_RUN: &[Copy] = &[WELCOME, NOT_AFFILIATED, NOT_IDENTIFICATION, NO_CLEARANCE, DO_NOT_APPROACH, DO_NOT_SHARE, NO_AGENCY, NOTHING_UPLOADED, ADULTS_US];
+
 // File warnings.
 pub const OLD_FILE: Copy = ("old_file", "This file is older than about 30 days.");
 pub const TIMESTAMP_DISAGREE: Copy = ("timestamps_disagree", "The file timestamps disagree.");
@@ -162,6 +175,7 @@ pub const R_REAL_POSTERS_OFF: Copy = ("real_posters_off", "Real FBI photos stay 
 pub const R_DELETE_FOREIGN: Copy = ("delete_foreign", "Refusing to delete a directory that is not an OpenWorld result.");
 pub const R_DELETE_FAILED: Copy = ("delete_failed", "The result could not be deleted.");
 pub const DELETED: Copy = ("deleted", "Deleted.");
+pub const R_NO_DOCUMENT: Copy = ("no_document", "That document is not in this build. Refusing.");
 
 // Update posters. A failed update leaves the posters as they were.
 pub const R_NETWORK_OFF: Copy = ("network_off", "This build has no network code. The posters were not changed.");
@@ -307,6 +321,8 @@ pub fn product_copy() -> Value {
         R_NETWORK_OFF, R_POSTERS_FETCH, R_POSTERS_BAD_LIST, R_POSTERS_RUNTIME, R_POSTERS_NONE, R_POSTERS_FOREIGN,
         R_POSTERS_UNWRITTEN, SKIP_NOT_OPEN, SKIP_NO_PHOTO, SKIP_PHOTO_UNAVAILABLE, SKIP_PHOTO_TOO_LARGE, SKIP_NOT_PICTURE,
         SKIP_NO_FACE, SKIP_SEVERAL_FACES,
+        WELCOME, DO_NOT_APPROACH, ADULTS_US, ACCEPT_TERMS, TERMS_CHANGED, DOC_TERMS, DOC_PRIVACY, DOC_BIOMETRIC, DOC_HEALTH_DATA,
+        DOC_LICENSES, R_NO_DOCUMENT,
         class_note(true, true), class_note(true, false), class_note(false, true),
     ];
     let mut map = Map::new();

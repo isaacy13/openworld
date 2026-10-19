@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "accept_terms": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By continuing, you agree to the Terms of Use, including binding individual arbitration and a class-action waiver, and to the Privacy Policy and the Biometric Data Policy."
+          }
+        }
+      }
+    },
+    "adults_us": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For adults in the United States."
+          }
+        }
+      }
+    },
     "already_warm": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -313,6 +337,18 @@
         }
       }
     },
+    "do_not_approach": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do not approach, follow, confront, or try to hold anyone. If someone is in immediate danger, call 911."
+          }
+        }
+      }
+    },
     "do_not_share": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -321,6 +357,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Do not post or share this result. A possible candidate can be a stranger who looks alike."
+          }
+        }
+      }
+    },
+    "doc_biometric": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biometric Data Policy"
+          }
+        }
+      }
+    },
+    "doc_health_data": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consumer Health Data Privacy Policy"
+          }
+        }
+      }
+    },
+    "doc_licenses": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licenses"
+          }
+        }
+      }
+    },
+    "doc_privacy": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        }
+      }
+    },
+    "doc_terms": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms of Use"
           }
         }
       }
@@ -657,6 +753,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "No candidate is not a clearance."
+          }
+        }
+      }
+    },
+    "no_document": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That document is not in this build. Refusing."
           }
         }
       }
@@ -1177,6 +1285,18 @@
         }
       }
     },
+    "terms_changed": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The terms have changed. Read them, then continue to keep using OpenWorld."
+          }
+        }
+      }
+    },
     "timestamps_disagree": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -1257,6 +1377,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "The poster pack could not be read. Refusing."
+          }
+        }
+      }
+    },
+    "welcome": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld compares faces in a photo or video you already have with public FBI missing-person and wanted-person posters, on this device."
           }
         }
       }

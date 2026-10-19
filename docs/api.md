@@ -29,6 +29,8 @@ Every request has `"v": 1` and an `"op"`. Unknown fields are refused. Every answ
 | `delete` | `out` | refuses `delete_foreign` for a folder that is not an OpenWorld result |
 | `sweep` | `root` | `removed`: expired results deleted under `root` |
 | `copy` | | `copy`: `{code: text}`, `disclosure: [Line]` for a report the shell makes itself (a scan the system killed), without the clearance line |
+| `legal` | | `version` (the terms version to accept), `contact`, `first_run: [Line]`, `accept` Line, `changed` Line (shown instead of nothing when an older version was accepted), `documents: [{id, title: Line}]`. See [First run](#first-run) |
+| `legal_document` | `id` (`terms`, `privacy`, `biometric`, `health_data`, `licenses`) | `{id, title: Line, paragraphs: [String]}`, the built-in text as plain paragraphs; refuses `no_document` |
 
 ### Scan request
 
@@ -79,6 +81,10 @@ JSON lines to `on_event`:
 ```
 
 `pages` is `null` when the list does not give a total. `posters_checked` comes every 10 photos and after the last.
+
+## First run
+
+Before the first scan, a shell shows the `legal` answer's `first_run` lines, its `accept` line, a link to each document, and one **Continue**. Continue stores `version` in the shell's own preferences; nothing is sent. At each launch the shell compares the stored value with `version`: equal opens the app; anything else shows the screen again, with `changed` above it when some version was accepted before. The documents are in the library (`docs/legal/`, and `docs/legal/third-party.txt` from `scripts/notices.py`), so reading them uses no network. About shows the same links and `contact` at any time.
 
 ## Update posters
 

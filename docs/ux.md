@@ -31,6 +31,18 @@ One flow, three screens, on every platform. Each shell uses its platform's contr
 
 ## Screens
 
+### 0. First run
+
+Shown before Start until the terms version the core names (`legal`) is accepted, and again when it changes ([api](api.md#first-run)).
+
+- Title **Welcome to OpenWorld**, then the `first_run` lines as a short list with the lock and info icons, then the `accept` line. When an older version was accepted, the `changed` line sits above the list.
+- Links, each opening the built-in text in a reading sheet: **Terms of Use**, **Privacy Policy**, **Biometric Data Policy**.
+- One primary **Continue**. No checkbox and no per-scan prompt. Closing the screen without Continue closes the app on a computer and leaves the phone app on this screen.
+
+### About
+
+Reached from Start (the header menu on computers, an info button on phones). The version, `contact`, and a row for each `legal` document: the three policies, the Washington consumer health data policy, and **Licenses** (third-party software and models). Each opens the same reading sheet, a scrolling list of the document's paragraphs.
+
 ### 1. Start
 
 - Title **OpenWorld**. One line under it: "Check a photo or video you already have against public FBI missing and wanted posters, on this device."
