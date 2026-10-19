@@ -1,69 +1,266 @@
 {
-  "below_64": {
-    "candidates": [],
-    "faces_seen_not_compared": 0,
-    "inventory": [],
-    "status": "complete",
-    "summary": "No candidate is not a clearance."
-  },
   "below_cutoff": {
     "candidates": [],
-    "faces_seen_not_compared": 0,
-    "inventory": [
-      "face:Below the locked cutoff. Not a candidate."
+    "counts": [
+      1,
+      1,
+      0,
+      0
     ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
     "status": "complete",
-    "summary": "No candidate is not a clearance."
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "below_cutoff",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "below_cutoff"
+      }
+    ]
   },
   "blank": {
     "candidates": [],
-    "faces_seen_not_compared": 0,
-    "inventory": [],
-    "status": "complete",
-    "summary": "No candidate is not a clearance."
-  },
-  "impostor": {
-    "candidates": [],
-    "faces_seen_not_compared": 0,
-    "inventory": [
-      "face:Below the locked cutoff. Not a candidate."
+    "counts": [
+      0,
+      0,
+      0,
+      0
     ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
     "status": "complete",
-    "summary": "No candidate is not a clearance."
+    "tracks": []
   },
-  "scene": {
+  "both_classes": {
     "candidates": [
       {
-        "kind": "face",
+        "band": "band_well",
+        "class": "missing",
+        "frame": 0,
         "leave_notes": [
-          "OpenWorld is not sending a report.",
-          "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678).",
-          "This file is not authenticated."
+          "not_sending",
+          "leave_missing",
+          "unauthenticated"
         ],
-        "leaving": "You are leaving OpenWorld.",
-        "poster_class": "missing",
-        "wording": "Possible candidate. Not an identification."
+        "leaving": "leaving",
+        "poster": "fixture-missing-a"
       },
       {
-        "kind": "plate",
+        "band": "band_well",
+        "class": "wanted",
+        "frame": 0,
         "leave_notes": [
-          "OpenWorld is not sending a report.",
-          "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.",
-          "This file is not authenticated."
+          "not_sending",
+          "leave_wanted",
+          "unauthenticated"
         ],
-        "leaving": "You are leaving OpenWorld.",
-        "poster_class": "wanted",
-        "wording": "Possible candidate. Not an identification."
+        "leaving": "leaving",
+        "poster": "fixture-wanted-b"
       }
     ],
-    "faces_seen_not_compared": 1,
-    "inventory": [
-      "face:Possible candidate. Not an identification.",
-      "face:Not compared.",
-      "vehicle:A vehicle is not a person.",
-      "plate:Possible candidate. Not an identification."
+    "counts": [
+      2,
+      2,
+      0,
+      2
     ],
+    "disclosure_has_no_clearance": true,
+    "headline": "possible_candidate",
+    "reason": null,
+    "refusal": null,
     "status": "complete",
-    "summary": "Possible candidate. Not an identification."
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      },
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      }
+    ]
+  },
+  "demo_scene": {
+    "candidates": [
+      {
+        "band": "band_well",
+        "class": "missing",
+        "frame": 0,
+        "leave_notes": [
+          "not_sending",
+          "leave_missing",
+          "unauthenticated"
+        ],
+        "leaving": "leaving",
+        "poster": "fixture-missing-a"
+      }
+    ],
+    "counts": [
+      2,
+      1,
+      1,
+      1
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "possible_candidate",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      },
+      {
+        "face_px": 64,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "not_compared",
+        "quality_frames": 0,
+        "reason": "why_small",
+        "status": "not_compared"
+      }
+    ]
+  },
+  "measured_one_video_frame": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          12,
+          12
+        ],
+        "label": "too_brief",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "too_brief"
+      }
+    ]
+  },
+  "one_video_frame": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          12,
+          12
+        ],
+        "label": "too_brief",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "too_brief"
+      }
+    ]
+  },
+  "seen_32_px": {
+    "candidates": [],
+    "counts": [
+      1,
+      0,
+      1,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 32,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "not_compared",
+        "quality_frames": 0,
+        "reason": "why_small",
+        "status": "not_compared"
+      }
+    ]
+  },
+  "stranger": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "below_cutoff",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "below_cutoff"
+      }
+    ]
   }
 }
