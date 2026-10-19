@@ -269,7 +269,9 @@ pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanRe
         .and_then(crate::timeutil::system_time_from_unix)
         .or_else(|| decode::container_created(&req.input));
     let warnings = media_warnings(mtime_of(req), container, now);
-    let mut job = open_job(req, media.fps, media.video || media.frames > 1, warnings, now)?;
+    // Pictures that are not a video, like the pages of a TIFF or a multi-image
+    // HEIC, each decide alone, as a still does.
+    let mut job = open_job(req, media.fps, media.video, warnings, now)?;
     job.declared_frames = Some(media.frames);
     // Phone decoders paint a cut JPEG's missing rows gray too, and a shell that
     // pushes only a motion photo's still has not scanned its clip.
@@ -328,9 +330,12 @@ pub fn scan_path(req: &ScanRequest, stop: Option<&StopFlag>, events: &mut dyn Fn
     let end = match decoded {
         // Only an exact frame count can say a clean decode stopped early. Duration
         // times the frame rate also counts audio that continues after the pictures.
+        // A header that counts fewer pictures than the file stores is Incomplete
+        // even when every stored picture was read, and the report names its count.
         Ok(stats) => DecodeEnd {
-            clean: stats.clean,
-            declared_frames: (probed.video && probed.frames_exact && probed.frames > 0).then_some(stats.probe.frames),
+            clean: stats.clean && stats.probe.header_frames.is_none(),
+            declared_frames: (probed.video && probed.frames_exact && probed.frames > 0)
+                .then_some(stats.probe.header_frames.unwrap_or(stats.probe.frames)),
             reason: None,
         },
         Err(err) => DecodeEnd { clean: false, declared_frames: None, reason: Some(media_refusal(err).headline) },

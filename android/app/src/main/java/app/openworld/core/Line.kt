@@ -32,8 +32,11 @@ fun JSONObject.lines(name: String): List<Line> = Line.list(optJSONArray(name))
 /** A string field that may be absent or JSON null. */
 fun JSONObject.text(name: String): String? = if (isNull(name)) null else optString(name).ifEmpty { null }
 
-/** The core's fixed sentences by code, from the `copy` call. A shell refusal uses these words. */
-class Copy(private val texts: Map<String, String>) {
+/**
+ * The core's fixed sentences by code, from the `copy` call. A shell refusal uses these words, and a
+ * report the shell makes itself shows [disclosure], which has no clearance line.
+ */
+class Copy(private val texts: Map<String, String>, val disclosure: List<Line> = emptyList()) {
     fun line(code: String, fallback: String = ""): Line = Line(code, texts[code] ?: fallback)
 
     companion object {
@@ -41,7 +44,7 @@ class Copy(private val texts: Map<String, String>) {
 
         fun from(answer: JSONObject): Copy {
             val table = answer.optJSONObject("copy") ?: return EMPTY
-            return Copy(table.keys().asSequence().associateWith { table.optString(it) })
+            return Copy(table.keys().asSequence().associateWith { table.optString(it) }, answer.lines("disclosure"))
         }
     }
 }

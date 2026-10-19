@@ -30,6 +30,9 @@ final class ScanModelTests: XCTestCase {
         guard case .ready(let pack) = model.posters else { return XCTFail("posters") }
         XCTAssertTrue(pack.demo)
         XCTAssertEqual(model.copy.line("incomplete").text, "Incomplete.")
+        // The interrupted-scan card shows the core's disclosure, without the clearance line.
+        XCTAssertEqual(model.copy.disclosure.count, 8)
+        XCTAssertFalse(model.copy.disclosure.contains { $0.code == "no_clearance" })
     }
 
     func testMissingPostersAreTheCoresRefusalAndBlockAnalyze() async throws {

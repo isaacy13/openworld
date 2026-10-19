@@ -11,6 +11,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /** Copies a content URI into cacheDir/imports. Only content:// photos and videos are read. */
 class AndroidImports(private val resolver: ContentResolver, private val dir: File) : Imports {
@@ -71,10 +72,15 @@ class AndroidImports(private val resolver: ContentResolver, private val dir: Fil
 
     override fun delete(imported: Imported) {
         imported.file.delete()
+        held -= imported.file.path
+    }
+
+    override fun hold(imported: Imported) {
+        held += imported.file.path
     }
 
     override fun clear() {
-        dir.listFiles()?.forEach { it.deleteRecursively() }
+        dir.listFiles()?.filter { it.path !in held }?.forEach { it.deleteRecursively() }
     }
 
     private class Facts(val name: String?, val size: Long?, val modifiedMs: Long?)
@@ -104,5 +110,7 @@ class AndroidImports(private val resolver: ContentResolver, private val dir: Fil
 
     private companion object {
         const val SPACE_MARGIN = 64L * 1024 * 1024
+        /** Copies a scan in this process still reads. Gone with the process, as that scan is. */
+        val held: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     }
 }

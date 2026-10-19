@@ -26,9 +26,13 @@ interface Imports {
     /** Copy `uri` into the cache. Throws [ImportRefused]. Runs off the main thread. */
     suspend fun copy(uri: Uri, onProgress: (Float?) -> Unit): Imported
 
+    /** Delete the copy, and end its [hold]. */
     fun delete(imported: Imported)
 
-    /** Remove every leftover copy. */
+    /** A scan in this process reads this copy until [delete]: [clear] leaves it. */
+    fun hold(imported: Imported)
+
+    /** Remove every leftover copy. A copy a running scan holds is not a leftover. */
     fun clear()
 }
 

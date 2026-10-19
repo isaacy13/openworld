@@ -132,6 +132,11 @@ pub struct Probe {
     pub frames: u64,
     /// True when the container reported a frame count. An estimate from duration is not exact.
     pub frames_exact: bool,
+    /// The frame count the headers claim, when the pictures the file stores
+    /// disagree: an AVI header that counts fewer, a Matroska length that runs
+    /// past the last picture. `frames` is the stored count. A scan declares
+    /// this one, so the file ends Incomplete.
+    pub header_frames: Option<u64>,
     pub container_created: Option<SystemTime>,
     pub video: bool,
     /// The stored pixels are not square. Width and height are the displayed size.
@@ -763,6 +768,7 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: if moving { count as f64 } else { 0.0 },
         frames: count,
         frames_exact: true,
+        header_frames: None,
         container_created: None,
         video: moving,
         square_pixels: false,
@@ -932,6 +938,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_frames: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -955,6 +962,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_frames: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -990,6 +998,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
             duration_sec: 0.0,
             frames: 1,
             frames_exact: true,
+            header_frames: None,
             container_created: None,
             video: false,
             square_pixels: false,
@@ -1112,6 +1121,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_frames: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -1387,6 +1397,7 @@ fn probe_animated_webp(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: if moving { duration } else { 0.0 },
         frames: count,
         frames_exact: true,
+        header_frames: None,
         container_created: None,
         video: moving,
         square_pixels: false,
@@ -1623,12 +1634,17 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (None, _) => false,
     };
     let shown_packets = read.as_ref().map(|read| read.shown);
+    // A header that counts fewer pictures than the file stores is not the
+    // file. The pictures a player lists are. Trusting the header would stop
+    // the decode early and call the rest of the file scanned. Its duration
+    // comes from the same short count, so it cannot shorten the plan either.
+    let header_short = match (nb, packets) {
+        (Some(listed), Some(counted)) if counted > listed && shown_packets.is_some_and(|shown| shown > listed) => Some(listed),
+        _ => None,
+    };
     let stored = match (nb, packets) {
         (Some(listed), Some(counted)) if counted > 0 && counted < listed => Some(counted),
-        // A header that counts fewer pictures than the file stores is not the
-        // file. The pictures a player lists are. Trusting the header would stop
-        // the decode early and call the rest of the file scanned.
-        (Some(listed), Some(counted)) if counted > listed && shown_packets.is_some_and(|shown| shown > listed) => shown_packets,
+        _ if header_short.is_some() => shown_packets,
         (Some(listed), _) => Some(listed),
         (None, packets) => packets,
     };
@@ -1646,11 +1662,16 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (stored, _, _) => stored,
     };
     let frames = match (stored, presented) {
-        (Some(exact), Some(presented)) if header_matches_packets && presented > 0 && presented < exact => presented,
+        (Some(exact), Some(presented)) if header_matches_packets && header_short.is_none() && presented > 0 && presented < exact => presented,
         (Some(exact), _) => exact,
         (None, Some(presented)) => presented,
         (None, None) => return Err(MediaError::BadCodec),
     };
+    // Matroska and WebM count no frames, so the packets are the count. A file
+    // cut short keeps its length in the header, and its last picture ends well
+    // before that length. Its packets would read as every frame.
+    let cut_short = nb.is_none() && read.as_ref().and_then(|read| read.end).is_some_and(|end| picture - end > (3.0 / fps).max(0.2));
+    let header_frames = header_short.or_else(|| cut_short.then(|| presented.unwrap_or(frames)));
     // The size FFmpeg will deliver, after any sample-aspect stretch.
     fits(width, height)?;
     if frames > MAX_FRAMES {
@@ -1660,9 +1681,16 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         width,
         height,
         fps,
-        duration_sec: if picture > 0.0 { picture } else { duration },
+        duration_sec: if header_short.is_some() {
+            frames as f64 / fps
+        } else if picture > 0.0 {
+            picture
+        } else {
+            duration
+        },
         frames,
         frames_exact: stored.is_some(),
+        header_frames,
         container_created: created,
         video: true,
         square_pixels,
@@ -1734,6 +1762,8 @@ struct Packets {
     times: Option<Vec<f64>>,
     /// How long the last shown picture stays up.
     last_duration: Option<f64>,
+    /// When the last shown picture with a time ends, as far as its packet says.
+    end: Option<f64>,
 }
 
 fn video_packets(path: &Path, shown: usize) -> Option<Packets> {
@@ -1783,11 +1813,13 @@ fn video_packets(path: &Path, shown: usize) -> Option<Packets> {
         }
     }
     let last_duration = timed.as_ref().and_then(|list| list.last()).and_then(|(_, duration)| *duration);
+    let end = kept.iter().filter_map(|(time, duration)| Some(time.as_ref()? + duration.unwrap_or(0.0))).reduce(f64::max);
     Some(Packets {
         stored,
         shown: kept.len() as u64,
         times: timed.map(|list| list.into_iter().map(|(time, _)| time).collect()),
         last_duration,
+        end,
     })
 }
 
@@ -2524,6 +2556,7 @@ mod tests {
             duration_sec: 1.0,
             frames: 1,
             frames_exact: true,
+            header_frames: None,
             container_created: None,
             video: true,
             square_pixels: false,
