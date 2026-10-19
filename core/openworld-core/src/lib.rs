@@ -6,6 +6,11 @@
 //! `ffi` (or, on a computer, link it directly). They do not detect, track, or
 //! compare. The `openworld` CLI is a thin wrapper over the same calls.
 
+// `!(x > 0.0)` is deliberate throughout: it is true for NaN, so a NaN refuses.
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+// A refusal is a whole report, so the shells read one shape either way.
+#![allow(clippy::result_large_err)]
+
 pub mod arcface;
 pub mod bench;
 pub mod bundle;

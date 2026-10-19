@@ -11,6 +11,15 @@
 //!
 //! No panic crosses this boundary. Every returned string is freed with
 //! `ow_string_free`.
+//!
+//! # Safety
+//!
+//! Every pointer is null or valid for the call: strings are NUL-terminated,
+//! pixel buffers hold `stride * height` bytes (chroma planes their rows),
+//! and a job is used by one thread at a time and not after `ow_job_finish`
+//! or `ow_job_free`. A stop token may be used from any thread until freed.
+//! The C header states the same contract; these functions check for null.
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use crate::copy::Line;
 use crate::engine::{DecodeEnd, Event, StopFlag};
@@ -212,6 +221,7 @@ pub extern "C" fn ow_job_push_yuv420(
         for row in 0..height as usize {
             let yrow = &yp[row * y_stride as usize..];
             let crow = (row / 2) * uv_stride as usize;
+            #[allow(clippy::needless_range_loop)]
             for col in 0..width as usize {
                 let c = crow + (col / 2) * uv_step as usize;
                 let (mut l, cb, cr) = (i32::from(yrow[col]), i32::from(up[c]) - 128, i32::from(vp[c]) - 128);

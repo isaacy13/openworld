@@ -247,11 +247,7 @@ fn motion_video(path: &Path) -> MotionVideo {
     let mut claimed = false;
     let mut turned_off = false;
     let mut video_len = None;
-    loop {
-        let marker = match next_jpeg_marker(&mut file) {
-            Some(marker) => marker,
-            None => break,
-        };
+    while let Some(marker) = next_jpeg_marker(&mut file) {
         // The scan starts here. The XMP packet is a marker before it.
         if marker == 0xDA || marker == 0xD9 {
             break;
@@ -637,10 +633,7 @@ fn motion_photo_off(text: &str) -> bool {
         if end == start {
             return true;
         }
-        return match rest[start..end].parse::<u64>() {
-            Ok(1) if !neg => false,
-            _ => true,
-        };
+        return !matches!(rest[start..end].parse::<u64>(), Ok(1) if !neg);
     }
     false
 }
@@ -927,7 +920,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
 }
 
 fn oriented_still_size(width: u32, height: u32, tag: u8) -> (u32, u32) {
-    if matches!(tag, 5 | 6 | 7 | 8) {
+    if matches!(tag, 5..=8) {
         (height, width)
     } else {
         (width, height)
@@ -1131,7 +1124,10 @@ fn animated_png(path: &Path) -> bool {
 
 /// Each chunk of a WebP: tag, payload offset, payload size. Read by seeking,
 /// so a large file costs a few small reads.
-fn webp_chunks(path: &Path) -> Option<(File, Vec<([u8; 4], u64, u64)>)> {
+/// (tag, payload offset, payload size).
+type Chunk = ([u8; 4], u64, u64);
+
+fn webp_chunks(path: &Path) -> Option<(File, Vec<Chunk>)> {
     let mut file = File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     let mut header = [0u8; 12];

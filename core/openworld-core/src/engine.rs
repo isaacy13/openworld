@@ -280,7 +280,7 @@ impl Engine {
             }
         }
         self.frames_analyzed += 1;
-        if self.frames_analyzed % PROGRESS_EVERY == 0 {
+        if self.frames_analyzed.is_multiple_of(PROGRESS_EVERY) {
             events(Event::Progress { frames_analyzed: self.frames_analyzed, frame: index });
         }
         true

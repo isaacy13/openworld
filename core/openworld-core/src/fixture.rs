@@ -237,7 +237,7 @@ fn unpack(packed: u16) -> Option<u16> {
 
 fn try_at(img: &RgbImage, x: u32, y: u32) -> Option<Hit> {
     let side = black_run(img, x, y, 1, 0);
-    if side < 16 || side % 8 != 0 || x + side > img.width() || y + side > img.height() {
+    if side < 16 || !side.is_multiple_of(8) || x + side > img.width() || y + side > img.height() {
         return None;
     }
     if black_run(img, x, y, 0, 1) != side || !square_frame(img, x, y, side) {
