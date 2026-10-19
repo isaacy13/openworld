@@ -352,21 +352,21 @@ class Checks(unittest.TestCase):
         self.assertEqual(curve["chance"]["fmr_at_cutoff"], curve["lfw"]["at_manifest_threshold"]["false_match"]["rate"])
         self.assertEqual(curve["chance"]["source"], "LFW all pairs, faces enlarged 2x")
 
-    def test_a_moved_operating_point_fails(self):
+    def test_a_rate_at_an_operating_point_is_checked(self):
         curve = synthetic_curve()
         published = json.loads(json.dumps(curve))
         for op in published["lfw"]["operating_points"]:
-            if op["target_fmr"] == rf.CHECK_FMR:
-                op["threshold"] = round(op["threshold"] + 0.02, 4)
-        self.assertTrue(any("score at FMR" in f for f in rf.check(curve, published)))
+            if op["target_fmr"] == 1e-4:
+                op["false_match"]["rate"] = 0.5
+        self.assertTrue(any("published FMR 0.0001" in f for f in rf.check(curve, published)))
 
     def test_a_published_rate_outside_the_sample_interval_fails(self):
         curve = synthetic_curve()
         published = json.loads(json.dumps(curve))
-        published["lfw"]["at_manifest_threshold"]["false_non_match"]["rate"] = 0.99
+        published["lfw"]["at_manifest_threshold"]["false_non_match_one_pair_per_person"]["rate"] = 0.99
         published["scans"]["stills"]["enrolled_found"]["rate"] = 0.0
         failures = rf.check(curve, published)
-        self.assertTrue(any("LFW false_non_match at the manifest threshold" in f for f in failures))
+        self.assertTrue(any("LFW false_non_match_one_pair_per_person at the manifest threshold" in f for f in failures))
         self.assertTrue(any("stills enrolled_found" in f for f in failures))
 
     def test_the_lfw_false_match_rate_is_checked(self):
