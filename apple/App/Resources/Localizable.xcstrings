@@ -1,0 +1,172 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ frames · faces looked for at %lld px": {},
+    "%@, %lld posters": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, %2$lld poster"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, %2$lld posters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@: %@": {},
+    "%lld possible candidates. Review each one below.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld possible candidate. Review it below."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld possible candidates. Review each one below."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld posters": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld poster"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld posters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "5 frames a second": {},
+    "A stop is Incomplete, never a clearance.": {},
+    "A stopped scan is Incomplete. It is never a clearance.": {},
+    "Analyze on this device": {},
+    "Animation · %@ frames · %@": {},
+    "Back": {},
+    "Bundle": {},
+    "CPU": {},
+    "Cancel": {},
+    "Chance": {},
+    "Check a photo or video you already have against public FBI missing and wanted posters, on this device.": {},
+    "Choose a Photo or Video…": {},
+    "Choose a photo or video": {},
+    "Choose a photo or video (⌘O)": {},
+    "Choose another file": {},
+    "Classes": {},
+    "Compare with": {},
+    "Coverage": {},
+    "Delete result": {},
+    "Delete this result?": {},
+    "Demo": {},
+    "Demo posters": {},
+    "Details": {},
+    "Detection size": {},
+    "Detector": {},
+    "Device note": {},
+    "Dismiss": {},
+    "Done": {},
+    "Embedder": {},
+    "Estimating…": {},
+    "Every frame": {},
+    "FBI posters": {},
+    "Face from frame %lld. %@": {},
+    "Faces": {},
+    "Files": {},
+    "Frame %@ of %@": {},
+    "Frames": {},
+    "From your file": {},
+    "GPU": {},
+    "Install demo posters": {},
+    "Keep scanning": {},
+    "Looking": {},
+    "Missing": {},
+    "Model bundle": {},
+    "Neural Engine": {},
+    "No camera": {},
+    "No posters installed. Real FBI photos stay off.": {},
+    "Not scanned": {},
+    "Nothing is scanned or uploaded from here.": {},
+    "Nothing uploaded": {},
+    "Nothing was scanned. Choose another file, or open this one on a computer.": {},
+    "Nothing was scanned. Choose another file.": {},
+    "Nothing was scanned. Install the posters again, then scan.": {},
+    "Nothing was scanned. Try again, or choose another file.": {},
+    "OK": {},
+    "Open FBI page": {},
+    "OpenWorld": {},
+    "Options": {},
+    "Other faces": {},
+    "Photo · %@": {},
+    "Plate": {},
+    "Poster": {},
+    "Posters": {},
+    "Preparing the file…": {},
+    "Ran on": {},
+    "Read all": {},
+    "Reading the file…": {},
+    "Recorded %@": {},
+    "Result": {},
+    "Results are deleted after 7 days, or when the posters expire.": {},
+    "Review": {},
+    "Saved. Open OpenWorld to scan it.": {},
+    "Saving…": {},
+    "Scan another file": {},
+    "Scan progress": {},
+    "Scanning": {},
+    "Scanning on this device": {},
+    "Show frame": {},
+    "Starting…": {},
+    "Stay": {},
+    "Stays on this device": {},
+    "Stop": {},
+    "Stop scan": {},
+    "Stop the scan?": {},
+    "Stopping. The result will say Incomplete.": {},
+    "The crops and frames from this scan are removed from this device.": {},
+    "The frame count was estimated from the length. If it is off, the result is Incomplete.": {},
+    "The system stopped the last scan before it finished. It is not a clearance.": {},
+    "This file could not be saved. Open OpenWorld and choose it there.": {},
+    "Video · %@ · %@": {},
+    "Wanted": {},
+    "What happened to this file": {},
+    "What happens to this file": {},
+    "about %@ left": {},
+    "fetch date unknown": {},
+    "fetched %@": {},
+    "fetched today": {},
+    "or drop it here": {}
+  },
+  "version": "1.0"
+}

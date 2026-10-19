@@ -1,0 +1,180 @@
+# SPDX-License-Identifier: Apache-2.0
+# XcodeGen spec for OpenWorld.xcodeproj (generated, not committed):
+#   scripts/build-core.sh   # build/OpenWorldCore.xcframework and build/onnxruntime.xcframework
+#   xcodegen generate       # in apple/
+# Set DEVELOPMENT_TEAM (and register group.app.openworld) before signing for a device or the stores.
+name: OpenWorld
+options:
+  bundleIdPrefix: app.openworld
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    # Mac builds run locally without a team ("Sign to Run Locally"). Set a team to distribute.
+    "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    DEAD_CODE_STRIPPING: YES
+    # The core is built for arm64 only (Apple silicon Macs, iPhones, and the arm64 simulator).
+    # scripts/build-core.sh documents how to add x86_64 slices.
+    EXCLUDED_ARCHS: x86_64
+
+targets:
+  # The model and the core bridge. Links the Rust core and ONNX Runtime statically.
+  OpenWorldKit:
+    type: framework
+    platform: [iOS, macOS]
+    productName: OpenWorldKit
+    sources:
+      - path: Sources/OpenWorldKit
+    dependencies:
+      - framework: build/OpenWorldCore.xcframework
+        embed: false
+      - framework: build/onnxruntime.xcframework
+        embed: false
+      - sdk: CoreML.framework
+      - sdk: Accelerate.framework
+      - sdk: Foundation.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorldKit
+        GENERATE_INFOPLIST_FILE: YES
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        BUILD_LIBRARY_FOR_DISTRIBUTION: NO
+        # From `--print native-static-libs` of the core: -liconv -lc++ -framework CoreML -framework Foundation.
+        OTHER_LDFLAGS: ["-lc++", "-liconv"]
+
+  # iPhone and iPad.
+  OpenWorld:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "macOS/**"
+      - path: ../bundles
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: OpenWorldKit_iOS
+      - target: OpenWorldShare
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorld
+        INFOPLIST_FILE: App/iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/iOS/OpenWorld.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+
+  # Mac.
+  OpenWorldMac:
+    type: application
+    platform: macOS
+    productName: OpenWorld
+    sources:
+      - path: App
+        excludes:
+          - "iOS/**"
+      - path: ../bundles
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: OpenWorldKit_macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorld
+        PRODUCT_NAME: OpenWorld
+        INFOPLIST_FILE: App/macOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/macOS/OpenWorld.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+
+  # Share sheet: saves one photo or video into the app group for the app to pick up.
+  OpenWorldShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+      - path: Sources/OpenWorldKit/Inbox.swift
+      - path: App/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorld.Share
+        INFOPLIST_FILE: Share/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Share/OpenWorldShare.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+
+  # The kit's tests, on the Mac, against the linked core.
+  OpenWorldKitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/OpenWorldKitTests
+    dependencies:
+      - target: OpenWorldKit_macOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorldKitTests
+
+  # One launch-and-look smoke test of the Mac app.
+  OpenWorldUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: OpenWorldMac
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorldUITests
+        TEST_TARGET_NAME: OpenWorldMac
+
+schemes:
+  OpenWorld:
+    build:
+      targets:
+        OpenWorld: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  OpenWorldMac:
+    build:
+      targets:
+        OpenWorldMac: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - OpenWorldKitTests
+        - OpenWorldUITests
+    archive:
+      config: Release
