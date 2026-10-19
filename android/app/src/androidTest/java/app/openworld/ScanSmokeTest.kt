@@ -8,7 +8,9 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToString
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.openworld.core.Line
@@ -33,6 +35,17 @@ class ScanSmokeTest {
 
     private fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
+    private fun model() = ViewModelProvider(compose.activity)[ScanViewModel::class.java]
+
+    /** Waits for [condition]; on a timeout, fails with the app state and the screen tree. */
+    private fun waitFor(what: String, ms: Long, condition: () -> Boolean) {
+        try {
+            compose.waitUntil(ms, condition)
+        } catch (timeout: Throwable) {
+            throw AssertionError("$what after $ms ms.\nState: ${model().state.value}\nScreen:\n${compose.onRoot(useUnmergedTree = true).printToString()}", timeout)
+        }
+    }
+
     @Test
     fun theLinkedCoreAnswers() {
         val answer = NativeCore { Line("missing_program", "") }.call(request("version"))
@@ -45,9 +58,9 @@ class ScanSmokeTest {
         compose.onNodeWithText(string(R.string.app_name)).assertExists()
         val install = string(R.string.posters_install_demo)
         val badge = string(R.string.posters_demo_badge)
-        compose.waitUntil(STARTUP_MS) { shown(install) || shown(badge) }
+        waitFor("No demo install button or badge", STARTUP_MS) { shown(install) || shown(badge) }
         if (!shown(badge)) compose.onNodeWithText(install).performClick()
-        compose.waitUntil(STARTUP_MS) { shown(badge) }
+        waitFor("No demo badge after installing", STARTUP_MS) { shown(badge) }
 
         // The still goes through the app's own path: PNG on disk, BitmapFactory, RGBA push.
         val activity = compose.activity
@@ -56,19 +69,19 @@ class ScanSmokeTest {
         val bitmap = Bitmap.createBitmap(DemoScene.WIDTH, DemoScene.HEIGHT, Bitmap.Config.ARGB_8888)
         bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(DemoScene.rgba()))
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        val model = ViewModelProvider(activity)[ScanViewModel::class.java]
+        val model = model()
         compose.runOnUiThread {
             model.openImported(Imported(file, file.name, "image/png", file.length(), null, Uri.fromFile(file).toString()))
         }
 
         val analyze = string(R.string.analyze)
-        compose.waitUntil(SCAN_MS) {
+        waitFor("Analyze never enabled", SCAN_MS) {
             compose.onAllNodes(hasText(analyze) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(analyze).performClick()
 
         val headline = "Possible candidate. Not an identification."
-        compose.waitUntil(SCAN_MS) { shown(headline) }
+        waitFor("No candidate headline", SCAN_MS) { shown(headline) }
         compose.onAllNodesWithText(headline)[0].assertExists()
         compose.onAllNodesWithText(string(R.string.open_fbi_page))[0].assertExists()
     }
