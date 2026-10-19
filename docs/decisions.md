@@ -56,7 +56,11 @@ The cutoff is measured on the CPU provider. `openworld bench` times each provide
 
 ## 9. Build and platforms
 
-- ONNX Runtime is loaded at run time from a library pinned by SHA-256 (`scripts/fetch_ort.py`), not downloaded while building.
+- ONNX Runtime is loaded at run time from a library pinned by SHA-256, not downloaded while building. The pins live in one file, `core/openworld-core/onnxruntime.pins`: the PyPI wheel's published digest, and the digest of the library inside it, computed from that checked wheel. `scripts/fetch_ort.py` downloads and extracts with them; `build.rs` builds the one library digest for the target into the core.
+- The core hashes the library file before it loads it and refuses any other bytes, with the `runtime` refusal. This holds for every place it looks: `OPENWORLD_ORT_LIB` (when set, the only place), beside the program, `../Frameworks`, `../lib`, and the development copy. On a computer it never falls back to the system loader, because those bytes cannot be checked; a platform without a pin loads nothing. Release packaging never re-signs or replaces the library, because that would change its bytes.
+- Android loads the library by name from the app's signed APK (stored uncompressed, mapped in place, so there is no file to hash). Gradle verifies the ONNX Runtime AAR against `android/gradle/verification-metadata.xml` when it builds, and the APK signature covers it after that. iOS and the Mac app link ONNX Runtime statically from the archive `apple/scripts/build-core.sh` pins; the code signature covers it after that.
+- Build inputs are pinned too: GitHub Actions by commit SHA (`scripts/pin_actions.py --check` in CI), the Gradle distribution by Gradle's published SHA-256, and every Gradle artifact by `android/gradle/verification-metadata.xml`, which CI regenerates from what the build resolves and compares with the committed file.
+- A `v*` tag runs `.github/workflows/release.yml`: it builds the files, lists them in `SHA256SUMS`, writes CycloneDX SBOMs, attests each file's build provenance, and attaches them to a **draft** release. Signing uses the owner's keys from repository secrets and is skipped, with a log line, when they are absent. No key is committed.
 - The desktop app is Rust + GTK 4 + libadwaita on Linux and Windows, linking the core in-process. On Windows it looks like a GNOME app; a WinUI shell is a later option.
 - Phones push decoded frames to the core (`ow_job_*`); nothing writes frames to disk.
 

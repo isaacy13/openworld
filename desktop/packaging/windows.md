@@ -16,7 +16,7 @@ cargo build --release --manifest-path desktop/Cargo.toml
 python scripts/fetch_ort.py windows-x86_64
 ```
 
-`fetch_ort.py` keeps the wheel only when its SHA-256 matches the pin in that script, and writes `third_party/onnxruntime/windows-x86_64/onnxruntime.dll`. Use `windows-x86_64-directml` for the DirectML build (the core must then be built with its `directml` feature).
+`fetch_ort.py` keeps the wheel only when its SHA-256 matches its pin in `core/openworld-core/onnxruntime.pins`, checks each file it takes out against its own pin, and writes `third_party/onnxruntime/windows-x86_64/onnxruntime.dll`. The core refuses any `onnxruntime.dll` whose SHA-256 is not that pin, so do not re-sign or replace it. Use `windows-x86_64-directml` for the DirectML build (the core must then be built with its `directml` feature, which makes it expect the DirectML pin instead).
 
 The MSYS2 `rust` package builds for `x86_64-pc-windows-gnu`, which links against the UCRT64 GTK. A rustup toolchain works too with `rustup default stable-x86_64-pc-windows-gnu` and the UCRT64 `bin` folder first on `PATH`.
 
