@@ -1,0 +1,30 @@
+# Contributing
+
+Thank you for helping. Read [AGENTS.md](AGENTS.md) and [docs/decisions.md](docs/decisions.md) first: the product limits there (import only, on-device, no auto-report, no clearance language, plates out of v0) are not open for change in a pull request.
+
+## Ground rules
+
+- **No photographs of real people in the repository**, in tests, fixtures, or screenshots. Use the demo markers (`openworld fixture-still`) or synthetic files. Public face sets are downloaded by `eval/` and never committed.
+- **No training** on user media or poster photos.
+- **No invented hashes.** A SHA-256 comes from the file or from its publisher.
+- **No English-text logic.** Shells decide by codes and statuses; words come from the core as Lines.
+
+## Build and test
+
+```sh
+python3 scripts/fetch_ort.py          # the pinned ONNX Runtime the core loads at run time
+python3 scripts/fetch_weights.py fast # optional: the Fast weights, kept only if the SHA-256 matches
+cargo test --manifest-path core/Cargo.toml
+cargo clippy --manifest-path core/Cargo.toml -p openworld-core -p openworld-cli -- -D warnings
+```
+
+The desktop app is in `desktop/` (`cargo run --manifest-path desktop/Cargo.toml`, needs GTK 4 and libadwaita), Android in `android/` (`./gradlew assembleDebug testDebugUnitTest`), and the Apple apps in `apple/` (see `apple/README.md`).
+
+## Pull requests
+
+- Keep each change small and focused, with tests for new behavior and for any bug you fix.
+- Match the surrounding code: short plain comments, clear names.
+- Write commit messages that say what changed and why, in a sentence.
+- CI must be green: the core tests and clippy, the self-test, the sampled real-photo check, and the shells that your change touches.
+
+Security issues go through [SECURITY.md](SECURITY.md), not public issues.

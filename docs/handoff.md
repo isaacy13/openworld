@@ -1,5 +1,7 @@
 # OpenWorld v0 handoff
 
+> Corrected on 2026-10-19 by [decisions.md](decisions.md): the cutoff, the Fast weights, the detection size (now automatic), plates (out of v0), and the fail-closed rules. Where they disagree, decisions.md wins.
+
 Paste this to an agent started **from** https://github.com/isaacy13/openworld. This project has no repo attached and cannot push. The GitHub repo is public and empty. Put the code there. Apache-2.0.
 
 ## Goal

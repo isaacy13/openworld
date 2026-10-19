@@ -2,185 +2,77 @@
 
 OneX Engineering will successfully privatize open source world peace.
 
-OpenWorld looks at a photo or video you already have, on the phone or computer where the file is. It compares faces, and plates only in a narrow case, to a small frozen set of public FBI missing-person and wanted-person posters. If a score passes that bundle's locked cutoff, you see the frame, the crop, the poster, and the uncertainty on that candidate's card. The face card states the score and the cutoff of what made that score: the bundle you picked, or, when the posters are fixture markers, the fixture cutoff whichever bundle you picked. That score line does not repeat "Possible candidate. Not an identification." The plate card states the plate text that matched, and it does not repeat that sentence either. Other crops from the file are listed under the cards. Two crops with the same label on one frame both stay in that list. A tap asks to open that poster's FBI page. The screen says "You are leaving OpenWorld." Under it: "OpenWorld is not sending a report.", the class line for that poster, the age and timestamp warnings this file has, and "This file is not authenticated." A wanted poster's line says do not approach and names 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov. A missing poster's line says it is not a criminal accusation, do not approach, and names NCMEC at 1-800-THE-LOST (1-800-843-5678). The confirmation offers Open and Stay. OpenWorld only opens an FBI page. The app does not send a report. A completed scan with no candidate states "No candidate is not a clearance." as the headline and again in the disclosure.
+OpenWorld checks a photo or video you already have against public FBI missing-person and wanted-person posters, **on the device where the file is**. It finds the faces, follows them through a video, and compares each one to a small, frozen poster pack with a locked cutoff. A face that passes is shown as **"Possible candidate. Not an identification."**: the crop from your file beside the poster photo, the frame it came from, and how far past the cutoff it was. One tap, through a confirmation, opens that poster's own FBI page. OpenWorld never sends a report.
 
-v0 scans a synthetic fixture. Real FBI photos stay off. The Open bundle runs real face networks, measured on public photos, but its only posters are the ones a measurement builds.
+> **Status: pre-release.** There is no release yet. **Real FBI posters stay off**: the apps scan against a demo poster pack of synthetic markers until the cutoff is measured on photos like the posters. See [docs/decisions.md](docs/decisions.md).
 
-## Design
+## What it is not
 
-The files in [docs/](docs/) are a design export, not a release. Start at [docs/handoff.md](docs/handoff.md). There is no release yet, so this README does not print a SHA-256. When a release exists, the checksum is filled from that GitHub release. A checksum shipped beside the binary is not the check.
+Import only: no camera, no watch folder, no background scan. Nothing is uploaded, nobody is enrolled, and nothing trains on your file. A candidate is not an identification. **No candidate is not a clearance.** On-device does not mean the file is real. Not NCIC, NCMEC, NamUs, INTERPOL, or an Amber alert.
 
-## What this is not
+## How it works
 
-Import only. There is no camera permission, no watch folder, and no background scan.
-
-Nothing is uploaded. There is no account, no enrollment, and no training on your file or on poster photos. OpenWorld does not contact an agency. A candidate is not an identification. No candidate is not a clearance. On-device does not mean the file is real.
-
-This is not NCIC, NCMEC, NamUs, INTERPOL, or an Amber or Silver feed. Amber is a phone emergency broadcast.
-
-Plate text is read only when an enabled poster publishes that plate and the crop passes the quality gate. A plate whose text is not on a poster says "This plate text is not published on a poster." A plate that cannot be read says "The plate could not be read." When no enabled poster publishes a plate, the crop says "No poster publishes a plate." A vehicle is not a person.
-
-
-## Quickstart
-
-You need a current stable Rust toolchain and, for video, FFmpeg. The desktop window needs GTK 4.
-
-```sh
-cargo test --manifest-path core/Cargo.toml
-cargo run --manifest-path core/Cargo.toml -p openworld-cli -- demo --out /tmp/openworld-demo
-python3 desktop/openworld_gtk.py
+```text
+your file → decode one frame at a time (FFmpeg on a computer; AVFoundation / MediaCodec on a phone)
+          → YuNet finds faces at a size chosen so a 112 px face is found
+          → the tracker follows each face
+          → hard quality gates: size, landmarks, confidence, pose, blur, exposure
+          → the 5 best frames of each face are embedded once by SFace and averaged
+          → locked cosine against the poster pack
+          → a video face is a candidate only after 3 gated frames or 1 second
+          → one row per face; cards for candidates; nothing leaves the device
 ```
 
-That writes a synthetic still, a fixture poster pack, and a result directory. The summary is either "Possible candidate. Not an identification." or, when nothing passes, "No candidate is not a clearance." Crops are under `/tmp/openworld-demo/result/crops`.
+One Rust library (`core/`) does all of it. The apps only show what it returns ([docs/api.md](docs/api.md)).
 
-The sections below say what each surface prints and when it refuses.
+| Bundle | Models | Cutoff | Measured |
+| --- | --- | --- | --- |
+| **Fast** (selected) | YuNet 2023mar (MIT) + SFace 2021dec (Apache-2.0) | 0.63: false match rate at or under one in a million on LFW | `eval/real_faces.py`; the result reads "Not measured yet" until `bundles/fast/curve.json` is published for this pipeline |
+| **Accurate** | Larger SCRFD + ResNet-100 ArcFace (no redistributable weights yet) | 0.60 | Not measured yet |
 
-## The scan
+Every result says how many false candidates chance alone would give that scan. With *f* the false match rate, *N* posters, and *M* faces, that is about *f·N·M*. It is why the cutoff is strict.
 
-`core/` is the Rust library and the `openworld` CLI. A bundle is a folder under `bundles/`. Add or remove a model by adding or removing a folder. A bundle's measured curve is `curve.json` inside that folder, so a copied folder keeps it. A curve path outside the folder is not read. A bundle page with no model's headline is "The scan program is not on this device. Refusing." It does not say Model bundle, and it does not say scores are not comparable. A file that cannot be read on that page is the first line, and the headline stays that refusal. Continue does not open the size page. `openworld bundles` prints that sentence alone when the catalog is empty. On Android, the catalog named by the environment is that catalog, including when Fast is not in it. A catalog that cannot be read says "The bundle catalog could not be read. Refusing." as the headline. Continue does not open the size page.
+## Try it
 
-- **Fast** is selected by default. It is declared as SCRFD-0.5GF plus a small ArcFace, best for phones and long video. InsightFace pretrained weights are non-commercial research only, so they are not in the tree and their SHA-256 is not invented here. Until those weights are pinned, a fixture pack is read with synthetic markers. The result says "Fixture markers were read." ONNX Runtime is linked. A weight file whose license is non-commercial research only is refused even if the hash matches, so the InsightFace zoo files are not an official bundle. A file that is pinned and allowed to ship is loaded as SCRFD, ArcFace, and the plate model. If that session does not load, the scan refuses. It does not say there was no candidate. An unfinished scan says "Incomplete." The reason is under that headline, in the warning color. It does not say there was no candidate either. A result file that cannot be written says "The result could not be written." in that warning color and leaves out "No candidate is not a clearance." A phone that cannot create a result folder says "The output directory could not be created. Refusing." as the headline and does not offer Analyze. The Mac window stays on that page too. A folder that cannot be replaced says "The output directory could not be replaced. Refusing." A decode that fails during the scan shows that refusal once. A session that loads and finds nothing is a completed scan, and it can say "No candidate is not a clearance."
-- **Accurate** is declared as a larger SCRFD plus a ResNet-100-class ArcFace, for a computer when you want fewer misses. Selectable. The row says "Not measured yet." until its own curve exists.
-- **Open** pairs YuNet 2023mar (MIT) with SFace 2021dec (Apache-2.0), both from OpenCV Zoo. It is for a computer, and its cutoff of 0.51 is measured on public photos (see Real photos, below). Its weights are not in the tree: `python3 scripts/fetch_weights.py open` downloads them and keeps a file only when its SHA-256 matches the manifest. A poster pack is only compared by the embedder that made it. A pack from another embedder says "The poster pack was made with another embedder. Refusing."
-
-A face enters the inventory at 64 px on the short side of the detection image. The size page says a face under 64 px on that image is left out. On a large file that rule is much larger in the original. In a 12-megapixel photo at 640, a face under 404 px is left out. When Full resolution would compare a face that the chosen size leaves out, the estimate says so under the choice line, for example "At 640 px, a face under 404 px in this file is left out. Full resolution compares a face from 112 px." The result repeats it as a warning. It is compared only when the crop from the original frame is at least 112 px on the short side. Below that the label is "Not compared." The size page says that too. It is not a candidate and it is not a clearance. The size page prints that whole paragraph, then Continue. The estimate screen keeps Analyze. A result lists every candidate, the score, and the disclosure, then Choose another file. A face that large whose crop cannot be scored says "This face could not be scored."
-
-### Files and frames
-
-`complete` analyzes every decoded frame. An animated GIF is every frame of that file. An animated PNG is every frame on the desktop scan. An animated PNG that does not store an average frame rate is still scanned. An animated PNG stored on its side, with the camera orientation tag that shows it upright, is still scanned. An animated WebP is every frame of that file. A phone that cannot read every frame of an animated PNG or animated WebP refuses. A face that is not on the first frame is still compared. A one-frame GIF stays one frame. A JPEG, a still WebP, a PNG, or a TIFF is scanned the way the photo is shown, including the camera orientation tag. Every page of a TIFF is scanned. A 16-bit TIFF sample is scanned from its high 8 bits. A palette TIFF, a bilevel TIFF, a CMYK TIFF, and a YCbCr TIFF are scanned as the picture they show. A multi-page TIFF whose pages are not all read is refused. Android refuses a TIFF. A video is scanned the way it is shown, including a quarter-turn display rotation, non-square pixels, and both together. A sample aspect that does not land on a whole pixel is still scanned. A cropped picture whose header is a few pixels off the decoded frame is still scanned. A video whose name has no extension is still a video: Android, Mac, and iPhone read the file header. A HEIF or AVIF header stays a still. A JPEG whose name ends in .png is decoded as a JPEG. Those phones copy a frame when the header is a PNG. The Mac and iPhone writer uses that same display size and writes every page of a TIFF. The estimate on those devices counts the video track. Audio that continues after the pictures does not turn a finished decode into "Incomplete." An edit list that hides some samples leaves the scan on the frames a player shows, and that finished scan stays complete. A picture that stays on screen does not take the place of the pictures after it. Measured coverage reads the picture on screen at each sample tick, including one that stays up. A Matroska or WebM file that does not store a frame count still counts one picture per packet, so that tick still lands on the picture that stays up. An AVI header that counts a nominal rate does the same, and a full scan of those pictures stays complete. A video that does not store an average frame rate still uses the rate a player shows, so that picture is scanned. Several frames of one track keep one card, the frame with the highest cosine. A plate track keeps the earliest frame of that track. The other frames stay in the inventory and in the comparison list. A frame under the cutoff stays out of the cards.
-
-### Coverage
-
-`measured` analyzes 5 frames a second, plus the tracker, and shows "A brief face can be missed." That sentence appears on an estimate that can run. The result says how many frames were analyzed. One frame says "1 frame analyzed." A scan that left some decoded frames out says how many of them were analyzed, under the headline. It also repeats the detection size in the words of that button. 640 says "640 px on the long side." Full resolution says "Full resolution." It repeats the coverage in those words too. Complete says "Every decoded frame." Measured says "5 frames a second, plus the tracker." A candidate card names the frame it came from, counting from 1. A still says "Frame 1." The second frame says "Frame 2." The crops under the cards name that frame too.
-
-### The estimate
-
-There is no maximum duration. The estimate is a planning model, not a thermal table. It counts the pictures the scan will read. On the desktop it reads the stored pictures without decoding them, so a long video gets its time without waiting for a decode. Complete counts every stored picture. Measured counts the picture on screen at each sample tick. Audio that continues after them keeps the same estimate. On a phone it also shows heat and battery. A long phone estimate suggests a computer. You can still run `complete` on the phone. If the job stops, the result is "Incomplete." and the screen says why, in the warning color, such as "The file was not fully decoded."
-
-A bad hash, a bad codec, or a missing or expired poster pack is a refusal. That result does not name a bundle.
-
-## Real photos
-
-`eval/real_faces.py` measures the Open bundle on public photographs and writes [`bundles/open/curve.json`](bundles/open/curve.json). The photos are downloaded, checked against pinned SHA-256 digests, and not committed. The stills and videos go through the same `openworld scan` command the desktop window uses, and the cosines that scan reports must equal the library's own vectors. The poster pack for that run is built by `eval/real` (`openworld-eval`). That tool is not shipped: the `openworld` command cannot turn a photo into a poster.
+You need Rust, Python 3, and FFmpeg.
 
 ```sh
-python3 scripts/fetch_weights.py open
+python3 scripts/fetch_ort.py              # pinned ONNX Runtime, checked by SHA-256
 cargo build --release --manifest-path core/Cargo.toml -p openworld-cli
-cargo build --release --manifest-path eval/real/Cargo.toml
-python3 eval/real_faces.py --bin core/target/release/openworld --eval-bin eval/real/target/release/openworld-eval --out bundles/open/curve.json --check bundles/open/curve.json
+core/target/release/openworld demo --out /tmp/openworld-demo
 ```
 
-| Measurement at the 0.51 cutoff | Result |
-| --- | --- |
-| LFW ten-fold accuracy, 6,000 standard pairs | 99.52% ± 0.37% |
-| False match rate, all 87,307,271 different-person LFW pairs | 771, or 8.8 in a million |
-| Miss rate, one same-person pair for each of 1,680 LFW people | 99, or 5.9% (95% interval 4.9% to 7.1%) |
-| Miss rate, all 242,257 same-person LFW pairs | 1.5% |
-| Stills through `openworld scan`: 100 enrolled people, 100 strangers | 93 found, 0 on the wrong poster, 0 strangers carded |
-| 1280x720 H.264 clips, the enrolled face on screen for one second | 20 of 20 found, under complete and under measured |
-| The 93 stills it found, saved as a JPEG stored a quarter turn off with an orientation tag | 93 found, 0 on the wrong poster |
-| The same faces in a 4032x3024 JPEG, the face about 560 px | 92 found at 640 and at full resolution |
-| The same faces in a 4032x3024 JPEG, the face about 190 px, as in a group photo | 0 found at 640, each result naming the size it left out; 92 found at full resolution |
-| The same faces in a 1080x1920 clip stored turned, with a display rotation | 93 found, under complete and under measured |
-| WIDER FACE validation, faces 72 px and up, at 640 px | 91.8% found (1,068 of 1,163), 95.3% when not occluded |
-| Held out from the cutoff: CALFW, 3,000 different-person pairs | 0 false matches (95% interval up to 0.13%) |
-| Held out from the cutoff: CALFW, 3,000 same-person pairs years apart | 1,116 missed, or 37.2% (35.5% to 38.9%) |
-| Held out from the cutoff: CPLFW, 3,000 different-person pairs | 1 false match (0.01% to 0.19%) |
-| Held out from the cutoff: CPLFW, 3,000 same-person pairs, one face turned | 1,779 missed, or 59.3% (57.5% to 61.1%) |
+That writes a demo poster pack and a synthetic still, scans it, and prints the result. `openworld analyze` walks through the same steps for a file you choose, with the disclosure and the estimate, and asks before it starts.
 
-Read those numbers with these limits:
+A demo pack is read with the demo markers, not the face models. The face models run against a pack of real face vectors, and the only such packs today are the ones `eval/` builds from public face sets for measurement (`python3 scripts/fetch_weights.py fast` fetches the weights). The shipped commands cannot turn a photo into a poster.
 
-- The cutoff was chosen on LFW. On cross-age LFW (CALFW) and cross-pose LFW (CPLFW), which it never saw, false matches stay rare, but a same-person photo taken years apart is missed more than one time in three, and a turned face more than half the time. 107 of the 5,984 CPLFW photos had no face compared at all. A poster photo is often years old. A missed person is not a clearance, and this bundle misses many. Ten-fold accuracy on those sets, which picks its own threshold, is 93.3% and 87.0%.
-- LFW is celebrity press photos. It is not mugshots, not FBI posters, and not NIST. A poster photo can be older, smaller, and worse than these.
-- LFW faces are about 94 px, under the 112 px compare rule. At their own size, 99.98% of LFW faces are seen and 2.9% are compared. Every LFW number above enlarges the photo twice. The embedder still reads a 112 px aligned crop.
-- The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand (0.5062), rounded up. The all-pairs miss rate is weighted toward the few people with hundreds of photos. One pair per person is what one poster against one photo sees: about one enrolled person in seventeen is missed.
-- WIDER FACE misses are mostly occluded, turned, masked, or cut off by the frame.
-- The phone-file rows score within 0.01 of the plain still on average. A 640 px scan of a 12-megapixel group photo leaves those faces out and says so. Full resolution finds them.
-- Real FBI photos stay off. LFW is the wrong domain for a surveillance operating point, so this curve cannot by itself turn them on. It sets `real_posters_allowed` to false.
+`openworld --help` lists every command. `--json` prints the library's own answer. `openworld bench` times the models on this device and checks that an accelerated provider scores like the CPU.
 
-## Posters
+## Apps
 
-The first pack is a fixture snapshot with the same schema a later update would use. `openworld posters update` refuses and prints "Real FBI photos stay off. Fast does not have a curve that allows them." It does not call api.fbi.gov. A curve that sets `real_posters_allowed` is what would open that path. The Fast fixture curve does not.
+| Platform | Folder | Built with |
+| --- | --- | --- |
+| Linux, Windows | `desktop/` | Rust, GTK 4, libadwaita; links the core |
+| Android | `android/` | Kotlin, Jetpack Compose, Material 3; MediaCodec; the core through JNI |
+| iPhone, Mac | `apple/` | SwiftUI; AVFoundation; the core as an XCFramework |
 
-Classes are missing and wanted, on or off together as a class. The cutoff is the same for both. The estimate starts with both on and says "Missing and wanted." Turning wanted off says "Missing." and leaves that class out of the scan. The control stays named Wanted. The result names those classes again, under the headline. A candidate card names that poster as Missing or Wanted. A poster with no title keeps that class on its own. An old file is warned on the file page and again on the estimate, before Analyze. A file that is not old leaves no blank line on that page. A provider that leaves the name blank shows the name from the address under that headline. A long file name wraps on the desktop, on the phone, and in the Mac window. Disagreeing timestamps are a warning under the result line, not part of it. An old file is repeated there too. With both off, Analyze stays on the page and does not run, and the screen says "Choose missing, wanted, or both." A refused estimate's headline is the refusal sentence. It does not say Estimate, and it does not show Missing, Wanted, or Analyze. A file that cannot be read on that page is the first line, and the headline stays that refusal. The command prints that sentence alone. It does not repeat the on-device lines. A scan that runs with both off says "No class was on." ECAP, unidentified remains, and unnamed Seeking Information are skipped by the list parser. A running job keeps the pack it loaded.
+All three follow one design: [docs/ux.md](docs/ux.md).
 
-## Command line
+## Measurement
 
-Before that report, the command says "Scanning" and names each crop as it is written: the frame, the label, and the crop path. A scan with no crop still says "Scanning." The report then lists each candidate the way the screen does: the frame, the poster, and Open FBI page with its address and the lines that screen shows on the way out. The crops follow, each named with its frame. A warning is printed before those cards. An unfinished scan prints its reason under "Incomplete."
+`eval/` measures Fast on public face sets (LFW, CALFW, CPLFW, WIDER FACE) that are downloaded, pinned by SHA-256, and never committed. LFW is celebrity press photos, not mugshots or posters, and has no demographic labels, so it cannot by itself turn real posters on. See [eval/README.md](eval/README.md).
 
-`openworld leave --url` prints "You are leaving OpenWorld." before that address. `openworld estimate` prints the same planning lines as the estimate screen. It starts with Estimate. Then the time, the caveat, where the scan runs, then the bundle, size, and coverage in the words of those buttons. Measured coverage then says "A brief face can be missed." An old file says "This file is older than about 30 days." before that time.
+## Trust
 
-`openworld analyze` says it on the file step and again before the time. The lines end with the classes that are on: "Missing and wanted.", "Missing.", or "Wanted." When the command asks which classes to compare, that step says "Missing and wanted." and marks Missing and Wanted as selected. Both off says "Choose missing, wanted, or both." and `openworld analyze` does not start. An answer that is not yes or no says "Choose missing, wanted, or both." on the next line, before the estimate. The next question starts on the next line. A declined analyze says "Not started." on the next line. `openworld analyze --json` prints that refusal, or the finished report, as one JSON document. The switches are `--no-missing` and `--no-wanted`, the same flags as scan. `openworld analyze --yes` uses the preselected bundle, size, and coverage when those flags are absent: Fast, 640 px on the long side, and every decoded frame. A file that cannot be read prints the refusal.
-
-`openworld delete` prints "Deleted." or "Refusing to delete a directory that is not an OpenWorld result." `openworld leave` on a page that is not the FBI prints "OpenWorld only opens an FBI page." `openworld posters check` prints "Fixture posters. Real FBI photos stay off." and how many posters, or the same refusal a scan would. `openworld copy` prints the words the screens use. `openworld bundles` says "Model bundle" and "Scores are not comparable across bundles. Results name the bundle you pick." It marks the bundle that will run: "Fast. Selected." When the command asks for a model bundle, that question says Model bundle. A bundle that is not in the catalog says "That bundle is not in the catalog. Refusing."
-
-The size step is titled Detection size and prints the same paragraph as the size page, including "A face under 64 px on that image is left out." and "Not compared." A size that is not 320, 480, 640, or full says "Detection size must be 320, 480, 640, or full. Refusing." before the command asks for a poster pack. A coverage that is not complete or measured says "Coverage must be complete or measured. Refusing." An empty catalog says "The scan program is not on this device. Refusing." before that size step. `openworld measure`, `openworld demo`, and a fixture still that needs Fast say that sentence when the catalog is empty, and "That bundle is not in the catalog. Refusing." when Fast is not one of the bundles. The demo command leaves its directory uncreated. A demo path that is already a file says "The output directory could not be created. Refusing." and leaves that file in place. When the fixture pack inside that directory cannot be written, the command says "The poster pack could not be read. Refusing." When the demo still cannot be written, the command says "The still could not be written. Refusing." A fixture still whose folder cannot be created says "The output directory could not be created. Refusing." A fixture still that cannot be written says "The still could not be written. Refusing." A demo, a measure, or a fixture still that refuses before it scans prints only the refusal sentence. A fixture still that asks for both a scene and a blank canvas says "Choose a scene or a blank still." A poster pack that is missing says "The poster pack is missing. Refusing." before the command asks for a result directory and before the estimate. A result path that is already a file, or that sits inside a file, says "The output directory could not be created. Refusing." before the command asks which classes to include and before the estimate. That file is left in place. When the fixture poster pack cannot be written, the headline is "The poster pack could not be read. Refusing." in the warning color. The scan stays off, and that file is left in place. That result still says what stays on the device, and it leaves out "No candidate is not a clearance." A decode the phone refuses before a report exists says that too. A candidate whose poster has no FBI page still shows that card. Open FBI page stays off that card.
-
-## Screens
-
-### Import
-
-When the command asks for a file, it says "Import a file you already have. There is no camera." The phone says "Import a file you already have, or receive it from the share sheet. There is no camera." A file shared while that app is already open arrives in the same window. Turning the phone keeps the open file on the same page. Changing the phone text size keeps the open file on the same page. Changing the phone display size keeps the open file on the same page. Changing the phone language keeps the open file on the same page. Changing the phone bold text keeps the open file on the same page. Changing the phone color mode keeps the open file on the same page. Changing the phone grammatical gender keeps the open file on the same page. Changing pages on the phone starts that page at the top. The desktop and the Mac window say "Import a file you already have. Drop it here, or use Choose File. There is no camera." A file with no local path still opens, and an old file still says that. That copy stays out of the poster pack. A second file with the same name still opens under that name, and that copy stays out of the poster pack. A file dropped on the Mac window stays readable for the scan. Choose File on the phone and in the Mac window keeps every file available, including a video whose name has no extension. A file shared onto the iPhone keeps that same set, including a video whose name has no extension. A file shared onto Android keeps that same set, including a video whose name has no extension. A file shared as an address, or only on the clip, still opens. A share with no file says "The file could not be read. Refusing."
-
-A file shared onto the phone keeps that file's age, so an old share still says that. A shared file whose name contains & still opens that file. A share that cannot be copied leaves the file already stored under that name. A share opens the file stored under that single name in the app folder.
-
-### Choices
-
-The size page marks the same way: "640 px on the long side. Selected." and "Complete. Every decoded frame. Selected." It names those coverage choices Coverage. The Mac and iPhone pickers use those same words. Tapping the bundle name, the detection size, or the coverage selects that choice. Tapping Missing or Wanted turns that class on or off. During a scan those classes stay as they are. A drag on a choice or a crop scrolls the page.
-
-### The desktop window
-
-Drop a photo or video, or use Choose File. Choose File opens on photos and video. Every file stays available in that dialog. A file with no local path still opens, and an old file still says that. That copy stays out of the poster pack. A second file with the same name still opens under that name, and that copy stays out of the poster pack. Fast is selected. The bundle page lists Fast first and marks the bundle that will run. Pressing the selected bundle again keeps that bundle marked. Going back to the file and pressing Continue keeps the bundle you already picked. Choose another file selects Fast again. 640 px on the long side is selected. The estimate is shown before Analyze. A one-second estimate says "About 1 second." A one-minute estimate says "About 1 minute."
-
-A file that cannot be read stays off the next page and says "The file could not be read. Refusing." That sentence is the first line on the page, in the warning color, above the title. A page that keeps the earlier file still puts it first. Continuing to the next page keeps that sentence. A result already on screen keeps that result, and the sentence stays first there too. That sentence stays on the screen. An estimate that can run does the same. A refused estimate keeps that refusal as the headline. A deleted result keeps "Deleted." A result that is only a refusal keeps that sentence. A scan of the file already chosen removes that sentence. A file that can be read removes that result before the next page, so the result is not left with no Delete button. A file this account cannot read stays off that page too. The command says that for a missing file, a directory, or a file this account cannot read. A readable file that is not a picture says "Bad codec or unreadable file. Refusing." A platform decode that reports a width, height, or frame count of zero says that same sentence. `openworld estimate` and `openworld scan` print it as the refusal, and `--json` prints one document. The scan request entry refuses that size before it reads the file. An answer that is not a report says "The scan could not be read. Refusing." The scan runs on the CPU in this build and says so.
-
-After Analyze, the screen says Scanning until the result is ready. The previous result is cleared before that wait. Scanning leaves no blank line under that headline. Each crop appears with its label while that scan runs, including a plate and a vehicle. The desktop reads the report while those crops are still arriving, so a large report does not leave the screen on Scanning. On a phone they appear on the estimate, under Scanning. Each of those crops names its frame, counting from 1. A long crop label wraps under its picture. Back stays off during that wait, including on the phone. The phone system Back steps to the previous page. On the first page it leaves the app. During a scan it stays on that page. A file that arrives during that wait stays off the screen, and the scan continues. After a result, Back returns to the estimate, and Choose another file starts over.
-
-Delete removes that result. A directory that is not a result stays, the result stays on screen, and the screen says why, in the warning color. That sentence stays on the screen. Choosing a file from an earlier page says that too, and the file stays the one already chosen. A file that can be read replaces an unread-file sentence with that reason. Continuing to the estimate keeps that sentence once. Back clears it. Analyze stays on the estimate when the result cannot be deleted, and that sentence appears once. A file that can be read after that removes the sentence. A page that is not the FBI says "OpenWorld only opens an FBI page." in that warning color. That sentence stays on the screen. Choose another file and Analyze leave that folder on disk and continue, so a missing result file does not trap the next scan. After a real delete, Delete is gone. "Deleted." leaves no blank line under that headline. Scanning does not show Delete. A scan that does not write a result does not offer Delete. It does not remove the file you picked. Choose another file also removes a result that would otherwise stay in a temporary folder. On Android, that button also removes the imported copy. Delete removes the result and keeps the copy so Analyze can run again.
-
-Closing the desktop window stops a scan that is still running and removes that temporary folder. A report that arrives as that window closes stays off the screen. A scan that starts as that window closes is stopped too. A scan started as that window closes stays off the screen. Back, Continue, and Choose another file as that window closes stay on the page. A file chosen as that window closes stays off the screen. Closing the phone app stops a scan that is still running and removes that temporary folder. A file chosen as the phone app closes stays off the screen. A crop that arrives as the phone app closes stays off the screen. Back, Continue, and Choose another file as the phone app closes stay on the page. Closing the Mac window, or the iPhone app, stops a scan that is still running and removes that temporary folder. A file chosen as the Mac window closes, or as the iPhone app closes, stays off the screen. A crop that arrives as the Mac window closes, or as the iPhone app closes, stays off the screen. A scan started as the Mac window closes, or as the iPhone app closes, stays off the screen. Back, Continue, and Choose another file as the Mac window closes, or as the iPhone app closes, stay on the page. Closing one Mac window leaves the scan in another Mac window running, and a file chosen in that window still opens. Closing the phone app stops a decode that is still writing frames. Closing the Mac window, or the iPhone app, stops that decode too.
-
-A refused file does not offer Analyze. Back still works, and the next file can continue. The phone result screen has the same Delete button.
-
-### Phones and the Mac
-
-`apple/` is the SwiftUI app for iPhone and Mac. It decodes with AVFoundation. That executable is built on a macOS runner. Linux CI runs the phone model and the contract tests. It does not build the iPhone or Mac app. A PNG still is copied byte for byte there so the phone model can run a fixture scan. Video still refuses without AVFoundation. `android/` is the Material app. It decodes with MediaCodec. Both call `ow_command` in the Rust library when that library is linked into the process (`include/openworld.h`). Host tests load `libopenworld_core` that way: `android/scripts/link-host-jni.sh` builds the JNI shim, and `OPENWORLD_LIB` is the same library for the Linux phone tests. That file is this machine's build. It is not an Android ABI and not an iOS archive. A store build still has to link those. Until it does, the phone starts the `openworld` program with the same arguments. They do not implement a second detector. FFmpeg runs only on the desktop file path, when frames were not already decoded.
-
-## Fast curve
-
-`bundles/fast/curve.json` is the fixture measurement on this program's preprocess: false match rate, false non-match rate, and the four comparison outcomes at the locked cutoff (true positive, false negative, false positive, true negative), each with a count and a 95% Wilson interval. Genuine trials use 16 fixture identities. Impostor trials use 160 pairs with a different probe identity every time. A face that was not compared is left out of that table. The file also has detection recall at the 64 px rule, faces seen but not compared, and the miss rate for a face visible about one second under both coverage modes. A shorter probe is included so the measured-mode warning has a number behind it.
-
-It is not SCRFD, not LFW, and not NIST. Real FBI photos stay off.
-
-```sh
-python3 eval/measure_fast.py --bin core/target/debug/openworld --bundles bundles --out bundles/fast/curve.json --check bundles/fast/curve.json
-```
-
-`eval/heldout.py` runs a separate set through the same `openworld scan` command the desktop window uses. Eighty impostor stills use identities other than the two fixture posters, at placements the published curve does not use. A face under 64 px is left out. A face at 64 px is seen and labeled "Not compared." A compressed video of color bars, with no marker in it, stays a clearance. A lossless video of the fixture scene stays a candidate, with one card for the face track and one card for the plate track, and a container time that disagrees with the file time is a warning, not a refusal. A phone scan reads that clock from the file. A still has no container clock. A one-frame GIF stays one frame and a clearance. A three-frame GIF whose marker is only on the middle frame stays a candidate, and the scan reports three frames. An animated PNG of that same marker stays a candidate and reports three frames. A video whose first picture stays on screen, with the marker only on a later picture, stays a candidate and reports every picture. A Matroska file that does not store a frame count, with the marker only on the picture that stays on screen, stays a candidate under measured coverage and reports every picture. An AVI file whose header counts a nominal rate, with the marker only on the picture that stays on screen, stays a candidate under measured coverage and stays complete when every picture is scanned. An Ogg Theora file of the fixture scene, whose average rate is empty, stays a candidate. A cropped picture whose header is a few pixels off the decoded frame stays a candidate. An animated PNG of the fixture scene that does not store an average frame rate stays a candidate. An animated PNG of the fixture scene, stored on its side with the camera orientation tag that shows it upright, stays a candidate. An animated WebP of the fixture scene, with the marker only on the middle frame, stays a candidate, and the scan reports three frames. A JPEG stored on its side, with the camera orientation tag that shows it upright, stays a candidate. A still WebP stored on its side, with that same tag, stays a candidate. A PNG stored on its side, with that same tag, stays a candidate. A TIFF stored on its side, with that same tag, stays a candidate. A 16-bit TIFF stored on its side, with that same tag, stays a candidate. A palette TIFF, a bilevel TIFF, a YCbCr TIFF, and a subsampled YCbCr TIFF of the upright scene stay candidates. A two-page TIFF whose marker is only on the second page stays a candidate, and the scan reports two frames. A video stored on its side, with a quarter-turn display rotation that shows it upright, stays a candidate. A video whose pixels are not square, and whose player shows the upright scene, stays a candidate. A video that is turned and stored with non-square pixels, and whose player shows the upright scene, stays a candidate. A video whose edit list hides the opening blank samples stays a candidate, and the scan stays complete. A video whose edit list hides a sample after a picture stays up stays a candidate, and that scan stays complete. A video whose edit list hides the marker stays a clearance. A video whose audio continues after the pictures stays a candidate when every picture frame was decoded. An audio file is refused. None of these files are photographs of people. This set does not turn `real_posters_allowed` on.
-
-## Continuous integration
-
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on pushes to `main`. The Ubuntu job rebuilds the Rust library, requires 90% line coverage, checks this Fast curve against a fresh run, checks the product sentences, and runs the Android phone tests. A second Ubuntu job fetches the Open weights and runs a sample of the real-photo measurement. Each rate in that sample has to agree with the published Open curve within its 95% interval. A third runs the Apple contract and the phone model tests. A fourth opens the GTK desktop window on a virtual display and runs every desktop check, with `python3 tests/automate.py desktop`. Without a display or GTK 4 that command fails instead of skipping. The macOS job builds the SwiftUI app. It does not launch it.
-
-The crops in those phone tests are synthetic markers drawn for the fixture pack. They are not photographs of people, and they are not a training set. OpenWorld does not train on photos. Face photographs are not committed. InsightFace pretrained weights stay out. Open has an LFW curve. A curve on photos like the posters is still open, and `real_posters_allowed` stays false.
-
-## A public release
-
-These are still open. A fixture scan does not close them, and neither does the LFW curve.
-
-- Pin redistributable Fast weights (SCRFD-0.5GF, the small ArcFace, RTMDet-nano, and plate text) with name, version, SHA-256, and a license that allows shipping. InsightFace pretrained files stay out. Open is pinned and redistributable, but it reads no plate.
-- Publish a face curve on photos like the posters, for the bundle that would turn real posters on. `real_posters_allowed` stays false until that curve says otherwise. `openworld posters update` keeps refusing, and it does not call api.fbi.gov.
-- Link `libopenworld_core` into the iPhone and Android store binaries. Host tests already call `ow_command` in-process. The store ABIs are not built here.
-- Measure phone heat and battery. The estimate remains a planning model.
-- Legal review, store signing, and an independent audit.
-- Pin `keys/openworld-release.pub` and publish the release file's SHA-256 on the GitHub release. This repository does not invent either value.
+- [docs/threat-model.md](docs/threat-model.md): assets, adversaries, mitigations.
+- [docs/data-flow.md](docs/data-flow.md): every piece of data and when it is deleted.
+- [SECURITY.md](SECURITY.md): reporting a vulnerability.
+- The design specs are in [docs/](docs/), starting with [docs/handoff.md](docs/handoff.md) and [docs/decisions.md](docs/decisions.md).
 
 ## Checking a release
 
-There is no release yet. Do not trust a checksum that shipped next to a binary.
+There is no release yet. When one exists, compare the file you downloaded with the SHA-256 published on that GitHub release, then check its signature against the public key pinned in [keys/](keys/). A checksum shipped next to a binary is not the check. This README does not invent a digest.
 
-When a release exists, compare the file you downloaded to the SHA-256 digest published on that GitHub release, then check the signature against the public key pinned in this repository. No signing key is pinned yet. `keys/README.md` says why. This README does not invent a digest.
+## Contributing
 
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Apache-2.0; see [LICENSE](LICENSE).
