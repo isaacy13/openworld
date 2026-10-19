@@ -46,6 +46,7 @@ import tarfile
 import tempfile
 import time
 import tomllib
+import urllib.error
 import urllib.request
 import zipfile
 from collections import Counter
@@ -176,10 +177,11 @@ def fetch(data: Path, need):
         zipfile.ZipFile(data / "wider_face_split.zip").extractall(data)
 
 
-def download(url: str, target: Path, attempts=6):
+def download(url: str, target: Path, attempts=6, rate_limit_waits=30):
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_suffix(target.suffix + ".part")
-    for attempt in range(attempts):
+    failures = waits = 0
+    while True:
         try:
             # Some hosts refuse Python's default User-Agent.
             request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -188,10 +190,17 @@ def download(url: str, target: Path, attempts=6):
                     out.write(block)
             part.replace(target)
             return
-        except OSError:
-            if attempt == attempts - 1:
+        except OSError as error:
+            # A rate limit is waited out; it does not count as a failure.
+            if isinstance(error, urllib.error.HTTPError) and error.code == 429 and waits < rate_limit_waits:
+                waits += 1
+                retry_after = error.headers.get("Retry-After", "")
+                time.sleep(int(retry_after) if retry_after.isdigit() else 60)
+                continue
+            failures += 1
+            if failures == attempts:
                 raise
-            time.sleep(2 ** (attempt + 1))
+            time.sleep(2**failures)
 
 
 def held_out_pairs(root: Path, spec, folds=None):
@@ -231,7 +240,8 @@ def fetch_held_out(data: Path, name, folds=None):
     missing = [p for p in photos if not p.is_file()]
     if missing:
         print(f"downloading {len(missing)} {name} photos", file=sys.stderr)
-        with ThreadPoolExecutor(8) as pool:
+        # Few at a time: the mirror rate-limits anonymous downloads.
+        with ThreadPoolExecutor(4) as pool:
             list(pool.map(lambda p: download(f"{base}/{spec['folder']}/{p.relative_to(root / spec['folder']).as_posix()}", p), missing))
     got = held_out_digest(root, spec)
     if got is None:
