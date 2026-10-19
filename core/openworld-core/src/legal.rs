@@ -59,9 +59,9 @@ pub fn document(id: &str) -> Result<Value, Line> {
     Ok(json!({ "ok": true, "id": doc.id, "title": Line::of(doc.title), "paragraphs": paragraphs }))
 }
 
-/// Blocks separated by blank lines, each kept as written.
+/// Blocks separated by blank lines, each kept as written. A Windows checkout has CRLF endings.
 fn blocks(text: &str) -> Vec<String> {
-    text.split("\n\n").map(|b| b.trim_matches('\n').to_string()).filter(|b| !b.trim().is_empty()).collect()
+    text.replace("\r\n", "\n").split("\n\n").map(|b| b.trim_matches('\n').to_string()).filter(|b| !b.trim().is_empty()).collect()
 }
 
 /// The policies' Markdown as plain paragraphs: headings, emphasis, code marks, and links
@@ -126,6 +126,7 @@ mod tests {
         assert_eq!(plain_line("- See the [Privacy Policy](privacy.md), section 2."), "• See the Privacy Policy, section 2.");
         assert_eq!(plain_line("from `api.fbi.gov` [a](b) and [c](d)"), "from api.fbi.gov a and c");
         assert_eq!(plain("# T\n\nOne\ntwo\n\n\n- a\n- b\n"), vec!["T", "One\ntwo", "• a\n• b"]);
+        assert_eq!(plain("# T\r\n\r\nOne\r\ntwo\r\n"), vec!["T", "One\ntwo"]);
     }
 
     #[test]
