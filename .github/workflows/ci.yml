@@ -97,14 +97,17 @@ jobs:
         with:
           path: ~/.cache/openworld-eval
           key: public-faces-${{ hashFiles('eval/real_faces.py') }}
-      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli --features eval
+      - name: statistics unit tests
+        run: python -m unittest discover -s eval -p 'test_*.py'
+      # The eval build writes raw scores, so it gets its own target folder.
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli --features eval --target-dir target-eval
       - run: cargo build --release --manifest-path eval/real/Cargo.toml
       - name: bench on this runner
-        run: core/target/release/openworld --bundles bundles --json bench
+        run: target-eval/release/openworld --bundles bundles --json bench
       - name: sampled real-photo check against the published Fast curve
         if: hashFiles('bundles/fast/curve.json') != ''
         run: >
-          python eval/real_faces.py --bin core/target/release/openworld
+          python eval/real_faces.py --bin target-eval/release/openworld
           --eval-bin eval/real/target/release/openworld-eval
           --people 300 --wider-images 500 --scan-people 30 --video-people 5
-          --check bundles/fast/curve.json > /dev/null
+          --check bundles/fast/curve.json --out "$RUNNER_TEMP/sample-curve.json" > /dev/null
