@@ -718,6 +718,9 @@ fn decode_tiff(path: &Path, info: Probe, on_frame: &mut impl FnMut(u64, &RgbImag
 
 fn tiff_samples(color: tiff::ColorType) -> Result<(usize, u8), MediaError> {
     match color {
+        // Expanded here, not by FFmpeg, so every FFmpeg version shows the same colors.
+        // Packed (under 8-bit) samples are not read by the tiff crate; FFmpeg shows those.
+        tiff::ColorType::Palette(8) => Ok((1, 8)),
         tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => Ok((1, bits)),
         tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => Ok((3, bits)),
         tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => Ok((4, bits)),
@@ -746,6 +749,26 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
     let tag = tiff_tag(decoder);
     let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
     let rgb = match (color, decoded) {
+        (tiff::ColorType::Palette(bits), tiff::decoder::DecodingResult::U8(bytes)) => {
+            let map = decoder
+                .find_tag(tiff::tags::Tag::ColorMap)
+                .ok()
+                .flatten()
+                .and_then(|value| value.into_u16_vec().ok())
+                .ok_or(MediaError::BadCodec)?;
+            let entries = 1usize << bits;
+            if map.len() < 3 * entries {
+                return Err(MediaError::BadCodec);
+            }
+            let pixels = (width as usize).checked_mul(height as usize).ok_or(MediaError::BadCodec)?;
+            let indices = bytes.get(..pixels).ok_or(MediaError::BadCodec)?;
+            let mut rgb = Vec::with_capacity(pixels * 3);
+            for &index in indices {
+                let i = usize::from(index);
+                rgb.extend_from_slice(&[(map[i] >> 8) as u8, (map[entries + i] >> 8) as u8, (map[2 * entries + i] >> 8) as u8]);
+            }
+            RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)?
+        }
         (tiff::ColorType::CMYK(8), tiff::decoder::DecodingResult::U8(bytes)) => cmyk_to_rgb(&bytes, width, height)?,
         (tiff::ColorType::YCbCr(8), tiff::decoder::DecodingResult::U8(bytes)) => ycbcr_to_rgb(&bytes, width, height)?,
         (_, tiff::decoder::DecodingResult::U8(bytes)) => samples_to_rgb(&bytes, width, height, samples)?,

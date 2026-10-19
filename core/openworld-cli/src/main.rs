@@ -342,10 +342,8 @@ fn report_lines(report: &ScanReport) -> Vec<String> {
     if let Some(reason) = &report.reason {
         lines.push(reason.text.clone());
     }
-    for line in [&report.perception_note, &report.frames_line, &report.faces_line, &report.classes, &report.coverage_line, &report.coverage_banner, &report.detection_line, &report.device_note, &report.chance] {
-        if let Some(line) = line {
-            lines.push(line.text.clone());
-        }
+    for line in [&report.perception_note, &report.frames_line, &report.faces_line, &report.classes, &report.coverage_line, &report.coverage_banner, &report.detection_line, &report.device_note, &report.chance].into_iter().flatten() {
+        lines.push(line.text.clone());
     }
     lines.push(format!("Bundle: {} {}. Posters: {} ({}).", report.bundle.name, report.bundle.version, report.posters.id, report.posters.sha256));
     lines.extend(report.warnings.iter().map(|w| w.text.clone()));
