@@ -1,6 +1,6 @@
 # Data flow
 
-Every piece of data OpenWorld touches, where it lives, and when it goes away. Nothing on this page leaves the device.
+Every piece of data OpenWorld touches, where it lives, and when it goes away. Nothing on this page leaves the device. The public [policies](legal/README.md) say the same thing to users, so a change here changes them in the same commit.
 
 | Data | Created by | Stored | Deleted |
 | --- | --- | --- | --- |
