@@ -51,7 +51,8 @@ fn the_catalog_lists_fast_first_and_keeps_accurate_unmeasured() {
     assert_eq!(rows["bundles"][1]["curve_line"]["code"], "not_measured");
     assert_eq!(rows["note"]["code"], "bundle_note");
     assert!(rows["bundles"].as_array().unwrap().iter().all(|r| r["real_posters_allowed"] == false));
-    assert_eq!(ask(json!({"v": 1, "op": "posters_update", "bundles": catalog()}))["refusal"], "real_posters_off");
+    let fbi = tempfile::tempdir().unwrap();
+    assert_eq!(ask(json!({"v": 1, "op": "posters_update", "bundles": catalog(), "posters": fbi.path()}))["refusal"], "real_posters_off");
 }
 
 fn copy_dir(from: &Path, to: &Path) {

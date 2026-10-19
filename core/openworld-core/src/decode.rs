@@ -1172,6 +1172,33 @@ fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
     Ok(image.to_rgb8())
 }
 
+/// A downloaded JPEG, PNG, or WebP, under the same limits as a still on disk.
+/// Anything else is `BadCodec`, whatever a header said it was.
+pub fn still_from_bytes(bytes: &[u8]) -> Result<RgbImage, MediaError> {
+    use image::ImageFormat::{Jpeg, Png, WebP};
+    let format = image::guess_format(bytes).map_err(|_| MediaError::BadCodec)?;
+    if !matches!(format, Jpeg | Png | WebP) {
+        return Err(MediaError::BadCodec);
+    }
+    let decode = || -> image::ImageResult<RgbImage> {
+        let mut reader = ImageReader::with_format(std::io::Cursor::new(bytes), format);
+        reader.limits(still_limits());
+        let mut decoder = reader.into_decoder()?;
+        let (w, h) = decoder.dimensions();
+        if u64::from(w) * u64::from(h) > MAX_PIXELS {
+            return Err(image::ImageError::Limits(image::error::LimitError::from_kind(image::error::LimitErrorKind::DimensionError)));
+        }
+        let orientation = decoder.orientation()?;
+        let mut image = DynamicImage::from_decoder(decoder)?;
+        image.apply_orientation(orientation);
+        Ok(image.to_rgb8())
+    };
+    decode().map_err(|err| match err {
+        image::ImageError::Limits(_) => MediaError::TooLarge,
+        _ => MediaError::BadCodec,
+    })
+}
+
 /// True when a JPEG ends before its end-of-image marker. Segments are skipped
 /// by their lengths and scan data byte by byte, so data appended after the
 /// marker, like a motion photo's clip, is not read. Not a JPEG: false.

@@ -143,6 +143,23 @@ pub const R_DELETE_FOREIGN: Copy = ("delete_foreign", "Refusing to delete a dire
 pub const R_DELETE_FAILED: Copy = ("delete_failed", "The result could not be deleted.");
 pub const DELETED: Copy = ("deleted", "Deleted.");
 
+// Update posters. A failed update leaves the posters as they were.
+pub const R_NETWORK_OFF: Copy = ("network_off", "This build has no network code. The posters were not changed.");
+pub const R_POSTERS_FETCH: Copy = ("posters_fetch_failed", "The FBI poster list could not be fetched. The posters were not changed.");
+pub const R_POSTERS_BAD_LIST: Copy = ("posters_bad_list", "The FBI poster list was not in the expected form. The posters were not changed.");
+pub const R_POSTERS_RUNTIME: Copy = ("posters_runtime", "The face models stopped while checking poster photos. The posters were not changed.");
+pub const R_POSTERS_NONE: Copy = ("posters_none", "No poster photo passed the checks. The posters were not changed.");
+pub const R_POSTERS_FOREIGN: Copy = ("posters_foreign", "That folder is not empty and is not a poster pack. Choose an empty folder. Refusing.");
+pub const R_POSTERS_UNWRITTEN: Copy = ("posters_unwritten", "The new posters could not be written. The posters were not changed.");
+// Why a poster was left out. A face on its photo that fails a gate uses the `why_*` line.
+pub const SKIP_NOT_OPEN: Copy = ("skip_not_open", "Not an open, named missing or wanted poster.");
+pub const SKIP_NO_PHOTO: Copy = ("skip_no_photo", "The poster has no photo at an FBI address.");
+pub const SKIP_PHOTO_UNAVAILABLE: Copy = ("skip_photo_unavailable", "The poster photo could not be downloaded.");
+pub const SKIP_PHOTO_TOO_LARGE: Copy = ("skip_photo_too_large", "The poster photo is too large to check safely.");
+pub const SKIP_NOT_PICTURE: Copy = ("skip_not_picture", "The poster photo is not a picture OpenWorld reads.");
+pub const SKIP_NO_FACE: Copy = ("skip_no_face", "No face was found on the poster photo.");
+pub const SKIP_SEVERAL_FACES: Copy = ("skip_several_faces", "The poster photo shows more than one face.");
+
 /// The classes compared for this scan. A clearance names them so both are not assumed.
 pub fn class_note(missing: bool, wanted: bool) -> Copy {
     match (missing, wanted) {
@@ -266,6 +283,9 @@ pub fn product_copy() -> Value {
         R_PACK_NO_CLASS, R_INTERNAL,
         R_PACK_EMBEDDER, R_PACK_PERCEPTION, R_FIXTURE_OFF, R_OUT_CREATE, R_OUT_FOREIGN, R_OUT_OVERLAP, R_OUT_REPLACE,
         R_BAD_REQUEST, R_REAL_POSTERS_OFF, R_DELETE_FOREIGN, R_DELETE_FAILED, DELETED,
+        R_NETWORK_OFF, R_POSTERS_FETCH, R_POSTERS_BAD_LIST, R_POSTERS_RUNTIME, R_POSTERS_NONE, R_POSTERS_FOREIGN,
+        R_POSTERS_UNWRITTEN, SKIP_NOT_OPEN, SKIP_NO_PHOTO, SKIP_PHOTO_UNAVAILABLE, SKIP_PHOTO_TOO_LARGE, SKIP_NOT_PICTURE,
+        SKIP_NO_FACE, SKIP_SEVERAL_FACES,
         class_note(true, true), class_note(true, false), class_note(false, true),
     ];
     let mut map = Map::new();

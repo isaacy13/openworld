@@ -21,4 +21,4 @@ No account, no analytics, no crash reports with media, no location, no contacts,
 
 ## Network
 
-A scan makes no network request. The only network action is **Update posters**, which stays off until an official curve allows real posters. When it is on, it fetches the public FBI list over HTTPS, hashes the response body, and sends nothing about the user's files. **Open FBI page** hands one URL to the browser after the leaving sheet; OpenWorld does not send a report.
+A scan makes no network request. The only network action is **Update posters**, which stays off until an official curve allows real posters. When it is on, it fetches the public FBI list and poster photos over HTTPS from `api.fbi.gov`, `www.fbi.gov`, and `fbi.gov` only, hashes each response body, builds the poster vectors on the device, and sends nothing about the user's files ([api](api.md#update-posters)). **Open FBI page** hands one URL to the browser after the leaving sheet; OpenWorld does not send a report.

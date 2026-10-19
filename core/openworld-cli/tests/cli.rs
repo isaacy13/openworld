@@ -135,7 +135,7 @@ fn refusals_name_their_reason() {
     assert_eq!((code, report["refusal"].as_str()), (2, Some("bundle_not_found")));
     let (code, report) = json(&["scan", "--input", s(&still), "--posters", s(&posters), "--out", s(&root.path().join("e")), "--coverage", "some"]);
     assert_eq!((code, report["refusal"].as_str()), (2, Some("bad_coverage")));
-    let (code, report) = json(&["posters", "update"]);
+    let (code, report) = json(&["posters", "update", "--out", s(&root.path().join("fbi"))]);
     assert_eq!((code, report["refusal"].as_str()), (2, Some("real_posters_off")));
 }
 
