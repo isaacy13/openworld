@@ -13,6 +13,7 @@ import app.openworld.platform.DeviceStatus
 import app.openworld.platform.Imported
 import app.openworld.platform.Imports
 import app.openworld.platform.ScanMarker
+import app.openworld.platform.TermsStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -36,6 +37,10 @@ class FakeCore : Core {
     var duringUpdate: () -> Unit = {}
     /** The core's answer today: no curve allows real posters. */
     var update: JSONObject = refusal("real_posters_off")
+    var legal: JSONObject = JSONObject().put("ok", true).put("version", TERMS_VERSION).put("contact", "support@example.com")
+        .put("first_run", JSONArray().put(line("welcome")).put(line("not_affiliated")).put(line("nothing_uploaded")))
+        .put("accept", line("accept_terms")).put("changed", line("terms_changed"))
+        .put("documents", JSONArray().apply { DOCUMENTS.forEach { put(JSONObject().put("id", it).put("title", line("doc_$it"))) } })
 
     override fun call(request: JSONObject, onEvent: (JSONObject) -> Unit): JSONObject {
         if (request.getString("op") == "posters_update") {
@@ -77,6 +82,11 @@ class FakeCore : Core {
             "delete" -> JSONObject().put("ok", true).put("deleted", true).put("headline", line("deleted"))
             "posters_demo" -> JSONObject().put("ok", true)
             "posters_update" -> update
+            "legal" -> legal
+            "legal_document" -> request.getString("id").takeIf { it in DOCUMENTS }?.let { id ->
+                JSONObject().put("ok", true).put("id", id).put("title", line("doc_$id"))
+                    .put("paragraphs", JSONArray().put("$id one").put("$id two"))
+            } ?: refusal("no_document")
             else -> refusal("bad_request")
         }
     }
@@ -93,6 +103,10 @@ class FakeCore : Core {
         .put("preselected", preselected).put("curve_line", line("not_measured")).put("weights_ready", preselected).put("official", true)
 
     companion object {
+        const val TERMS_VERSION = "2026-10-19"
+
+        val DOCUMENTS = listOf("terms", "privacy", "biometric", "health_data", "licenses")
+
         /** The core's disclosure codes, in its order. */
         val DISCLOSURE = listOf(
             "on_device", "nothing_uploaded", "nobody_enrolled", "no_training", "no_agency",
@@ -249,4 +263,13 @@ class FakeMarker : ScanMarker {
     }
 
     override fun leftovers(): List<File> = marks.filter { it !in running }
+}
+
+/** The accepted terms version, like [app.openworld.platform.PrefsTerms]. */
+class FakeTerms(var version: String? = null) : TermsStore {
+    override fun accepted(): String? = version
+
+    override fun accept(version: String) {
+        this.version = version
+    }
 }

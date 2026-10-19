@@ -3,6 +3,7 @@ package app.openworld.ui
 
 import app.openworld.AppEnv
 import app.openworld.core.JobStart
+import app.openworld.core.Line
 import app.openworld.core.Status
 import app.openworld.core.TrackStatus
 import app.openworld.media.Probe
@@ -37,6 +38,7 @@ class ScanViewModelTest {
     private val device = FakeDevice()
     private val imports = FakeImports()
     private val marker = FakeMarker()
+    private val terms = FakeTerms(FakeCore.TERMS_VERSION)
     private val root = File("/data/openworld")
     private val file = Imported(File(root, "imports/clip.mp4"), "clip.mp4", "video/mp4", 1_000_000, null, "content://media/1")
 
@@ -53,6 +55,7 @@ class ScanViewModelTest {
             device = device,
             imports = imports,
             marker = marker,
+            terms = terms,
             paths = Paths(File(root, "bundles"), File(root, "posters"), File(root, "results")),
             install = {},
             io = dispatcher,
@@ -76,9 +79,81 @@ class ScanViewModelTest {
         assertTrue(state.demoBuild)
         assertEquals(1, state.posters?.missing)
         assertTrue(state.screen is ScanState.Start)
-        assertEquals(listOf("copy", "version", "sweep", "bundles", "posters_check"), core.calls.map { it.getString("op") })
+        assertEquals(listOf("legal", "copy", "version", "sweep", "bundles", "posters_check"), core.calls.map { it.getString("op") })
+        assertEquals(Terms.Accepted, state.terms)
         // The start screen's non-affiliation line comes from the core, by code.
         assertEquals("not_affiliated", state.notAffiliated?.code)
+    }
+
+    @Test
+    fun nothingAcceptedShowsFirstRun() = runTest(dispatcher) {
+        terms.version = null
+        val state = model().state.value
+        assertEquals(Terms.FirstRun(changed = false), state.terms)
+        assertEquals(FakeCore.TERMS_VERSION, state.legal?.version)
+        assertEquals(listOf("welcome", "not_affiliated", "nothing_uploaded"), state.legal?.firstRun?.map { it.code })
+        assertEquals("accept_terms", state.legal?.accept?.code)
+        assertEquals(FakeCore.DOCUMENTS, state.legal?.documents?.map { it.id })
+    }
+
+    @Test
+    fun anOlderAcceptanceShowsFirstRunWithTheChange() = runTest(dispatcher) {
+        terms.version = "2026-01-01"
+        val state = model().state.value
+        assertEquals(Terms.FirstRun(changed = true), state.terms)
+        assertEquals("terms_changed", state.legal?.changed?.code)
+    }
+
+    @Test
+    fun continueKeepsTheVersionAndOpensTheApp() = runTest(dispatcher) {
+        terms.version = "2026-01-01"
+        val vm = model()
+        vm.acceptTerms()
+        advanceUntilIdle()
+        assertEquals(FakeCore.TERMS_VERSION, terms.version)
+        assertEquals(Terms.Accepted, vm.state.value.terms)
+        assertTrue(vm.screen() is ScanState.Start)
+        // The next launch opens the app.
+        assertEquals(Terms.Accepted, model().state.value.terms)
+    }
+
+    @Test
+    fun withoutAVersionThereIsNothingToAccept() = runTest(dispatcher) {
+        terms.version = null
+        core.legal = FakeCore.refusal("missing_program")
+        val vm = model()
+        assertEquals(Terms.Refused(Line("missing_program", "missing_program")), vm.state.value.terms)
+        vm.acceptTerms()
+        advanceUntilIdle()
+        assertNull(terms.version)
+        assertTrue(vm.state.value.terms is Terms.Refused)
+    }
+
+    @Test
+    fun aDocumentIsReadFromTheCore() = runTest(dispatcher) {
+        val vm = model()
+        vm.openAbout()
+        assertTrue(vm.state.value.about)
+        vm.openDocument("licenses")
+        // The title shows while the core reads the text.
+        assertEquals(Reading("licenses", Line("doc_licenses", "doc_licenses")), vm.state.value.reading)
+        advanceUntilIdle()
+        assertEquals(listOf("licenses one", "licenses two"), vm.state.value.reading?.paragraphs)
+        assertEquals("licenses", core.calls.last().getString("id"))
+        vm.closeDocument()
+        assertNull(vm.state.value.reading)
+        vm.closeAbout()
+        assertFalse(vm.state.value.about)
+    }
+
+    @Test
+    fun anUnknownDocumentShowsTheRefusal() = runTest(dispatcher) {
+        val vm = model()
+        vm.openDocument("nope")
+        advanceUntilIdle()
+        val reading = vm.state.value.reading
+        assertEquals("no_document", reading?.refusal?.code)
+        assertNull(reading?.paragraphs)
     }
 
     @Test

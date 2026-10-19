@@ -61,6 +61,13 @@ interface ScanMarker {
     fun leftovers(): List<File>
 }
 
+/** The terms version the person accepted with Continue, in the shell's own preferences. Nothing is sent. */
+interface TermsStore {
+    fun accepted(): String?
+
+    fun accept(version: String)
+}
+
 /** Shell refusal and notice codes, shown from R.string by the same name. */
 object Shell {
     const val SCAN_KILLED = "scan_killed"

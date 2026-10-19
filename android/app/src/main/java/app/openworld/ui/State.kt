@@ -3,6 +3,7 @@ package app.openworld.ui
 
 import app.openworld.core.BundleRow
 import app.openworld.core.Estimate
+import app.openworld.core.Legal
 import app.openworld.core.Line
 import app.openworld.core.PosterPack
 import app.openworld.core.Report
@@ -12,6 +13,13 @@ import app.openworld.platform.Imported
 import java.io.File
 
 data class UiState(
+    /** The first-run gate, in front of every screen until the core's terms version is accepted. */
+    val terms: Terms = Terms.Checking,
+    /** The core's `legal` answer, for the first-run and About screens. */
+    val legal: Legal? = null,
+    val about: Boolean = false,
+    /** The document in the reading sheet. */
+    val reading: Reading? = null,
     /** Bundles installed and the core answered. */
     val ready: Boolean = false,
     /** This build can write the demo poster pack. */
@@ -27,6 +35,23 @@ data class UiState(
     /** A one-off notice for the snackbar. */
     val message: Line? = null,
 )
+
+/** First run (docs/ux.md §0). Only Continue moves past it. */
+sealed interface Terms {
+    /** The core has not answered `legal` yet. */
+    data object Checking : Terms
+
+    data object Accepted : Terms
+
+    /** `changed` when some older version was accepted. */
+    data class FirstRun(val changed: Boolean) : Terms
+
+    /** The core named no version, so there is nothing to accept and no way past. */
+    data class Refused(val headline: Line?) : Terms
+}
+
+/** A built-in document. `paragraphs` is null while the core reads it, or when it refused. */
+data class Reading(val id: String, val title: Line?, val paragraphs: List<String>? = null, val refusal: Line? = null)
 
 /** The flow: Start, Review, Scanning, Done. Exactly one at a time. */
 sealed interface ScanState {

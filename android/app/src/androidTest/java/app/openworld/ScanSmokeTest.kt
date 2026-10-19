@@ -56,7 +56,13 @@ class ScanSmokeTest {
 
     @Test
     fun aDemoScanFindsTheDemoCandidate() {
-        compose.onNodeWithText(string(R.string.app_name)).assertExists()
+        // A fresh install shows First run; a later test in the same install finds Start.
+        val proceed = string(R.string.first_run_continue)
+        val title = string(R.string.app_name)
+        waitFor("Neither First run nor Start", STARTUP_MS) { shown(proceed) || shown(title) }
+        // Continue sits below the policies: a tap off screen lands nowhere.
+        if (shown(proceed)) compose.onNodeWithText(proceed).performScrollTo().performClick()
+        waitFor("No start screen after Continue", STARTUP_MS) { shown(title) }
         val install = string(R.string.posters_install_demo)
         val badge = string(R.string.posters_demo_badge)
         waitFor("No demo install button or badge", STARTUP_MS) { shown(install) || shown(badge) }

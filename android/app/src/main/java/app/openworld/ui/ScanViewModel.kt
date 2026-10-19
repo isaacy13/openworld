@@ -13,6 +13,7 @@ import app.openworld.core.Candidate
 import app.openworld.core.Copy
 import app.openworld.core.Estimate
 import app.openworld.core.JobStart
+import app.openworld.core.Legal
 import app.openworld.core.Line
 import app.openworld.core.NativeCore
 import app.openworld.core.PosterPack
@@ -24,6 +25,7 @@ import app.openworld.core.Track
 import app.openworld.core.line
 import app.openworld.core.objects
 import app.openworld.core.request
+import app.openworld.core.strings
 import app.openworld.core.text
 import app.openworld.media.MediaInfo
 import app.openworld.media.Probe
@@ -68,6 +70,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     private var importJob: Job? = null
     private var probeJob: Job? = null
     private var estimateJob: Job? = null
+    private var readingJob: Job? = null
     @Volatile private var session: Session? = null
     /** The copy on disk for the file under review. */
     private var current: Imported? = null
@@ -78,6 +81,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
 
     private suspend fun setup() {
         val leftover = withContext(env.io) {
+            // The gate first: a first install copies the catalog for a while.
+            readTerms()
             // A failed install shows up as the catalog's refusal below.
             runCatching { env.install() }
             copy = Copy.from(env.core.call(request("copy")))
@@ -115,6 +120,19 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
         }
     }
 
+    /** Equal versions open the app; anything else shows First run (docs/api.md#first-run). */
+    private fun readTerms() {
+        val answer = env.core.call(request("legal"))
+        val legal = if (answer.optBoolean("ok")) Legal.from(answer) else null
+        val accepted = runCatching { env.terms.accepted() }.getOrNull()
+        val terms = when {
+            legal == null -> Terms.Refused(answer.line("headline"))
+            legal.version == accepted -> Terms.Accepted
+            else -> Terms.FirstRun(changed = accepted != null)
+        }
+        _state.update { it.copy(terms = terms, legal = legal) }
+    }
+
     private fun loadCatalog() {
         val answer = env.core.call(request("bundles") { put("bundles", env.paths.bundles.path) })
         bundles = if (answer.optBoolean("ok")) BundleRow.list(answer) else emptyList()
@@ -130,6 +148,45 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
         }
     }
 
+    // First run and About.
+
+    /** Continue: keep the version the core named, then open the app. */
+    fun acceptTerms() {
+        val s = _state.value
+        val version = s.legal?.version ?: return
+        if (s.terms !is Terms.FirstRun) return
+        viewModelScope.launch {
+            withContext(env.io) { runCatching { env.terms.accept(version) } }
+            _state.update { it.copy(terms = Terms.Accepted) }
+        }
+    }
+
+    fun openAbout() = _state.update { it.copy(about = true) }
+
+    fun closeAbout() = _state.update { it.copy(about = false) }
+
+    /** A built-in document, read off the main thread: the licenses run to thousands of paragraphs. */
+    fun openDocument(id: String) {
+        val title = _state.value.legal?.documents?.firstOrNull { it.id == id }?.title
+        val reading = Reading(id, title)
+        readingJob?.cancel()
+        _state.update { it.copy(reading = reading) }
+        readingJob = viewModelScope.launch {
+            val answer = withContext(env.io) { env.core.call(request("legal_document") { put("id", id) }) }
+            val read = if (answer.optBoolean("ok")) {
+                reading.copy(title = answer.line("title") ?: title, paragraphs = strings(answer.optJSONArray("paragraphs")))
+            } else {
+                reading.copy(refusal = answer.line("headline") ?: copy.line(answer.optString("refusal", "no_document")))
+            }
+            _state.update { s -> if (s.reading == reading) s.copy(reading = read) else s }
+        }
+    }
+
+    fun closeDocument() {
+        readingJob?.cancel()
+        _state.update { it.copy(reading = null) }
+    }
+
     // Start.
 
     /** A picked or shared file. Copied off the main thread, then reviewed. */
@@ -140,7 +197,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
         }
         importJob?.cancel()
         dropImport()
-        _state.update { it.copy(screen = ScanState.Start(importing = Importing(null, null))) }
+        _state.update { it.copy(screen = ScanState.Start(importing = Importing(null, null)), about = false) }
         importJob = viewModelScope.launch {
             try {
                 val imported = env.imports.copy(uri) { progress ->

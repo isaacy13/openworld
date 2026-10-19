@@ -177,6 +177,35 @@ data class Candidate(
     }
 }
 
+/** The `legal` answer: the terms version to accept, and what the first-run and About screens show. */
+data class Legal(
+    val version: String,
+    val contact: String,
+    val firstRun: List<Line>,
+    val accept: Line?,
+    /** Shown above the first-run lines when an older version was accepted. */
+    val changed: Line?,
+    val documents: List<LegalDocument>,
+) {
+    companion object {
+        /** Null when the answer names no version, so there is nothing to accept. */
+        fun from(answer: JSONObject): Legal? {
+            val version = answer.text("version") ?: return null
+            return Legal(
+                version = version,
+                contact = answer.optString("contact"),
+                firstRun = answer.lines("first_run"),
+                accept = answer.line("accept"),
+                changed = answer.line("changed"),
+                documents = objects(answer.optJSONArray("documents")).map { LegalDocument(it.optString("id"), it.line("title")) },
+            )
+        }
+    }
+}
+
+/** A built-in document: `terms`, `privacy`, `biometric`, `health_data`, or `licenses`. */
+data class LegalDocument(val id: String, val title: Line?)
+
 data class Weight(val role: String, val name: String, val sha256: String)
 
 /** The `openworld.result.v2` report, or a refusal in the same shape. */
@@ -273,4 +302,9 @@ data class Report(
 internal fun objects(array: JSONArray?): List<JSONObject> {
     if (array == null) return emptyList()
     return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+}
+
+internal fun strings(array: JSONArray?): List<String> {
+    if (array == null) return emptyList()
+    return (0 until array.length()).map { array.optString(it) }
 }

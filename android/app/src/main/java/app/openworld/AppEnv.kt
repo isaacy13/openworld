@@ -7,6 +7,7 @@ import app.openworld.platform.Device
 import app.openworld.platform.Imports
 import app.openworld.platform.Paths
 import app.openworld.platform.ScanMarker
+import app.openworld.platform.TermsStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
@@ -17,6 +18,7 @@ class AppEnv(
     val device: Device,
     val imports: Imports,
     val marker: ScanMarker,
+    val terms: TermsStore,
     val paths: Paths,
     /** Puts the bundle catalog in `paths.bundles`. Blocking. */
     val install: () -> Unit,

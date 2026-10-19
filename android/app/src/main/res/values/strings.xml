@@ -5,6 +5,14 @@
          {name} placeholders are filled from its args. -->
     <string name="app_name">OpenWorld</string>
 
+    <!-- First run and About -->
+    <string name="first_run_title">Welcome to OpenWorld</string>
+    <string name="first_run_continue">Continue</string>
+    <string name="about_open">About OpenWorld</string>
+    <string name="about_title">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_contact">Contact</string>
+
     <!-- Start -->
     <string name="start_subtitle">Check a photo or video you already have against public FBI missing and wanted posters, on this device.</string>
     <string name="start_choose">Choose a photo or video</string>

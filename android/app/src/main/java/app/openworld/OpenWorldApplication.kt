@@ -11,6 +11,7 @@ import app.openworld.platform.AndroidImports
 import app.openworld.platform.BundleInstaller
 import app.openworld.platform.Paths
 import app.openworld.platform.PrefsMarker
+import app.openworld.platform.PrefsTerms
 import java.io.File
 
 class OpenWorldApplication : Application() {
@@ -26,6 +27,7 @@ class OpenWorldApplication : Application() {
             device = AndroidDevice(this),
             imports = AndroidImports(contentResolver, File(cacheDir, "imports")),
             marker = PrefsMarker(this),
+            terms = PrefsTerms(this),
             paths = paths,
             install = {
                 paths.results.mkdirs()

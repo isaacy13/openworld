@@ -37,6 +37,21 @@ class PrefsMarker(context: Context) : ScanMarker {
     }
 }
 
+/** The accepted terms version, kept on this device only (backups exclude shared preferences). */
+class PrefsTerms(context: Context) : TermsStore {
+    private val prefs = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    override fun accepted(): String? = prefs.getString(KEY, null)
+
+    override fun accept(version: String) {
+        prefs.edit().putString(KEY, version).commit()
+    }
+
+    private companion object {
+        const val KEY = "accepted_terms"
+    }
+}
+
 /**
  * Copies the bundle catalog from the APK's assets to filesDir/bundles once per install or update.
  * The core checks every weight's SHA-256 itself when it loads a bundle.
