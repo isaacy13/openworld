@@ -333,9 +333,9 @@ pub fn scan_path(req: &ScanRequest, stop: Option<&StopFlag>, events: &mut dyn Fn
         // A header that counts fewer pictures than the file stores is Incomplete
         // even when every stored picture was read, and the report names its count.
         Ok(stats) => DecodeEnd {
-            clean: stats.clean && stats.probe.header_short.is_none(),
+            clean: stats.clean && stats.probe.header_frames.is_none(),
             declared_frames: (probed.video && probed.frames_exact && probed.frames > 0)
-                .then_some(stats.probe.header_short.unwrap_or(stats.probe.frames)),
+                .then_some(stats.probe.header_frames.unwrap_or(stats.probe.frames)),
             reason: None,
         },
         Err(err) => DecodeEnd { clean: false, declared_frames: None, reason: Some(media_refusal(err).headline) },

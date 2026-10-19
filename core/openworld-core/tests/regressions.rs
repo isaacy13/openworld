@@ -158,7 +158,7 @@ fn an_avi_whose_headers_claim_five_frames_of_a_hundred_is_read_to_the_end() {
     // The plan counts the pictures the file stores, not the header's five, and
     // its length follows them.
     assert_eq!(probed.frames, 100, "{probed:?}");
-    assert_eq!(probed.header_short, Some(5), "{probed:?}");
+    assert_eq!(probed.header_frames, Some(5), "{probed:?}");
     assert!((probed.duration_sec - 4.0).abs() < 0.01, "{probed:?}");
     assert_eq!(estimate_for(&lab.request(&lying)).unwrap().frames_analyzed, 100);
     let report = lab.scan(&lying);
@@ -172,6 +172,25 @@ fn an_avi_whose_headers_claim_five_frames_of_a_hundred_is_read_to_the_end() {
     // Measured coverage reads the marker's frames too.
     let measured = lab.scan_measured(&lying);
     assert_not_a_silent_clearance(&measured);
+}
+
+#[test]
+fn a_matroska_or_webm_file_cut_short_is_not_complete() {
+    // Matroska counts no frames, so the packets left are all a probe sees. The
+    // header still gives the whole length, and the last picture ends before it.
+    let lab = Lab::new();
+    let pictures: Vec<_> = (0..100).map(plain).collect();
+    for (name, options) in [("whole.mkv", H264), ("whole.webm", &["-c:v", "libvpx", "-b:v", "1M"][..])] {
+        let whole = lab.path(name);
+        encode(lab.dir.path(), &pictures, 25, options, &whole);
+        assert_eq!(lab.scan(&whole).status, Status::Complete, "{name}");
+        let bytes = fs::read(&whole).unwrap();
+        let cut = lab.write(&format!("cut-{name}"), &bytes[..bytes.len() * 9 / 10]);
+        let report = lab.scan(&cut);
+        assert_eq!(report.status, Status::Incomplete, "{name}: {}", describe(&report));
+        assert_eq!(report.counts.frames_declared, Some(100), "{name}: {}", describe(&report));
+        assert!(report.counts.frames_decoded < 100, "{name}: {}", describe(&report));
+    }
 }
 
 // 3. A garbage-filled MPEG-TS that makes FFmpeg print error after error.
