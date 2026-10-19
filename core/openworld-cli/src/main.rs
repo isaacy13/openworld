@@ -201,7 +201,7 @@ fn run(cli: Cli) -> Result<i32, String> {
     let call = |c: Call| invoke::run(c, None, &mut |_| {});
     match cli.cmd {
         Cmd::Bundles => answer(json_mode, call(Call::Bundles { bundles }), bundle_lines),
-        Cmd::Copy => answer(json_mode, call(Call::Copy), |v| {
+        Cmd::Copy => answer(json_mode, call(Call::Copy {}), |v| {
             v["copy"].as_object().map(|m| m.iter().map(|(k, t)| format!("{k}: {}", t.as_str().unwrap_or(""))).collect()).unwrap_or_default()
         }),
         Cmd::Leave { url } => answer(json_mode, call(Call::Leave { url }), |v| vec![text(&v["message"]), v["url"].as_str().unwrap_or("").into()]),

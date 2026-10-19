@@ -96,6 +96,9 @@ pub struct Estimate {
     pub notes: Vec<Line>,
     pub suggest_computer: bool,
     pub caveat: Line,
+    /// About the file itself: old, or its timestamps disagree.
+    #[serde(default)]
+    pub warnings: Vec<Line>,
 }
 
 pub struct EstimateInput {
@@ -157,6 +160,7 @@ pub fn estimate(input: &EstimateInput) -> Estimate {
         notes,
         suggest_computer: suggest,
         caveat: Line::of(copy::ESTIMATE_CAVEAT),
+        warnings: Vec::new(),
     }
 }
 

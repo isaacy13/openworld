@@ -150,11 +150,15 @@ fn the_estimate_follows_the_file_the_coverage_and_the_pack() {
     let report = run(&req);
     assert_eq!(report.counts.frames_analyzed, measured.frames_analyzed);
 
-    // The typed call adds the class line and whether Analyze can start.
-    let answer = ask(json!({"v": 1, "op": "estimate", "input": still, "bundles": catalog(), "posters": lab.posters, "missing": false, "wanted": false}));
+    // The typed call adds the class line, whether Analyze can start, what the scan
+    // promises, and warnings about the file itself.
+    assert!(photo.warnings.is_empty());
+    let answer = ask(json!({"v": 1, "op": "estimate", "input": still, "bundles": catalog(), "posters": lab.posters, "missing": false, "wanted": false, "file_mtime_unix": 1_000_000_000}));
     assert_eq!(answer["ok"], true);
     assert_eq!(answer["classes"]["code"], "choose_class");
     assert_eq!(answer["can_start"], false);
+    assert_eq!(answer["warnings"][0]["code"], copy::OLD_FILE.0);
+    assert!(answer["disclosure"].as_array().unwrap().iter().any(|l| l["code"] == copy::NO_CLEARANCE.0));
     let answer = ask(json!({"v": 1, "op": "estimate", "input": lab.path("gone.png"), "bundles": catalog(), "posters": lab.posters}));
     assert_eq!(answer["refusal"], "unreadable");
 }

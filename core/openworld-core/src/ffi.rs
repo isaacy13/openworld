@@ -110,11 +110,14 @@ pub extern "C" fn ow_job_start(request: *const c_char, on_event: Option<OwEventF
     }
 }
 
-/// A versioned scan request: `{"v": 1, ...ScanRequest}`.
+/// A versioned scan request: `{"v": 1, "op": "scan", ...ScanRequest}`. `op` may be left out.
 fn scan_request(text: &str) -> Result<ScanRequest, Line> {
     let mut value: serde_json::Value = serde_json::from_str(text).map_err(|_| Line::of(crate::copy::R_BAD_REQUEST))?;
     let object = value.as_object_mut().ok_or_else(|| Line::of(crate::copy::R_BAD_REQUEST))?;
     if object.remove("v").and_then(|v| v.as_u64()) != Some(invoke::API_VERSION) {
+        return Err(Line::of(crate::copy::R_BAD_REQUEST));
+    }
+    if object.remove("op").is_some_and(|op| op != "scan") {
         return Err(Line::of(crate::copy::R_BAD_REQUEST));
     }
     serde_json::from_value(value).map_err(|_| Line::of(crate::copy::R_BAD_REQUEST))
@@ -387,10 +390,11 @@ mod tests {
     #[test]
     fn fewer_frames_than_promised_is_incomplete_and_a_stop_says_why() {
         let (root, posters, bundles) = setup();
-        for (stop, code) in [(None, "not_fully_decoded"), (Some("heat"), "stopped_heat")] {
+        // A shell may push again and see the stop, skip, or stop delivering at once.
+        for (stop, after, code) in [(None, "", "not_fully_decoded"), (Some("heat"), "push", "stopped_heat"), (Some("battery"), "skip", "stopped_battery"), (Some("background"), "", "stopped_background")] {
             let out = root.path().join(format!("r-{code}"));
             let request = serde_json::json!({
-                "v": 1, "bundles": bundles, "posters": posters, "out": out,
+                "v": 1, "op": "scan", "bundles": bundles, "posters": posters, "out": out,
                 "media": {"width": 64, "height": 48, "frames": 1800, "fps": 30.0, "video": true}
             });
             let request = CString::new(request.to_string()).unwrap();
@@ -402,10 +406,14 @@ mod tests {
             if let Some(reason) = stop {
                 let reason = CString::new(reason).unwrap();
                 ow_stop(token, reason.as_ptr());
-                assert_eq!(ow_job_push_pixels(job, 1, gray.as_ptr(), 64, 48, 64 * 3, OW_RGB, 0), 0);
+                match after {
+                    "push" => assert_eq!(ow_job_push_pixels(job, 1, gray.as_ptr(), 64, 48, 64 * 3, OW_RGB, 0), 0),
+                    "skip" => assert_eq!(ow_job_skip(job, 1), 0),
+                    _ => {}
+                }
             }
             ow_stop_free(token);
-            let end = CString::new(r#"{"clean":true}"#).unwrap();
+            let end = CString::new(format!(r#"{{"clean":{}}}"#, stop.is_none())).unwrap();
             let report = answer(ow_job_finish(job, end.as_ptr()));
             assert_eq!(report["status"], "incomplete");
             assert_eq!(report["reason"]["code"], code);

@@ -20,7 +20,7 @@ Every request has `"v": 1` and an `"op"`. Unknown fields are refused. Every answ
 | --- | --- | --- |
 | `version` | | `api`, `library`, `demo_posters` (bool), `providers` |
 | `bundles` | `bundles` (catalog folder) | `bundles`: rows `{id, name, best_for, preselected, curve_exists, curve_line: Line, real_posters_allowed, weights_ready, official}`, `note` |
-| `estimate` | a scan request | `human` Line, `seconds`, `frames_analyzed`, `detection_long_side`, `detection_line`, `coverage_line`, `coverage_banner?`, `notes: [Line]`, `suggest_computer`, `caveat`, `classes` Line, `can_start` |
+| `estimate` | a scan request | `human` Line, `seconds`, `frames_analyzed`, `detection_long_side`, `detection_line`, `coverage_line`, `coverage_banner?`, `notes: [Line]`, `suggest_computer`, `caveat`, `warnings: [Line]` about the file (old, timestamps disagree), `disclosure: [Line]` to show before Analyze, `classes` Line, `can_start` |
 | `scan` | a scan request | the report (desktop only: the library decodes the file with FFmpeg) |
 | `posters_check` | `posters` | `posters: {id, source, sha256, created_at, expires_at, missing, wanted, demo}` |
 | `posters_demo` | `out` | writes the demo pack (demo builds) |
@@ -52,7 +52,7 @@ Every request has `"v": 1` and an `"op"`. Unknown fields are refused. Every answ
 
 The phone decodes with AVFoundation or MediaCodec and pushes frames:
 
-1. `ow_job_start(request, on_event, user, &refusal)`, with `media: {width, height, frames, fps, duration_sec, video, container_unix}`. `frames` is how many pictures you will deliver; a different count is Incomplete. On refusal it returns NULL and `refusal` holds `{ok:false, refusal, headline}`.
+1. `ow_job_start(request, on_event, user, &refusal)` with a scan request (`"op": "scan"` may be left out) and `media: {width, height, frames, fps, duration_sec, video, container_unix}`. `frames` is how many pictures you will deliver; a different count is Incomplete. On refusal it returns NULL and `refusal` holds `{ok:false, refusal, headline}`.
 2. For each decoded frame `i` in order: if `ow_job_wants(job, i)` is 0, call `ow_job_skip(job, i)` without converting the frame. Otherwise push it with `ow_job_push_yuv420` (MediaCodec `Image` planes, CVPixelBuffer 420 planes) or `ow_job_push_pixels` (RGBA, BGRA, RGB), with the rotation that shows it upright. A push returns 0 when the scan stopped: finish then.
 3. `ow_job_stop_token(job)` gives a token any thread can use: `ow_stop(token, "cancel" | "heat" | "battery" | "background")`. Watch `ProcessInfo.thermalState` / `PowerManager.getCurrentThermalStatus()`, battery level, and the app leaving the foreground.
 4. `ow_job_finish(job, "{\"clean\": true}")` when the decoder reached the end without an error (`false` otherwise). It returns the report and frees the job.

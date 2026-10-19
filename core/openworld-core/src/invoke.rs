@@ -36,8 +36,8 @@ pub enum Call {
     /// Remove expired results under `root`.
     Sweep { root: PathBuf },
     /// Every sentence, by code.
-    Copy,
-    Version,
+    Copy {},
+    Version {},
 }
 
 pub fn refusal(line: Line) -> Value {
@@ -79,6 +79,7 @@ pub fn run(call: Call, stop: Option<&StopFlag>, events: &mut dyn FnMut(Event)) -
                 value["ok"] = true.into();
                 value["classes"] = serde_json::to_value(Line::of(copy::estimate_class_line(req.missing, req.wanted))).unwrap_or_default();
                 value["can_start"] = (req.missing || req.wanted).into();
+                value["disclosure"] = serde_json::to_value(crate::report::disclosure(true)).unwrap_or_default();
                 value
             }
             Err(report) => refusal(report.headline),
@@ -113,8 +114,8 @@ pub fn run(call: Call, stop: Option<&StopFlag>, events: &mut dyn FnMut(Event)) -
             Err(line) => refusal(line),
         },
         Call::Sweep { root } => json!({ "ok": true, "removed": crate::outdir::sweep(&root, std::time::SystemTime::now()) }),
-        Call::Copy => json!({ "ok": true, "copy": copy::product_copy() }),
-        Call::Version => json!({
+        Call::Copy {} => json!({ "ok": true, "copy": copy::product_copy() }),
+        Call::Version {} => json!({
             "ok": true,
             "api": API_VERSION,
             "library": env!("CARGO_PKG_VERSION"),
@@ -151,6 +152,7 @@ mod tests {
         assert_eq!(ask(r#"{"op":"copy"}"#)["refusal"], "bad_version");
         assert_eq!(ask(r#"{"v":1,"op":"copy"}"#)["ok"], true);
         assert_eq!(ask(r#"{"v":1,"op":"nope"}"#)["refusal"], "bad_request");
+        assert_eq!(ask(r#"{"v":1,"op":"copy","nope":1}"#)["refusal"], "bad_request");
         // A misspelled option is refused, not ignored.
         assert_eq!(ask(r#"{"v":1,"op":"leave","url":"https://www.fbi.gov/x","ur":"y"}"#)["refusal"], "bad_request");
         assert_eq!(ask(r#"{"v":1,"op":"leave","url":"https://www.fbi.gov/x"}"#)["url"], "https://www.fbi.gov/x");

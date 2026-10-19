@@ -319,7 +319,7 @@ fn on_screen_frames(fps: f64, count: u64, delays: Option<Vec<f64>>) -> Option<Ve
 /// What the scan of this file will cost, before Analyze.
 pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
     let now = SystemTime::now();
-    let (frames, fps, duration, long, short, cover, delays) = if let Some(media) = &req.media {
+    let (frames, fps, duration, long, short, cover, delays, container) = if let Some(media) = &req.media {
         if media.width == 0 || media.height == 0 || media.frames == 0 {
             return Err(report::refused(copy::R_BAD_CODEC));
         }
@@ -327,7 +327,8 @@ pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
             return Err(report::refused(copy::R_NO_FPS));
         }
         let duration = if media.duration_sec > 0.0 { media.duration_sec } else if media.fps > 0.0 { media.frames as f64 / media.fps } else { 0.0 };
-        (media.frames, media.fps, duration, media.width.max(media.height), media.width.min(media.height), false, None)
+        let container = media.container_unix.and_then(crate::timeutil::system_time_from_unix).or_else(|| decode::container_created(&req.input));
+        (media.frames, media.fps, duration, media.width.max(media.height), media.width.min(media.height), false, None, container)
     } else {
         if !input_readable(&req.input) {
             return Err(report::refused(copy::R_UNREADABLE));
@@ -343,7 +344,7 @@ pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
             0.0
         };
         let delays = (req.coverage == Coverage::Measured && probed.video).then(|| decode::picture_delays(&req.input)).flatten();
-        (probed.frames.max(1), probed.fps, duration, probed.width.max(probed.height), probed.width.min(probed.height), probed.motion_cover, delays)
+        (probed.frames.max(1), probed.fps, duration, probed.width.max(probed.height), probed.width.min(probed.height), probed.motion_cover, delays, probed.container_created)
     };
     let bundle = require_bundle(&req.bundles, &req.bundle)?;
     let pack = load_pack(&req.posters, now).ok();
@@ -357,7 +358,7 @@ pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
             cover = false;
         }
     }
-    Ok(crate::estimate::estimate(&EstimateInput {
+    let mut estimate = crate::estimate::estimate(&EstimateInput {
         frames,
         fps,
         duration_sec: duration,
@@ -369,7 +370,9 @@ pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
         execution: crate::runtime::execution(&provider),
         device: req.device.clone(),
         cover,
-    }))
+    });
+    estimate.warnings = media_warnings(mtime_of(req), container, now);
+    Ok(estimate)
 }
 
 /// Timings measured once per bundle, provider, and detection size in this process.

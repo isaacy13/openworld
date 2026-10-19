@@ -293,6 +293,13 @@ impl Engine {
 
     /// Frame `index` was decoded and is not analyzed: `wants` said no. Nothing is copied.
     pub fn skip(&mut self, index: u64) -> bool {
+        if self.stopped.is_some() || self.failure.is_some() {
+            return false;
+        }
+        if let Some(reason) = self.cfg.stop.reason() {
+            self.stopped = Some(reason.line());
+            return false;
+        }
         if index != self.frames_pushed || self.take_sample(index) {
             self.failure.get_or_insert(Line::of(copy::NOT_FULLY_DECODED));
             return false;
@@ -540,7 +547,8 @@ impl Engine {
                 break;
             }
         }
-        let mut reason = self.failure.clone().or(self.stopped.clone());
+        // A shell may stop delivering frames as soon as it asks for a stop.
+        let mut reason = self.failure.clone().or(self.stopped.clone()).or_else(|| self.cfg.stop.reason().map(|r| r.line()));
         if reason.is_none() && !end.clean {
             reason = Some(end.reason.clone().unwrap_or_else(|| Line::of(copy::NOT_FULLY_DECODED)));
         }
