@@ -167,4 +167,20 @@ mod tests {
         assert_eq!(draft.posters[1].class, PosterClass::Missing);
         assert_eq!(draft.posters[2].class, PosterClass::Wanted);
     }
+
+    /// `eval/posters.py` copies these rules to measure the posters the core
+    /// would keep. Both are tested on the same items, so the copy cannot drift.
+    #[test]
+    fn classify_matches_the_shared_cases() {
+        let text = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../eval/fbi_classify_cases.json"));
+        let cases: Value = serde_json::from_str(text).unwrap();
+        let cases = cases["cases"].as_array().unwrap();
+        assert!(cases.len() > 20);
+        for case in cases {
+            let got = classify_item(&case["item"])
+                .map(|p| serde_json::json!({"id": p.id, "class": p.class.as_str(), "title": p.title, "fbi_url": p.fbi_url}))
+                .unwrap_or(Value::Null);
+            assert_eq!(got, case["want"], "{}", case["name"]);
+        }
+    }
 }

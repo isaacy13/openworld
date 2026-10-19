@@ -9,7 +9,7 @@ A scan compares every face in a file with every enabled poster. At a false-match
 - Fast's cutoff is the lowest LFW all-pairs score with a false-match rate at or under **one in a million**, rounded up: **0.63**. Misses go up; that is accepted.
 - A video face is a candidate only after it passes the quality gates on **3 frames or across 1 second**, and its template (the mean of its best gated frames) passes the cutoff. A still decides on its one face.
 - Every result states the chance line: how many false candidates chance alone gives this scan, from the bundle's measured rate.
-- Real FBI posters stay off. Turning them on needs a curve on poster-like photos and a per-scan false-candidate rate the owner accepts.
+- Real FBI posters stay off. Turning them on needs a curve on poster-like photos and a per-scan false-candidate rate the owner accepts (§10).
 
 ## 2. Fast ships real, redistributable weights
 
@@ -60,6 +60,18 @@ The cutoff is measured on the CPU provider. `openworld bench` times each provide
 - The desktop app is Rust + GTK 4 + libadwaita on Linux and Windows, linking the core in-process. On Windows it looks like a GNOME app; a WinUI shell is a later option.
 - Phones push decoded frames to the core (`ow_job_*`); nothing writes frames to disk.
 
+## 10. The poster-photo gate
+
+`eval/real_faces.py` measures the Fast bundle on the real FBI posters too (`poster_domain` in the curve). It reads the public list, keeps the posters the core keeps, and compares their photos with each other and with every LFW face, at the manifest threshold, by the sex and race each poster states. No photo and nothing about one person is committed; only counts and rates are.
+
+`real_posters_allowed` comes from that section alone, and only on a full run:
+
+- The upper 95% bound of the false match rate is at or under **2e-6** for poster x LFW (a poster against the public, the comparison a scan makes), and for poster x poster when it has enough comparisons.
+- For every sex or race group with enough comparisons, the upper bound is at or under **1e-5**.
+- "Enough" is the count at which zero false matches could pass (about 3.84 / rate: 1.92 million comparisons, or 384,000 for a group). Smaller sets and groups are listed as not enough data; only poster x LFW must have enough.
+
+These two rates are proposed; they are the owner's to change (`GATE_FMR`, `GATE_GROUP_FMR`). The cutoff rule (§1) stays a separate failure. The picker line says either that real FBI photos stay off or that real posters are on because the poster-photo check passed. Passing it is not legal review or source clearance.
+
 ## Still open
 
-Legal review, measured phone heat and battery on named devices, signed release binaries, an independent audit, a demographic evaluation (LFW has no such labels), and a curve on poster-like photos.
+Legal review, measured phone heat and battery on named devices, signed release binaries, an independent audit, a demographic evaluation beyond the sex and race the posters state, and the first full run of the poster-photo curve (§10).

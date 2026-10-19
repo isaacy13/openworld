@@ -233,5 +233,5 @@ jobs:
         run: >
           python eval/real_faces.py --bin target-eval/release/openworld
           --eval-bin eval/real/target/release/openworld-eval
-          --people 300 --wider-images 500 --scan-people 30 --video-people 5
+          --people 300 --wider-images 500 --scan-people 30 --video-people 5 --posters 100
           --check bundles/fast/curve.json --out "$RUNNER_TEMP/sample-curve.json" > /dev/null
