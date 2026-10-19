@@ -24,7 +24,7 @@ Every request has `"v": 1` and an `"op"`. Unknown fields are refused. Every answ
 | `scan` | a scan request | the report (desktop only: the library decodes the file with FFmpeg) |
 | `posters_check` | `posters` | `posters: {id, source, sha256, created_at, expires_at, missing, wanted, demo}` |
 | `posters_demo` | `out` | writes the demo pack (demo builds) |
-| `posters_update` | `bundles` | refuses `real_posters_off` until an official curve allows real posters |
+| `posters_update` | `bundles`, `bundle` (default `"fast"`), `posters` (the pack folder) | `posters` (as `posters_check`), `kept`, `skipped: [{reason: Line, count}]`, `list_sha256`. See [Update posters](#update-posters). Refuses `real_posters_off` until the selected bundle is official and its curve allows real posters |
 | `leave` | `url` | `{message: Line, url}`; refuses `only_fbi` for anything but an `https://www.fbi.gov/...` page |
 | `delete` | `out` | refuses `delete_foreign` for a folder that is not an OpenWorld result |
 | `sweep` | `root` | `removed`: expired results deleted under `root` |
@@ -70,6 +70,25 @@ JSON lines to `on_event`:
 ```
 
 `crop` paths are relative to `out`. A `face` event is a first look; the `track` event replaces it with the decided row.
+
+`posters_update` sends its own progress:
+
+```json
+{"event": "posters_page", "page": 3, "pages": 26}
+{"event": "posters_checked", "checked": 120, "posters": 900}
+```
+
+`pages` is `null` when the list does not give a total. `posters_checked` comes every 10 photos and after the last.
+
+## Update posters
+
+`posters_update` reads every page of `https://api.fbi.gov/wanted/v1/list` (`page`, `pageSize` 50, until its `total`), keeps the open, named missing and wanted posters ([record classes](record-classes.md)), downloads each one's lead photo (`original`, else `large`), and builds its vector on this device with the selected bundle's detector and embedder.
+
+- Only `https://` addresses on `api.fbi.gov`, `www.fbi.gov`, and `fbi.gov` are requested, and a redirect is followed only to one of them. The request names OpenWorld in its User-Agent and carries no cookies or other headers. A list page is capped at 8 MB and a photo at 20 MB; each request has a 60-second deadline, with a pause between requests.
+- Each response body is hashed; headers are never an input. `list_sha256` is the SHA-256 of the pages' body hashes, one per line, in page order. The pack id is `fbi-` and its first 16 hex digits.
+- A poster gets a vector only when its photo is a JPEG, PNG, or WebP under the picture limit and shows **exactly one face** that passes the quality gates at the compare size. Every box the detector reports counts, however small or unsure. Any other poster is left out and counted in `skipped` with its reason: `skip_not_open`, `skip_no_photo`, `skip_photo_unavailable`, `skip_photo_too_large`, `skip_not_picture`, `skip_no_face`, `skip_several_faces`, a gate's `why_*`, or `face_unscored`.
+- The pack is written beside `posters` and moved into place only after it loads and checks. Its photos sit beside the snapshot, pinned by SHA-256; only kept posters' photos are stored. `created_at` is the fetch time and `expires_at` seven days later.
+- `posters` must be new, empty, or a poster pack; anything else refuses `posters_foreign`. A failed update leaves the old pack as it was and refuses with `posters_fetch_failed`, `posters_bad_list`, `posters_runtime`, `posters_none` (no poster passed), `posters_unwritten`, or `network_off` (a build without the `network` feature).
 
 ## The report (`openworld.result.v2`)
 

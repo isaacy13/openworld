@@ -275,7 +275,7 @@ pub fn write_fixture_pack(dir: &Path, now: SystemTime) -> Result<PosterPack, Lin
 }
 
 /// A pack of network vectors, bound to the embedder weight that made them.
-/// The shipping commands do not write one. `source` names where the photos came from.
+/// Update posters writes one. `source` names where the photos came from.
 pub fn write_network_pack(
     dir: &Path,
     id: &str,

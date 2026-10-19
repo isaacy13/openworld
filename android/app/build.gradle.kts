@@ -97,7 +97,7 @@ val buildRustCore by tasks.registering(Exec::class) {
         "-t", "arm64-v8a", "-t", "x86_64",
         "-o", jniLibs.absolutePath,
         "build", "--release",
-        "--no-default-features", "--features", "ort-dynamic,fixture,nnapi",
+        "--no-default-features", "--features", "ort-dynamic,fixture,nnapi,network",
     )
     environment("CARGO_NDK_PLATFORM", "26")
     // 16 KB pages for Android 15 devices, and a soname so the shim links by name.

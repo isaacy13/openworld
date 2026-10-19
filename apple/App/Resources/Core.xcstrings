@@ -541,6 +541,18 @@
         }
       }
     },
+    "network_off": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build has no network code. The posters were not changed."
+          }
+        }
+      }
+    },
     "no_agency": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -829,6 +841,66 @@
         }
       }
     },
+    "posters_bad_list": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The FBI poster list was not in the expected form. The posters were not changed."
+          }
+        }
+      }
+    },
+    "posters_fetch_failed": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The FBI poster list could not be fetched. The posters were not changed."
+          }
+        }
+      }
+    },
+    "posters_foreign": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That folder is not empty and is not a poster pack. Choose an empty folder. Refusing."
+          }
+        }
+      }
+    },
+    "posters_none": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No poster photo passed the checks. The posters were not changed."
+          }
+        }
+      }
+    },
+    "posters_runtime": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The face models stopped while checking poster photos. The posters were not changed."
+          }
+        }
+      }
+    },
     "posters_stale": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -837,6 +909,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "The posters were fetched more than a day ago."
+          }
+        }
+      }
+    },
+    "posters_unwritten": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new posters could not be written. The posters were not changed."
           }
         }
       }
@@ -885,6 +969,90 @@
           "stringUnit": {
             "state": "translated",
             "value": "The system closed OpenWorld before the scan finished."
+          }
+        }
+      }
+    },
+    "skip_no_face": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No face was found on the poster photo."
+          }
+        }
+      }
+    },
+    "skip_no_photo": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster has no photo at an FBI address."
+          }
+        }
+      }
+    },
+    "skip_not_open": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not an open, named missing or wanted poster."
+          }
+        }
+      }
+    },
+    "skip_not_picture": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster photo is not a picture OpenWorld reads."
+          }
+        }
+      }
+    },
+    "skip_photo_too_large": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster photo is too large to check safely."
+          }
+        }
+      }
+    },
+    "skip_photo_unavailable": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster photo could not be downloaded."
+          }
+        }
+      }
+    },
+    "skip_several_faces": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster photo shows more than one face."
           }
         }
       }

@@ -106,6 +106,10 @@ pub enum Event {
     Face { track_id: u64, frame: u64, frame_label: Line, crop: Option<String> },
     /// A face left the picture and was decided.
     Track { track: TrackItem },
+    /// Update posters read page `page` of the FBI list. `pages` is unknown until the list says.
+    PostersPage { page: u32, pages: Option<u32> },
+    /// Update posters checked this many poster photos of `posters`.
+    PostersChecked { checked: u64, posters: u64 },
 }
 
 pub struct EngineConfig {

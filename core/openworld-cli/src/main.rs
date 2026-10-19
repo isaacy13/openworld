@@ -145,8 +145,14 @@ enum PosterCmd {
         #[arg(long)]
         posters: PathBuf,
     },
-    /// Fetch real posters. Stays off until an official curve allows it.
-    Update,
+    /// Fetch real posters from api.fbi.gov into a folder. Stays off until an official curve allows it.
+    Update {
+        /// The poster pack folder: new, empty, or a pack to replace.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value = "fast")]
+        bundle: String,
+    },
     /// Write the demo pack.
     Demo {
         #[arg(long)]
@@ -210,16 +216,29 @@ fn run(cli: Cli) -> Result<i32, String> {
         Cmd::Posters { action } => {
             let value = match action {
                 PosterCmd::Check { posters } => call(Call::PostersCheck { posters }),
-                PosterCmd::Update => call(Call::PostersUpdate { bundles }),
+                PosterCmd::Update { out, bundle } => {
+                    let mut progress = |event: Event| match event {
+                        Event::PostersPage { page, pages } if !json_mode => {
+                            eprintln!("FBI list page {page}{}.", pages.map(|p| format!(" of {p}")).unwrap_or_default())
+                        }
+                        Event::PostersChecked { checked, posters } if !json_mode => eprintln!("{checked} of {posters} poster photos checked."),
+                        _ => {}
+                    };
+                    invoke::run(Call::PostersUpdate { bundles, bundle, posters: out }, None, &mut progress)
+                }
                 PosterCmd::Demo { out } => call(Call::PostersDemo { out }),
             };
             answer(json_mode, value, |v| {
                 let p = &v["posters"];
-                vec![
+                let mut lines = vec![
                     format!("Pack {} from {}, fetched {}.", p["id"].as_str().unwrap_or(""), p["source"].as_str().unwrap_or(""), p["created_at"].as_str().unwrap_or("")),
                     format!("{} missing, {} wanted.", p["missing"], p["wanted"]),
                     format!("SHA-256 {}", p["sha256"].as_str().unwrap_or("")),
-                ]
+                ];
+                for skip in v["skipped"].as_array().into_iter().flatten() {
+                    lines.push(format!("Left out {}: {}", skip["count"], text(&skip["reason"])));
+                }
+                lines
             })
         }
         Cmd::Estimate { input, choices } => {
@@ -302,7 +321,7 @@ fn event_line(event: &Event) -> Option<String> {
     match event {
         Event::Face { frame_label, crop, .. } => Some(format!("Face. {} {}", frame_label.text, crop.clone().unwrap_or_default())),
         Event::Track { track } => Some(format!("{} {} {}", track.frames.text, track.label.text, track.reason.as_ref().map(|r| r.text.clone()).unwrap_or_default())),
-        Event::Progress { .. } => None,
+        Event::Progress { .. } | Event::PostersPage { .. } | Event::PostersChecked { .. } => None,
     }
 }
 

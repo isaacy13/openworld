@@ -408,6 +408,7 @@ impl Model {
                     None => scan.faces.push(decided),
                 }
             }
+            Event::PostersPage { .. } | Event::PostersChecked { .. } => {}
         }
     }
 

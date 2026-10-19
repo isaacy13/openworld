@@ -23,15 +23,19 @@ toml = "0.8.23"
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "api-24"] }
 ndarray = "0.17"
 tempfile = "3.14.0"
+# Update posters only: blocking HTTPS over rustls with the Mozilla roots. No cookies.
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"], optional = true }
 
 [features]
-default = ["fixture", "ort-dynamic"]
+default = ["fixture", "ort-dynamic", "network"]
 # Synthetic fiducial markers for demos and tests. An official release build leaves it out
 # and refuses a fixture poster pack.
 fixture = []
 # Raw scores in results, for eval/ only. Never in a shipped build.
 eval = []
 ort-dynamic = ["ort/load-dynamic"]
+# Update posters reaches the FBI. Without it the library has no network code.
+network = ["dep:ureq"]
 coreml = ["ort/coreml"]
 nnapi = ["ort/nnapi"]
 directml = ["ort/directml"]

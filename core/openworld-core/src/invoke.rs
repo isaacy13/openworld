@@ -29,8 +29,13 @@ pub enum Call {
     PostersCheck { posters: PathBuf },
     /// Write the demo poster pack. Demo builds only.
     PostersDemo { out: PathBuf },
-    /// Fetch real posters. Stays off until an official curve allows it.
-    PostersUpdate { bundles: PathBuf },
+    /// Fetch real posters into `posters`, with `bundle`'s models. Stays off until an official curve allows it.
+    PostersUpdate {
+        bundles: PathBuf,
+        #[serde(default = "fast")]
+        bundle: String,
+        posters: PathBuf,
+    },
     Leave { url: String },
     Delete { out: PathBuf },
     /// Remove expired results under `root`.
@@ -38,6 +43,10 @@ pub enum Call {
     /// Every sentence, by code.
     Copy {},
     Version {},
+}
+
+fn fast() -> String {
+    crate::bundle::FAST_ID.into()
 }
 
 pub fn refusal(line: Line) -> Value {
@@ -98,13 +107,16 @@ pub fn run(call: Call, stop: Option<&StopFlag>, events: &mut dyn FnMut(Event)) -
             Err(line) => refusal(line),
         },
         Call::PostersDemo { out } => demo_pack(&out),
-        Call::PostersUpdate { bundles } => {
-            let allowed = crate::bundle::load_bundles(&bundles).map(|all| all.iter().any(|b| b.real_posters_allowed())).unwrap_or(false);
-            match crate::update::update_posters(allowed, &mut crate::update::NoNetwork) {
-                Ok(draft) => json!({ "ok": true, "posters": draft.posters.len(), "body_sha256": draft.body_sha256 }),
-                Err(_) => refusal(Line::of(copy::R_REAL_POSTERS_OFF)),
-            }
-        }
+        Call::PostersUpdate { bundles, bundle, posters } => match crate::update::update_from_catalog(&bundles, &bundle, &posters, events) {
+            Ok(done) => json!({
+                "ok": true,
+                "posters": crate::engine::pack_info(&done.pack),
+                "kept": done.kept,
+                "skipped": done.skipped.iter().map(|(why, count)| json!({ "reason": Line::of(*why), "count": count })).collect::<Vec<_>>(),
+                "list_sha256": done.list_sha256,
+            }),
+            Err(line) => refusal(line),
+        },
         Call::Leave { url } => match leave_prompt(&url) {
             Ok(prompt) => json!({ "ok": true, "message": prompt.message, "url": prompt.url }),
             Err(line) => refusal(line),
@@ -162,8 +174,13 @@ mod tests {
     #[test]
     fn real_posters_stay_off() {
         let bundles = env!("CARGO_MANIFEST_DIR").to_string() + "/../../bundles";
-        let answer = ask(&format!(r#"{{"v":1,"op":"posters_update","bundles":{bundles:?}}}"#));
+        let posters = tempfile::tempdir().unwrap();
+        let dest = posters.path().join("posters");
+        let answer = ask(&format!(r#"{{"v":1,"op":"posters_update","bundles":{bundles:?},"posters":{dest:?}}}"#));
         assert_eq!(answer["refusal"], "real_posters_off");
+        assert!(!dest.exists());
+        // The destination is named, so a pack is never written somewhere implied.
+        assert_eq!(ask(&format!(r#"{{"v":1,"op":"posters_update","bundles":{bundles:?}}}"#))["refusal"], "bad_request");
     }
 
     #[test]

@@ -20,7 +20,7 @@
 # for (feature api-24). To move to a newer release, take the URL and checksum from that
 # package's Package.swift at the new tag and set ORT_POD_URL and ORT_POD_SHA256.
 #
-# The core is built with `--no-default-features --features fixture,coreml`: no ort-dynamic, so
+# The core is built with `--no-default-features --features fixture,coreml,network`: no ort-dynamic, so
 # ONNX Runtime is linked statically, and Core ML is tried before the CPU. Only the staticlib is
 # built (cargo rustc --crate-type staticlib), so nothing is linked here. Xcode links
 # libopenworld_core.a, onnxruntime.xcframework, libc++ and CoreML into OpenWorldKit.
@@ -96,7 +96,7 @@ build_core() {
   echo "== openworld-core for $target"
   (cd "$repo" && env "$@" cargo rustc \
     --manifest-path core/Cargo.toml -p openworld-core --lib --release \
-    --target "$target" --no-default-features --features fixture,coreml \
+    --target "$target" --no-default-features --features fixture,coreml,network \
     --crate-type staticlib -- --print native-static-libs) 2> >(tee "$build/cargo-$target.log" >&2)
 }
 

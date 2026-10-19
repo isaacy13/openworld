@@ -26,6 +26,8 @@ pub mod hardware;
 pub mod invoke;
 #[cfg(feature = "fixture")]
 pub mod measure;
+#[cfg(feature = "network")]
+pub mod net;
 pub mod onnx_exec;
 pub mod outdir;
 pub mod perception;

@@ -11,8 +11,9 @@ name = "openworld"
 path = "src/main.rs"
 
 [features]
-default = ["fixture"]
+default = ["fixture", "network"]
 fixture = ["openworld-core/fixture"]
+network = ["openworld-core/network"]
 eval = ["openworld-core/eval"]
 
 [dependencies]
