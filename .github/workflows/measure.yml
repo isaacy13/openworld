@@ -2,6 +2,9 @@ name: measure
 # The full Fast measurement. Run by hand; commit the uploaded curve as bundles/fast/curve.json.
 on:
   workflow_dispatch:
+  # A manual dispatch needs this file on the default branch. Until then, a change to it runs it.
+  push:
+    paths: [".github/workflows/measure.yml"]
 
 permissions:
   contents: read
