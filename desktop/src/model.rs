@@ -6,7 +6,7 @@
 //! on a worker thread, and feeds each [`Msg`] back through [`Model::apply`].
 //! What a result means is read from statuses and codes, never from English.
 
-use crate::calls::{BundleRow, FileFacts, Job, Msg, Updated};
+use crate::calls::{self, BundleRow, FileFacts, Job, Legal, Msg, Updated};
 use crate::places::Places;
 use crate::strings::{self, S};
 use openworld_core::copy::{self, Copy};
@@ -189,6 +189,10 @@ pub struct Model {
     pub closing: bool,
     /// Everything is cleaned up after `closing`.
     pub can_quit: bool,
+    /// The first-run screen's lines and the terms version to accept.
+    pub legal: Result<Legal, Line>,
+    /// The version accepted on this device, if any.
+    pub accepted: Option<String>,
     /// Answers for an older file or older options are dropped.
     ticket: u64,
     file_ticket: u64,
@@ -196,6 +200,7 @@ pub struct Model {
 
 impl Model {
     pub fn new(places: Places) -> Self {
+        let accepted = std::fs::read_to_string(&places.accepted).ok().map(|v| v.trim().to_string());
         Self {
             places,
             bundles: None,
@@ -207,6 +212,8 @@ impl Model {
             phase: Phase::Start,
             closing: false,
             can_quit: false,
+            legal: calls::legal(),
+            accepted,
             ticket: 0,
             file_ticket: 0,
         }
@@ -214,6 +221,30 @@ impl Model {
 
     pub fn startup(&mut self) -> Vec<Job> {
         vec![Job::Startup]
+    }
+
+    /// The first-run screen shows until this build's terms version is accepted.
+    pub fn needs_acceptance(&self) -> bool {
+        self.legal.as_ref().map_or(true, |legal| self.accepted.as_deref() != Some(legal.version.as_str()))
+    }
+
+    /// The line above the first-run screen when an older version was accepted.
+    pub fn terms_changed(&self) -> Option<&Line> {
+        match &self.legal {
+            Ok(legal) if self.accepted.is_some() && self.needs_acceptance() => Some(&legal.changed),
+            _ => None,
+        }
+    }
+
+    /// Continue: keep the accepted version on this device only. It counts for this run
+    /// even if it cannot be written; the screen then shows again at the next launch.
+    pub fn accept_terms(&mut self) -> std::io::Result<()> {
+        let Ok(legal) = &self.legal else { return Ok(()) };
+        self.accepted = Some(legal.version.clone());
+        if let Some(folder) = self.places.accepted.parent() {
+            std::fs::create_dir_all(folder)?;
+        }
+        std::fs::write(&self.places.accepted, &legal.version)
     }
 
     pub fn scanning(&self) -> bool {
@@ -663,6 +694,37 @@ mod tests {
                 queue.extend(model.apply(msg));
             }
         }
+    }
+
+    #[test]
+    fn the_terms_are_asked_until_this_version_is_accepted_and_again_when_it_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let places = Places::new(&root.path().join("data"), bundles());
+        let mut model = Model::new(places.clone());
+        let version = model.legal.as_ref().unwrap().version.clone();
+        assert!(model.needs_acceptance());
+        assert!(model.terms_changed().is_none(), "nothing was accepted before");
+        model.accept_terms().unwrap();
+        assert!(!model.needs_acceptance());
+        assert_eq!(std::fs::read_to_string(&places.accepted).unwrap(), version);
+        assert!(!Model::new(places.clone()).needs_acceptance(), "accepted once is remembered");
+
+        std::fs::write(&places.accepted, "2000-01-01").unwrap();
+        let older = Model::new(places);
+        assert!(older.needs_acceptance());
+        assert!(older.terms_changed().unwrap().is(copy::TERMS_CHANGED));
+    }
+
+    #[test]
+    fn every_document_the_about_menu_lists_reads() {
+        let legal = calls::legal().unwrap();
+        assert_eq!(legal.documents.len(), 5);
+        for row in &legal.documents {
+            let doc = calls::legal_document(&row.id).unwrap();
+            assert_eq!(doc.title, row.title);
+            assert!(!doc.paragraphs.is_empty());
+        }
+        assert!(calls::legal_document("nope").unwrap_err().is(copy::R_NO_DOCUMENT));
     }
 
     fn choose(rig: &mut Rig) {

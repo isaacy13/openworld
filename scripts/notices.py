@@ -26,7 +26,7 @@ TEXTS = ROOT / "docs/legal/licenses"
 PINS = ROOT / "core/openworld-core/onnxruntime.pins"
 WORKSPACES = ("core/Cargo.toml", "desktop/Cargo.toml")
 LICENSE_NAMES = ("LICENSE", "LICENCE", "COPYING", "NOTICE", "UNLICENSE", "COPYRIGHT")
-RULE = "=" * 72
+RULE = "=" * 48
 
 # What is not a Rust crate. The texts are committed under docs/legal/licenses.
 MODELS = [
@@ -175,12 +175,12 @@ def render() -> str:
             by_text[f.read_text(errors="replace").strip()].append(f"{name} {version} ({f.name})")
     out.append("")
     for text, users in sorted(by_text.items(), key=lambda item: item[1][0]):
-        out.extend(["-" * 72, "Used by: " + ", ".join(users), "", text, ""])
+        out.extend(["-" * 48, "Used by: " + ", ".join(users), "", text, ""])
     if bare:
-        out.extend(["-" * 72, "These crates ship no license file. Each is under the license named above, whose standard text follows:",
+        out.extend(["-" * 48, "These crates ship no license file. Each is under the license named above, whose standard text follows:",
                     ", ".join(bare), ""])
-    out.extend(["-" * 72, "Apache License 2.0 (standard text)", "", (ROOT / "LICENSE").read_text().rstrip(), ""])
-    out.extend(["-" * 72, "MIT License (standard text)", "", (TEXTS / "MIT.txt").read_text().rstrip(), ""])
+    out.extend(["-" * 48, "Apache License 2.0 (standard text)", "", (ROOT / "LICENSE").read_text().rstrip(), ""])
+    out.extend(["-" * 48, "MIT License (standard text)", "", (TEXTS / "MIT.txt").read_text().rstrip(), ""])
     return "\n".join(out).rstrip() + "\n"
 
 

@@ -77,6 +77,30 @@ pub struct Skipped {
     pub count: u64,
 }
 
+/// The first-run lines, the terms version to accept, and the built-in documents.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Legal {
+    pub version: String,
+    pub contact: String,
+    pub first_run: Vec<Line>,
+    pub accept: Line,
+    pub changed: Line,
+    pub documents: Vec<DocumentRow>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DocumentRow {
+    pub id: String,
+    pub title: Line,
+}
+
+/// A policy or the licenses, as paragraphs.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Document {
+    pub title: Line,
+    pub paragraphs: Vec<String>,
+}
+
 /// Work for the worker thread.
 pub enum Job {
     /// Sweep expired results and old temporary copies, then read bundles and posters.
@@ -206,6 +230,14 @@ pub fn bundles(dir: &Path) -> Result<Vec<BundleRow>, Line> {
         bundles: Vec<BundleRow>,
     }
     answer::<Rows>(call(Call::Bundles { bundles: dir.into() })).map(|rows| rows.bundles)
+}
+
+pub fn legal() -> Result<Legal, Line> {
+    answer(call(Call::Legal {}))
+}
+
+pub fn legal_document(id: &str) -> Result<Document, Line> {
+    answer(call(Call::LegalDocument { id: id.into() }))
 }
 
 pub fn estimate(req: &ScanRequest) -> Result<Estimate, Line> {

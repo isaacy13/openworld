@@ -23,4 +23,5 @@ fn the_window_opens_reads_startup_and_quits() {
     assert!(out.status.success(), "{stdout}\n{}", String::from_utf8_lossy(&out.stderr));
     assert!(stdout.contains("self-check ok"), "{stdout}");
     assert!(stdout.contains("fast"), "the repository bundles were not found: {stdout}");
+    assert!(stdout.contains("first run: shown"), "a new data folder must open on the first-run screen: {stdout}");
 }

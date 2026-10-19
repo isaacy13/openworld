@@ -8,6 +8,7 @@ use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 use openworld_core::copy;
 use openworld_core::Line;
+use openworld_desktop::calls;
 use openworld_desktop::model::PackState;
 use openworld_desktop::strings::{self, S};
 use std::rc::Rc;
@@ -134,6 +135,11 @@ impl Start {
         let header = adw::HeaderBar::new();
         header.set_show_title(false);
         let menu = gio::Menu::new();
+        let documents = gio::Menu::new();
+        for row in calls::legal().map(|legal| legal.documents).unwrap_or_default() {
+            documents.append(Some(strings::say(&row.title)), Some(&format!("win.document::{}", row.id)));
+        }
+        menu.append_section(None, &documents);
         menu.append(Some(strings::text(S::About)), Some("win.about"));
         let about = gtk::MenuButton::builder().icon_name("open-menu-symbolic").menu_model(&menu).primary(true).build();
         about.set_tooltip_text(Some(strings::text(S::MainMenu)));
@@ -171,6 +177,14 @@ impl Start {
             }
         });
         ui.window.add_action(&about);
+        let document = gio::SimpleAction::new("document", Some(glib::VariantTy::STRING));
+        let weak = Rc::downgrade(ui);
+        document.connect_activate(move |_, id| {
+            if let (Some(ui), Some(id)) = (weak.upgrade(), id.and_then(|v| v.str())) {
+                dialogs::document(&ui, id);
+            }
+        });
+        ui.window.add_action(&document);
 
         // A file dropped anywhere on the start page opens.
         let target = gtk::DropTarget::new(gio::File::static_type(), gdk::DragAction::COPY);

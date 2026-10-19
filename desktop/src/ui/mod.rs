@@ -11,6 +11,7 @@ mod review;
 mod scan;
 mod start;
 pub mod style;
+mod welcome;
 mod widgets;
 
 use adw::prelude::*;
@@ -73,7 +74,6 @@ impl Ui {
             .height_request(480)
             .content(&toasts)
             .build();
-        window.add_breakpoint(narrow);
 
         let ui = Rc::new(Self {
             app: app.clone(),
@@ -92,6 +92,10 @@ impl Ui {
         ui.review.wire(&ui);
         ui.scan.wire(&ui);
         ui.wire_window();
+        if ui.model.borrow().needs_acceptance() {
+            ui.window.set_content(Some(&welcome::build(&ui, &narrow)));
+        }
+        ui.window.add_breakpoint(narrow);
 
         let weak = Rc::downgrade(&ui);
         glib::spawn_future_local(async move {
@@ -186,6 +190,20 @@ impl Ui {
         if was_scanning && matches!(self.model.borrow().phase, Phase::Result(_)) {
             self.scan.announce(self);
         }
+    }
+
+    /// Continue on the first-run screen: keep the version, then show the app.
+    pub fn accept_terms(self: &Rc<Self>) {
+        if let Err(err) = self.model.borrow_mut().accept_terms() {
+            eprintln!("the accepted terms version could not be saved: {err}");
+        }
+        self.window.set_content(Some(&self.toasts));
+        self.start.focus();
+    }
+
+    /// The first-run screen is up.
+    pub fn welcoming(&self) -> bool {
+        self.window.content().is_some_and(|content| content != self.toasts.clone().upcast::<gtk::Widget>())
     }
 
     pub fn toast(&self, text: &str) {
@@ -472,7 +490,8 @@ fn self_check(ui: &Rc<Ui>, status: Rc<Cell<i32>>) {
                     Some(Err(line)) => strings::say(line).to_string(),
                     None => String::new(),
                 };
-                println!("self-check ok: window shown; bundles: {bundles}");
+                let first_run = if ui.welcoming() { "shown" } else { "accepted" };
+                println!("self-check ok: window shown; first run: {first_run}; bundles: {bundles}");
                 drop(model);
                 ui.window.close();
                 return;

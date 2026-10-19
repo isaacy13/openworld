@@ -6,7 +6,7 @@ These terms are an agreement between you and OneX Engineering ("OneX", "we", "us
 
 PLEASE READ THESE TERMS CAREFULLY. SECTION 14 REQUIRES MOST DISPUTES TO BE RESOLVED BY BINDING INDIVIDUAL ARBITRATION, NOT IN COURT, AND WAIVES YOUR RIGHT TO A JURY TRIAL AND TO TAKE PART IN A CLASS ACTION. YOU MAY OPT OUT OF ARBITRATION AS SECTION 14 DESCRIBES.
 
-By tapping Continue on the first screen, or by using the App, you agree to these terms, to the Privacy Policy, and to the Biometric Data Policy. If you do not agree, do not use the App.
+By selecting Continue on the first screen, or by using the App, you agree to these terms, to the Privacy Policy, and to the Biometric Data Policy. If you do not agree, do not use the App.
 
 ## In short
 

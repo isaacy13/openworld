@@ -161,6 +161,20 @@ async fn script(ui: &Rc<Ui>, dir: &Path) -> Result<usize, String> {
 
     until(ui, "the poster check", |m| !matches!(m.pack, PackState::Checking)).await?;
     ui.window.present();
+    // A new data folder opens on the first-run screen; Continue is the way past it.
+    if ui.welcoming() {
+        shots.take("first-run").await?;
+        dialogs::document(ui, "terms");
+        shots.take("terms").await?;
+        close_sheet(ui);
+        ui.accept_terms();
+    }
+    if ui.welcoming() || ui.model.borrow().needs_acceptance() {
+        return Err("Continue did not leave the first-run screen".into());
+    }
+    dialogs::document(ui, "licenses");
+    shots.take("licenses").await?;
+    close_sheet(ui);
     shots.take("start-no-posters").await?;
     // Update posters refuses until an official curve allows real posters.
     ui.update_posters();

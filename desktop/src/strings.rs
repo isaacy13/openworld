@@ -95,6 +95,9 @@ pub enum S {
     Unopened,
     About,
     MainMenu,
+    Welcome,
+    Continue,
+    Publisher,
 }
 
 /// The English label. Swap this table for a catalog to translate.
@@ -184,6 +187,9 @@ pub fn text(id: S) -> &'static str {
         S::Unopened => "The page could not be opened.",
         S::About => "About OpenWorld",
         S::MainMenu => "Main menu",
+        S::Welcome => "Welcome to OpenWorld",
+        S::Continue => "Continue",
+        S::Publisher => "OneX Engineering",
     }
 }
 

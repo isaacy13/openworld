@@ -18,6 +18,8 @@ pub struct Places {
     pub posters: PathBuf,
     pub results: PathBuf,
     pub imports: PathBuf,
+    /// The terms version the person accepted on the first-run screen. Never sent.
+    pub accepted: PathBuf,
 }
 
 impl Places {
@@ -29,6 +31,7 @@ impl Places {
             posters: root.join("posters"),
             results: root.join("results"),
             imports: std::env::temp_dir().join(format!("{IMPORT_PREFIX}{}", std::process::id())),
+            accepted: root.join("accepted-terms"),
         }
     }
 

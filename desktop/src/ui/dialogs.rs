@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Sheets: the full disclosure, leaving for the FBI page, a candidate's frame,
-//! and the confirmations for Delete and Stop.
+//! the policies and licenses, and the confirmations for Delete and Stop.
 
 use super::widgets::{icon_line, vbox};
 use super::Ui;
 use adw::prelude::*;
 use gtk::gio;
 use openworld_core::Line;
+use openworld_desktop::calls;
 use openworld_desktop::strings::{self, S};
 use std::path::Path;
 use std::rc::Rc;
@@ -106,10 +107,37 @@ pub fn about(ui: &Rc<Ui>) {
     let about = adw::AboutDialog::builder()
         .application_name(strings::text(S::AppName))
         .application_icon(super::APP_ID)
+        .developer_name(strings::text(S::Publisher))
         .version(env!("CARGO_PKG_VERSION"))
         .comments(strings::text(S::Tagline))
         .license_type(gtk::License::Apache20)
         .website("https://github.com/isaacy13/openworld")
         .build();
+    if let Ok(legal) = &ui.model.borrow().legal {
+        about.set_support_url(&format!("mailto:{}", legal.contact));
+    }
     about.present(Some(&ui.window));
+}
+
+/// A policy or the licenses, read from the library. The licenses run to thousands of
+/// paragraphs, so they go in a text view rather than a label each.
+pub fn document(ui: &Rc<Ui>, id: &str) {
+    let (title, body) = match calls::legal_document(id) {
+        Ok(doc) => (strings::say(&doc.title).to_string(), doc.paragraphs.join("\n\n")),
+        Err(line) => (strings::text(S::AppName).to_string(), strings::say(&line).to_string()),
+    };
+    let view = gtk::TextView::builder()
+        .editable(false)
+        .cursor_visible(false)
+        .wrap_mode(gtk::WrapMode::WordChar)
+        // License texts are wrapped by their authors for a fixed-width font.
+        .monospace(id == "licenses")
+        .left_margin(24)
+        .right_margin(24)
+        .bottom_margin(24)
+        .build();
+    view.buffer().set_text(&body);
+    view.update_property(&[gtk::accessible::Property::Label(&title)]);
+    let scroller = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&view).vexpand(true).build();
+    sheet(&title, &scroller, 640, 640).present(Some(&ui.window));
 }
