@@ -47,6 +47,8 @@ jobs:
         run: core/target/release/openworld --bundles bundles --json selftest
       - name: demo scan
         run: core/target/release/openworld --bundles bundles demo --out "$RUNNER_TEMP/demo"
+      - name: the Apple catalog of core sentences is current
+        run: python3 scripts/core_strings.py core/target/release/openworld --check
 
   windows:
     runs-on: windows-latest
@@ -100,6 +102,90 @@ jobs:
         with:
           name: desktop-shots
           path: ${{ runner.temp }}/desktop-shots
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;${NDK_VERSION}" "cmake;3.22.1"
+      - name: Fast weights, kept only when the pinned SHA-256 matches
+        run: python3 scripts/fetch_weights.py fast
+      - uses: gradle/actions/setup-gradle@v4
+      - name: APK and JVM tests
+        working-directory: android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          ./gradlew assembleDebug testDebugUnitTest --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openworld-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  apple-kit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-core
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.1"
+      - name: OpenWorldKit tests, including the real C API
+        working-directory: apple
+        env:
+          OPENWORLD_LIB_DIR: ${{ github.workspace }}/core/target/release
+        run: swift test
+
+  apple:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - run: brew install xcodegen
+      - name: core and ONNX Runtime XCFrameworks
+        run: apple/scripts/build-core.sh
+      - name: generate the Xcode project
+        working-directory: apple
+        run: xcodegen generate
+      - name: iPhone app for the simulator
+        working-directory: apple
+        run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorld -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Mac app, kit tests on the linked core, launch smoke test
+        working-directory: apple
+        run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorldMac -destination 'platform=macOS,arch=arm64' test
 
   real-faces:
     runs-on: ubuntu-24.04

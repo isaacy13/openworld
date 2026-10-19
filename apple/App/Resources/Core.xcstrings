@@ -841,6 +841,18 @@
         }
       }
     },
+    "scan_killed": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system closed OpenWorld before the scan finished."
+          }
+        }
+      }
+    },
     "stopped_background": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",

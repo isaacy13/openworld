@@ -52,6 +52,8 @@ pub const STOPPED_HEAT: Copy = ("stopped_heat", "The device got too hot, so the 
 pub const STOPPED_BATTERY: Copy = ("stopped_battery", "The battery ran low, so the scan stopped.");
 pub const STOPPED_BACKGROUND: Copy = ("stopped_background", "The app left the screen, so the scan stopped.");
 pub const NOT_FULLY_DECODED: Copy = ("not_fully_decoded", "The file was not fully decoded.");
+/// For the shells: a scan the system ended, found at the next launch.
+pub const SCAN_KILLED: Copy = ("scan_killed", "The system closed OpenWorld before the scan finished.");
 pub const RESULT_UNWRITTEN: Copy = ("result_unwritten", "The result could not be written.");
 
 // Why a face was not compared.
@@ -251,7 +253,7 @@ pub fn product_copy() -> Value {
     let all: &[Copy] = &[
         POSSIBLE_CANDIDATE, NO_CLEARANCE, INCOMPLETE, NOT_COMPARED, BELOW_CUTOFF, FACE_UNSCORED, TOO_BRIEF, FIXTURE_MARKERS,
         NO_CLASS, CHOOSE_CLASS, CANCELLED, STOPPED_HEAT, STOPPED_BATTERY, STOPPED_BACKGROUND, NOT_FULLY_DECODED,
-        RESULT_UNWRITTEN, WHY_SMALL, WHY_UNALIGNED, WHY_CONFIDENCE, WHY_POSE, WHY_BLUR, WHY_EXPOSURE, BAND_NEAR, BAND_ABOVE,
+        SCAN_KILLED, RESULT_UNWRITTEN, WHY_SMALL, WHY_UNALIGNED, WHY_CONFIDENCE, WHY_POSE, WHY_BLUR, WHY_EXPOSURE, BAND_NEAR, BAND_ABOVE,
         BAND_WELL, LEAVING, NOT_SENDING, LEAVE_WANTED, LEAVE_MISSING, ONLY_FBI, UNAUTHENTICATED, ON_DEVICE, NOTHING_UPLOADED,
         NOBODY_ENROLLED, NO_TRAINING, NO_AGENCY, NOT_IDENTIFICATION, NOT_REAL_PROOF, OLD_FILE, TIMESTAMP_DISAGREE,
         POSTERS_STALE, CPU_NOTE, GPU_NOTE, HEAT_NOTE, ALREADY_WARM, BATTERY_NOTE, SUGGEST_COMPUTER, ESTIMATE_CAVEAT,
