@@ -20,6 +20,7 @@ Start at [handoff.md](handoff.md), the agent entry brief, then [decisions.md](de
 | [release-gates.md](release-gates.md) | The measured curve v0 needs, and what still blocks a public app. |
 | [validation.md](validation.md) | What Fast must measure: FMR/FNMR, 64 px recall, and the ~1 s miss rate. |
 | [platforms.md](platforms.md) | One Rust core, native shells, Fast pre-selected, Accurate selectable and not measured yet. |
+| [../site/](../site/index.html) | The website (`scripts/site.py`, published by `.github/workflows/site.yml`). |
 | [store-listing.md](store-listing.md) | Store name, description, keywords, data-safety answers, and Apple review notes. |
 | [legal/](legal/README.md) | Draft Terms of Use, privacy, biometric, and Washington health-data policies, from [legal-review.md](legal-review.md). |
 

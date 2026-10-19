@@ -25,7 +25,7 @@ A possible candidate is not an identification. No candidate is not a clearance. 
 
 For adults in the United States.
 
-Terms of Use, Privacy Policy, and Biometric Data Policy: [hosted URLs]
+Terms of Use, Privacy Policy, and Biometric Data Policy: https://isaacy13.github.io/openworld/terms.html, /privacy.html, /biometric.html (or the same paths on the custom domain once it is set).
 
 ## Keywords (Apple, 100 characters)
 
