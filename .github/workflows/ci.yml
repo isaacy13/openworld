@@ -71,6 +71,36 @@ jobs:
           core/target/release/openworld.exe --bundles bundles --json selftest
           core/target/release/openworld.exe --bundles bundles demo --out "$RUNNER_TEMP/demo"
 
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libgtk-4-dev libadwaita-1-dev xvfb
+      - name: pinned ONNX Runtime
+        run: python3 scripts/fetch_ort.py
+      - name: clippy
+        run: cargo clippy --manifest-path desktop/Cargo.toml --all-targets --features shots -- -D warnings
+      - name: view-model tests and window smoke test
+        env:
+          OPENWORLD_REQUIRE_DISPLAY: "1"
+        run: xvfb-run -a cargo test --manifest-path desktop/Cargo.toml
+      - name: every screen end to end
+        run: |
+          cargo build --manifest-path desktop/Cargo.toml --features shots
+          xvfb-run -a -s "-screen 0 1600x1600x24" desktop/target/debug/openworld-desktop --screenshot "$RUNNER_TEMP/desktop-shots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-shots
+          path: ${{ runner.temp }}/desktop-shots
+
   real-faces:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
