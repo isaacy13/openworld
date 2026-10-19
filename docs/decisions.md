@@ -74,7 +74,7 @@ The cutoff is measured on the CPU provider. `openworld bench` times each provide
 - For every sex or race group with enough comparisons, the upper bound is at or under **1e-5**.
 - "Enough" is the count at which zero false matches could pass (about 3.84 / rate: 1.92 million comparisons, or 384,000 for a group). Smaller sets and groups are listed as not enough data; only poster x LFW must have enough.
 
-These two rates are proposed; they are the owner's to change (`GATE_FMR`, `GATE_GROUP_FMR`). The cutoff rule (§1) stays a separate failure. The picker line says either that real FBI photos stay off or that real posters are on because the poster-photo check passed. Passing it is not legal review or source clearance.
+The owner accepted these two rates on 2026-10-19 (`GATE_FMR`, `GATE_GROUP_FMR`). Changing either is the owner's call. The cutoff rule (§1) stays a separate failure. The picker line says either that real FBI photos stay off or that real posters are on because the poster-photo check passed. Passing it is not legal review or source clearance.
 
 ## Still open
 

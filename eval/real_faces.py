@@ -121,7 +121,7 @@ HELD_OUT_PINS = {
 CURVE_SCHEMA = "openworld.curve.v1"
 PICKER_LINE = "LFW curve measured. Real FBI photos stay off."
 PICKER_LINE_ON = "LFW and poster-photo curves measured. Real FBI posters are on because the poster-photo check passed."
-# The poster-photo gate. The two rates are the owner's to change. Real posters
+# The poster-photo gate. The owner accepted the two rates on 2026-10-19. Real posters
 # are allowed only on a full run (every LFW person, every kept poster, the FBI
 # list read to its total) where the upper 95% bound of the false match rate
 # (the wider of Wilson and the identity bootstrap) is at or under:

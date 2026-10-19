@@ -277,7 +277,7 @@ class Gate(unittest.TestCase):
         self.assertTrue(gate["allowed"], gate["failures"])
         self.assertEqual(gate["gate_fmr"], rf.GATE_FMR)
 
-    def test_the_proposed_constants(self):
+    def test_the_accepted_constants(self):
         self.assertEqual((rf.GATE_FMR, rf.GATE_GROUP_FMR), (2e-6, 1e-5))
         # Enough data is where a clean result could pass, so no group blocks for being small.
         self.assertEqual((rf.enough(rf.GATE_FMR), rf.enough(rf.GATE_GROUP_FMR)), (1_920_730, 384_146))
