@@ -2,7 +2,7 @@
 
 use crate::bundle::Bundle;
 use crate::copy::{
-    class_note, frame_label, frames_note, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE,
+    class_note, frame_label, frames_note, leave_notes, BELOW_CUTOFF, BRIEF_FACE, DISCLOSURE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE,
     NO_CLEARANCE, NOT_COMPARED, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
 };
 use crate::decode::{self, MediaError};
@@ -53,6 +53,8 @@ pub struct Candidate {
     pub crop: Option<String>,
     pub frame: Option<String>,
     pub leaving: String,
+    #[serde(default)]
+    pub leave_notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -765,6 +767,7 @@ impl<'a> Engine<'a> {
                     crop: crop_path.clone(),
                     frame: frame_path,
                     leaving: crate::copy::LEAVING.into(),
+                leave_notes: leave_notes(poster.class == crate::posters::PosterClass::Wanted, &self.opts.warnings),
                 });
             }
         }
@@ -848,6 +851,7 @@ impl<'a> Engine<'a> {
                 crop: crop_path.clone(),
                 frame: frame_path,
                 leaving: crate::copy::LEAVING.into(),
+                leave_notes: leave_notes(poster.class == crate::posters::PosterClass::Wanted, &self.opts.warnings),
             });
         }
         let matched_this = self.candidates.iter().any(|c| {

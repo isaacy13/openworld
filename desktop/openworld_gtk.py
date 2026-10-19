@@ -31,6 +31,7 @@ PHRASES = {
     "incomplete": "Incomplete.",
     "clearance": "No candidate is not a clearance.",
     "leaving": "You are leaving OpenWorld.",
+    "not_sending": "OpenWorld is not sending a report.",
     "brief": "A brief face can be missed.",
     "on_device": "This file stays on this device.",
     "old": "This file is older than about 30 days.",
@@ -1357,7 +1358,8 @@ class OpenWorld(Gtk.Application):
         if url:
             button = Gtk.Button(label="Open FBI page")
             button.set_halign(Gtk.Align.START)
-            button.connect("clicked", lambda *_c, url=url: self.confirm_leave(url))
+            notes = [str(note) for note in candidate.get("leave_notes") or [] if note]
+            button.connect("clicked", lambda *_c, url=url, notes=notes: self.confirm_leave(url, notes))
             box.append(button)
         frame.set_child(box)
         return frame
@@ -1383,7 +1385,7 @@ class OpenWorld(Gtk.Application):
             return message or "OpenWorld only opens an FBI page.", None
         return message, allowed
 
-    def confirm_leave(self, url: str) -> None:
+    def confirm_leave(self, url: str, notes: list[str] | tuple[str, ...] = ()) -> None:
         if self.closed:
             return
         message, allowed = self.leave_decision(url)
@@ -1407,6 +1409,10 @@ class OpenWorld(Gtk.Application):
         )
         dialog.add_button("Stay", Gtk.ResponseType.CANCEL)
         dialog.add_button("Open", Gtk.ResponseType.ACCEPT)
+        for note in notes:
+            line = Gtk.Label(label=note, wrap=True, xalign=0)
+            line.set_max_width_chars(42)
+            dialog.get_message_area().append(line)
         # GTK 4 dropped format_secondary_text. A URL has no spaces, so the
         # address wraps by character. A long address scrolls, and Stay and Open
         # stay on the screen.
@@ -2427,6 +2433,10 @@ class OpenWorld(Gtk.Application):
                 if phrase not in blob:
                     self._exercise_fail(f"missing {phrase}")
                     return False
+        cards = report.get("candidates") or []
+        if not cards or any((card.get("leave_notes") or [None])[0] != PHRASES["not_sending"] for card in cards):
+            self._exercise_fail(f"a card has no way-out notes: {cards}")
+            return False
         if "warn" in self.summary.get_css_classes():
             self._exercise_fail("a finished scan kept the refusal color")
             return False

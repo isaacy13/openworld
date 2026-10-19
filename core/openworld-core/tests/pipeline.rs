@@ -3,8 +3,9 @@
 use image::{ImageEncoder, Rgb, RgbImage};
 use openworld_core::bundle::load_bundles;
 use openworld_core::copy::{
-    BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, NO_CLEARANCE, NOT_COMPARED,
-    PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE, VEHICLE_NOT_PERSON,
+    BELOW_CUTOFF, BRIEF_FACE, FACE_UNSCORED, FIXTURE_MARKERS, INCOMPLETE, LEAVE_MISSING, LEAVE_WANTED, NOT_SENDING,
+    NO_CLEARANCE, NOT_COMPARED, OLD_FILE, PLATE_NOT_ON_POSTER, PLATE_UNPUBLISHED, PLATE_UNREAD, POSSIBLE_CANDIDATE,
+    TIMESTAMP_DISAGREE, UNAUTHENTICATED, VEHICLE_NOT_PERSON,
 };
 use openworld_core::estimate::{Coverage, DetectionSize, FormFactor};
 use openworld_core::fiducial::{self, render_face_module, render_plate, render_vehicle};
@@ -637,6 +638,41 @@ fn bad_hash_expired_pack_and_missing_weights_refuse() {
         &mut |_| {},
     );
     assert_eq!(weights.refusal.as_deref(), Some("missing_weights"));
+}
+
+#[test]
+fn the_way_out_says_no_report_is_sent_and_gives_the_class_and_file_warnings() {
+    let bundle = fast();
+    let dir = tempfile::tempdir().unwrap();
+    posters::write_fixture_pack(dir.path(), now()).unwrap();
+    let pack = posters::load_pack(dir.path(), now()).unwrap();
+    let scene = demo_scene(bundle.threshold);
+    let mut opts = opts(DetectionSize::Px(640), Coverage::Complete);
+    opts.fps = 0.0;
+    opts.warnings = vec![OLD_FILE.to_string(), TIMESTAMP_DISAGREE.to_string()];
+    let both = scan_images(&[scene.image.clone()], &bundle, &pack, &opts, &mut |_| {});
+    assert!(both.candidates.iter().any(|c| c.poster_class == "missing"));
+    assert!(both.candidates.iter().any(|c| c.poster_class == "wanted"));
+    for candidate in &both.candidates {
+        let class_line = if candidate.poster_class == "wanted" { LEAVE_WANTED } else { LEAVE_MISSING };
+        assert_eq!(
+            candidate.leave_notes,
+            [NOT_SENDING, class_line, OLD_FILE, TIMESTAMP_DISAGREE, UNAUTHENTICATED],
+            "{candidate:?}"
+        );
+    }
+    assert!(LEAVE_WANTED.contains("Do not approach.") && LEAVE_WANTED.contains("1-800-CALL-FBI (1-800-225-5324)"));
+    assert!(LEAVE_MISSING.contains("Do not approach.") && LEAVE_MISSING.contains("1-800-THE-LOST (1-800-843-5678)"));
+    assert!(LEAVE_MISSING.contains("not a criminal accusation"));
+    assert!(!LEAVE_MISSING.contains("CALL-FBI") && !LEAVE_MISSING.contains("tips.fbi.gov"));
+
+    let large = blank(4032, 3024);
+    opts.warnings = Vec::new();
+    let recent = scan_images(&[large, scene.image], &bundle, &pack, &opts, &mut |_| {});
+    assert!(recent.warnings.iter().any(|w| w.contains("is left out")), "{:?}", recent.warnings);
+    let face = recent.candidates.iter().find(|c| c.kind == "face").unwrap();
+    assert_eq!(face.leave_notes.len(), 3, "{:?}", face.leave_notes);
+    assert_eq!(face.leave_notes.last().map(String::as_str), Some(UNAUTHENTICATED));
 }
 
 #[test]

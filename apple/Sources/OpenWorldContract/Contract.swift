@@ -194,6 +194,9 @@ public struct Candidate: Decodable, Identifiable {
     public var crop: String?
     public var frame: String?
     public var leaving: String
+    /// Lines for the way out to this poster. An older report has none.
+    public var leaveNotes: [String] { storedLeaveNotes ?? [] }
+    var storedLeaveNotes: [String]?
     public var frameIndex: Int
     public var frameLabel: String
     public var posterId: String
@@ -207,6 +210,7 @@ public struct Candidate: Decodable, Identifiable {
         case frameLabel = "frame_label"
         case posterId = "poster_id"
         case trackId = "track_id"
+        case storedLeaveNotes = "leave_notes"
     }
 }
 

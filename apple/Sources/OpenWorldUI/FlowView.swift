@@ -144,6 +144,7 @@ public final class FlowModel: ObservableObject {
     @Published public var report: ScanReport?
     @Published public var resultDirectory: URL?
     @Published public var leavingURL: URL?
+    @Published public var leavingNotes: [String] = []
     @Published public var leaveError: String?
     @Published public var deleteNotice: String?
     @Published public var oldFile = false
@@ -719,10 +720,11 @@ public final class FlowModel: ObservableObject {
     }
 
     /// Ask the library before any FBI page is shown. A lookalike host stays closed.
-    public func requestLeave(_ urlString: String) {
+    public func requestLeave(_ urlString: String, notes: [String] = []) {
         guard !closed else { return }
         leavingURL = nil
         leaveError = nil
+        leavingNotes = notes
         let data: Data
         do {
             data = try core.run(PhoneArguments.leave(url: urlString))
@@ -1082,6 +1084,10 @@ public struct FlowView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(Copy.leaving)
                     .font(.headline)
+                ForEach(model.leavingNotes, id: \.self) { note in
+                    Text(note)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ScrollView {
                     Text(PhonePreview.wrappingFileName(model.leavingURL?.absoluteString ?? ""))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1136,7 +1142,7 @@ public struct FlowView: View {
                             }
                             if !candidate.fbiUrl.isEmpty {
                                 prominent("Open FBI page") {
-                                    model.requestLeave(candidate.fbiUrl)
+                                    model.requestLeave(candidate.fbiUrl, notes: candidate.leaveNotes)
                                 }
                             }
                         }

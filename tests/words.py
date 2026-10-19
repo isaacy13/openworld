@@ -10,6 +10,7 @@ REQUIRED = [
     "Incomplete.",
     "No candidate is not a clearance.",
     "You are leaving OpenWorld.",
+    "OpenWorld is not sending a report.",
 ]
 SHELLS = [
     ROOT / "desktop",

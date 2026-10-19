@@ -1190,6 +1190,7 @@ fn human_lines(report: &openworld_core::ScanReport) -> Vec<String> {
         if !candidate.fbi_url.is_empty() {
             lines.push("Open FBI page".into());
             lines.push(candidate.fbi_url.clone());
+            lines.extend(candidate.leave_notes.iter().cloned());
         }
     }
     if !report.inventory.is_empty() {
@@ -1969,6 +1970,14 @@ mod cli_tests {
                 "{}",
                 lines[card + 2]
             );
+            let notes = &report
+                .candidates
+                .iter()
+                .find(|c| poster.starts_with(&c.poster_title))
+                .unwrap()
+                .leave_notes;
+            assert_eq!(notes.first().map(String::as_str), Some("OpenWorld is not sending a report."));
+            assert_eq!(&lines[card + 3..card + 3 + notes.len()], notes.as_slice());
             assert!(
                 !lines[card - 1].contains("Possible candidate. Not an identification."),
                 "{}",

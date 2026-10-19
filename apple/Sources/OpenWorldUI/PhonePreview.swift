@@ -124,6 +124,7 @@ public enum PhonePreview {
             lines.append("Choose another file")
             if screen == "leaving" {
                 lines.append(Copy.leaving)
+                lines.append(contentsOf: model.leavingNotes)
                 if let page = model.leavingURL?.absoluteString { lines.append(page) }
                 lines.append("Open")
                 lines.append("Stay")

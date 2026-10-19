@@ -6,6 +6,10 @@ pub const NOT_COMPARED: &str = "Not compared.";
 pub const INCOMPLETE: &str = "Incomplete.";
 pub const NO_CLEARANCE: &str = "No candidate is not a clearance.";
 pub const LEAVING: &str = "You are leaving OpenWorld.";
+pub const NOT_SENDING: &str = "OpenWorld is not sending a report.";
+pub const LEAVE_WANTED: &str = "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.";
+pub const LEAVE_MISSING: &str = "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678).";
+pub const UNAUTHENTICATED: &str = "This file is not authenticated.";
 pub const BRIEF_FACE: &str = "A brief face can be missed.";
 pub const VEHICLE_NOT_PERSON: &str = "A vehicle is not a person.";
 pub const BELOW_CUTOFF: &str = "Below the locked cutoff. Not a candidate.";
@@ -34,6 +38,14 @@ pub fn estimate_class_line(missing: bool, wanted: bool) -> &'static str {
     } else {
         CHOOSE_CLASS
     }
+}
+
+/// Lines on the way out to a poster. Only the recency and timestamp warnings travel with them.
+pub fn leave_notes(wanted: bool, warnings: &[String]) -> Vec<String> {
+    let mut notes = vec![NOT_SENDING.to_string(), if wanted { LEAVE_WANTED } else { LEAVE_MISSING }.to_string()];
+    notes.extend(warnings.iter().filter(|w| *w == OLD_FILE || *w == TIMESTAMP_DISAGREE).cloned());
+    notes.push(UNAUTHENTICATED.to_string());
+    notes
 }
 
 /// The frame a candidate card came from, counting from 1. Index 0 is the first frame.
@@ -67,7 +79,7 @@ pub const DISCLOSURE: &[&str] = &[
     "OpenWorld does not contact an agency.",
     "A candidate is not an identification.",
     NO_CLEARANCE,
-    "This file is not authenticated.",
+    UNAUTHENTICATED,
     "On-device does not mean the file is real.",
 ];
 
@@ -102,6 +114,10 @@ pub fn product_copy() -> serde_json::Value {
         "incomplete": INCOMPLETE,
         "no_clearance": NO_CLEARANCE,
         "leaving": LEAVING,
+        "not_sending": NOT_SENDING,
+        "leave_wanted": LEAVE_WANTED,
+        "leave_missing": LEAVE_MISSING,
+        "unauthenticated": UNAUTHENTICATED,
         "brief_face": BRIEF_FACE,
         "vehicle_not_person": VEHICLE_NOT_PERSON,
         "below_cutoff": BELOW_CUTOFF,

@@ -35,12 +35,22 @@
     "candidates": [
       {
         "kind": "face",
+        "leave_notes": [
+          "OpenWorld is not sending a report.",
+          "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678).",
+          "This file is not authenticated."
+        ],
         "leaving": "You are leaving OpenWorld.",
         "poster_class": "missing",
         "wording": "Possible candidate. Not an identification."
       },
       {
         "kind": "plate",
+        "leave_notes": [
+          "OpenWorld is not sending a report.",
+          "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.",
+          "This file is not authenticated."
+        ],
         "leaving": "You are leaving OpenWorld.",
         "poster_class": "wanted",
         "wording": "Possible candidate. Not an identification."

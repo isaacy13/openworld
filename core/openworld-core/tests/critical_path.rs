@@ -116,6 +116,7 @@ fn decisions(report: &openworld_core::ScanReport) -> Value {
             "kind": item.kind,
             "wording": item.wording,
             "leaving": item.leaving,
+            "leave_notes": item.leave_notes,
             "poster_class": item.poster_class,
         })).collect::<Vec<_>>(),
         "faces_seen_not_compared": report.faces_seen_not_compared,
@@ -752,6 +753,10 @@ fn product_sentences_and_catalog_edges_stay_closed() {
         "incomplete",
         "no_clearance",
         "leaving",
+        "not_sending",
+        "leave_wanted",
+        "leave_missing",
+        "unauthenticated",
     ] {
         assert!(copy[key].as_str().unwrap().len() > 3, "{key}");
     }

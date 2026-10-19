@@ -698,7 +698,39 @@ final class OpenWorldUITests: XCTestCase {
             XCTAssertNil(model.leaveError)
             model.leavingURL = nil
             XCTAssertNil(model.leavingURL)
+            for card in model.report?.candidates ?? [] {
+                model.requestLeave(card.fbiUrl, notes: card.leaveNotes)
+                let classLine = card.posterClass == "wanted" ? Copy.leaveWanted : Copy.leaveMissing
+                XCTAssertEqual(model.leavingNotes, [Copy.notSending, classLine, "This file is not authenticated."])
+                let leaving = PhonePreview.lines(screen: "leaving", model: model)
+                let leavingAt = try XCTUnwrap(leaving.lastIndex(of: Copy.leaving))
+                let pageAt = try XCTUnwrap(leaving.lastIndex(of: card.fbiUrl))
+                XCTAssertEqual(Array(leaving[(leavingAt + 1)..<pageAt]), model.leavingNotes)
+                model.leavingURL = nil
+            }
+            XCTAssertTrue(Copy.leaveWanted.contains("Do not approach.") && Copy.leaveWanted.contains("1-800-CALL-FBI"))
+            XCTAssertTrue(Copy.leaveMissing.contains("Do not approach.") && Copy.leaveMissing.contains("1-800-THE-LOST"))
         }
+    }
+
+    func testTheWayOutListsTheCardNotesAboveTheAddress() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/OpenWorldUI/FlowView.swift")
+        let view = try String(contentsOf: source, encoding: .utf8)
+        let sheet = view.components(separatedBy: "private var leavingSheet").dropFirst().first?
+            .components(separatedBy: "private var resultsColumn").first ?? ""
+        let leaving = sheet.range(of: "Text(Copy.leaving)")
+        let notes = sheet.range(of: "ForEach(model.leavingNotes")
+        let address = sheet.range(of: "wrappingFileName(model.leavingURL")
+        XCTAssertTrue(
+            leaving != nil && notes != nil && address != nil
+                && leaving!.lowerBound < notes!.lowerBound && notes!.lowerBound < address!.lowerBound,
+            "the leave sheet does not list the card notes: \(sheet.prefix(400))"
+        )
+        XCTAssertTrue(view.contains("model.requestLeave(candidate.fbiUrl, notes: candidate.leaveNotes)"))
     }
 
     func testThePhonePreviewKeepsTheSizeRulesAndAnalyze() throws {

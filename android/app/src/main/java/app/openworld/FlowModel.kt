@@ -58,6 +58,7 @@ class CandidateRow(
     val cropPath: String?,
     val framePath: String?,
     val frameLabel: String = "Frame",
+    val leaveNotes: List<String> = emptyList(),
 )
 
 class FlowModel : ViewModel() {
@@ -82,6 +83,7 @@ class FlowModel : ViewModel() {
     var warnings by mutableStateOf("")
     var detail by mutableStateOf("")
     var leavingUrl by mutableStateOf<String?>(null)
+    var leavingNotes by mutableStateOf(listOf<String>())
     var leaveNotice by mutableStateOf<String?>(null)
     var deleteNotice by mutableStateOf<String?>(null)
     var pickNotice by mutableStateOf<String?>(null)
@@ -297,10 +299,11 @@ class FlowModel : ViewModel() {
         }
     }
 
-    fun prepareLeave(url: String) {
+    fun prepareLeave(url: String, notes: List<String> = emptyList()) {
         if (abandoned.get()) return
         leaveNotice = null
         leavingUrl = null
+        leavingNotes = notes
         try {
             val json = Core.json(listOf("--json", "leave", "--url", url))
             val message = json.present("message")
@@ -751,6 +754,9 @@ internal fun candidateRowsFrom(candidates: org.json.JSONArray?, out: File): List
                 cropPath = item.present("crop")?.let { File(out, it).absolutePath },
                 framePath = item.present("frame")?.let { File(out, it).absolutePath },
                 frameLabel = item.present("frame_label") ?: "Frame",
+                leaveNotes = item.optJSONArray("leave_notes")?.let { notes ->
+                    (0 until notes.length()).mapNotNull { notes.optString(it).ifBlank { null } }
+                } ?: emptyList(),
             )
         )
     }

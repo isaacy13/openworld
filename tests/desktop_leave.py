@@ -154,6 +154,36 @@ def main() -> None:
         pump(context, 15)
         if dialogs(app, Gtk):
             raise SystemExit("Stay left the long address on the screen")
+        notes = [
+            "OpenWorld is not sending a report.",
+            "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.",
+            "This file is older than about 30 days.",
+            "This file is not authenticated.",
+        ]
+        card = app._candidate_card(
+            {
+                "uncertainty": "Score 0.90.",
+                "poster_title": "Fixture subject B",
+                "poster_class_label": "Wanted",
+                "fbi_url": "https://www.fbi.gov/wanted",
+                "leave_notes": notes,
+            }
+        )
+        open_page = next(button for button in walk(card, Gtk.Button) if button.get_label() == "Open FBI page")
+        open_page.emit("clicked")
+        pump(context, 30)
+        handoff = dialogs(app, Gtk)
+        if len(handoff) != 1:
+            raise SystemExit(f"Open FBI page on a card did not show one dialog: {len(handoff)}")
+        handoff_texts = [label.get_text() for label in walk(handoff[0], Gtk.Label)]
+        shown = [text for text in handoff_texts if text in notes]
+        if handoff_texts[:1] != ["You are leaving OpenWorld."] or shown != notes:
+            raise SystemExit(f"the way out left out what the card carries: {handoff_texts}")
+        handoff_stay = next(button for button in walk(handoff[0], Gtk.Button) if button.get_label() == "Stay")
+        handoff_stay.activate()
+        pump(context, 15)
+        if dialogs(app, Gtk):
+            raise SystemExit("Stay left the hand-off dialog on the screen")
         app.confirm_leave("https://www.fbi.gov.evil.com/wanted")
         pump(context, 20)
         refused = dialogs(app, Gtk)

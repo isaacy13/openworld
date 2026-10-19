@@ -413,7 +413,7 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                             val poster = posterLine(row.title, row.posterClassLabel)
                             if (poster.isNotBlank()) Text(poster)
                             if (row.url.isNotBlank()) {
-                                Button(onClick = { model.prepareLeave(row.url) }) { Text("Open FBI page") }
+                                Button(onClick = { model.prepareLeave(row.url, row.leaveNotes) }) { Text("Open FBI page") }
                             }
                         }
                         if (model.strip.isNotEmpty()) {
@@ -484,14 +484,17 @@ fun OpenWorldApp(model: FlowModel, onChoose: () -> Unit, onOpen: (String) -> Uni
                     // A URL has no spaces. Breaks between characters keep the
                     // address inside the dialog, and a long address scrolls.
                     val addressLimit = maxOf(96.dp, LocalConfiguration.current.screenHeightDp.dp / 3)
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = addressLimit)
-                            .verticalScroll(rememberScrollState())
-                            .clearAndSetSemantics { text = AnnotatedString(url) },
-                    ) {
-                        Text(wrappingFileName(url), modifier = Modifier.fillMaxWidth())
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        model.leavingNotes.forEach { Text(it) }
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = addressLimit)
+                                .verticalScroll(rememberScrollState())
+                                .clearAndSetSemantics { text = AnnotatedString(url) },
+                        ) {
+                            Text(wrappingFileName(url), modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 },
                 confirmButton = {
