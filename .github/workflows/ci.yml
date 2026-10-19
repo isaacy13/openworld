@@ -65,14 +65,17 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: core
-      - name: ffmpeg (pinned and retried, so a feed outage fails here and not in a decoder test)
+      # MSYS2's signed ffmpeg package, the one the Windows release bundles. Chocolatey's feed
+      # was down for whole runs. Appended to PATH, so its folder shadows nothing the build uses.
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          install: mingw-w64-ucrt-x86_64-ffmpeg
+      - name: ffmpeg on PATH
         run: |
-          foreach ($try in 1..4) {
-            choco install ffmpeg --version 9.0.2 --no-progress -y
-            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
-            Start-Sleep -Seconds (15 * $try)
-          }
-          ffmpeg -version
+          "Path=$env:Path;${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          & "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin\ffmpeg.exe" -version
       - name: pinned ONNX Runtime
         run: python scripts/fetch_ort.py windows-x86_64
       - name: library tests
@@ -137,9 +140,10 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          # Keep the Windows PATH, so cargo from rustup and Chocolatey's ffmpeg are found.
+          # Keep the Windows PATH, so cargo from rustup is found.
           path-type: inherit
           install: >-
+            mingw-w64-ucrt-x86_64-ffmpeg
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-gtk4
@@ -147,14 +151,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop
-      - name: ffmpeg (pinned and retried, so a feed outage fails here and not in a decoder test)
-        run: |
-          foreach ($try in 1..4) {
-            choco install ffmpeg --version 9.0.2 --no-progress -y
-            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
-            Start-Sleep -Seconds (15 * $try)
-          }
-          ffmpeg -version
       - name: pinned ONNX Runtime
         run: python scripts/fetch_ort.py windows-x86_64
       - name: the toolchain the build uses
@@ -162,7 +158,8 @@ jobs:
         run: |
           rustc -vV
           cargo -V
-          which gcc pkg-config ffmpeg || true
+          which gcc pkg-config ffmpeg
+          ffmpeg -version
           pkg-config --modversion gtk4 libadwaita-1
       - name: view-model tests and window smoke test
         shell: msys2 {0}
