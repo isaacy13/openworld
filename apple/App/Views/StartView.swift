@@ -10,6 +10,7 @@ struct StartView: View {
     let chooseFile: () -> Void
     let pickPhoto: (PhotosPickerItem) -> Void
     @State private var photo: PhotosPickerItem?
+    @State private var showAbout = false
 
     var body: some View {
         Page {
@@ -37,8 +38,9 @@ struct StartView: View {
         .navigationTitle("OpenWorld")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
-        #else
+        #endif
         .toolbar {
+            #if os(macOS)
             ToolbarItem(placement: .primaryAction) {
                 Button(action: chooseFile) {
                     Label("Choose a Photo or Video…", systemImage: "folder")
@@ -46,8 +48,20 @@ struct StartView: View {
                 .help("Choose a photo or video (⌘O)")
                 .disabled(model.isScanning)
             }
+            #endif
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAbout = true
+                } label: {
+                    Label("About OpenWorld", systemImage: "info.circle")
+                }
+                .help("About OpenWorld")
+                .accessibilityIdentifier("about")
+            }
         }
-        #endif
+        .sheet(isPresented: $showAbout) {
+            AboutSheet(model: model)
+        }
         .onChange(of: photo) { _, item in
             guard let item else { return }
             photo = nil

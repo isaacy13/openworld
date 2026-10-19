@@ -81,6 +81,11 @@ final class PolicyTests: XCTestCase {
         XCTAssertEqual(try object(Request.leave(url: "https://www.fbi.gov/x").json)["url"] as? String, "https://www.fbi.gov/x")
         XCTAssertEqual(try object(Request.copy.json).count, 2)
         XCTAssertEqual(try object(Request.sweep(root: "/r").json)["root"] as? String, "/r")
+        XCTAssertEqual(Request.legal.json, #"{"op":"legal","v":1}"#)
+        let document = try object(Request.legalDocument(id: "licenses").json)
+        XCTAssertEqual(Set(document.keys), ["v", "op", "id"])
+        XCTAssertEqual(document["op"] as? String, "legal_document")
+        XCTAssertEqual(document["id"] as? String, "licenses")
     }
 
     private func object(_ json: String) throws -> [String: Any] {

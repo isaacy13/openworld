@@ -107,6 +107,10 @@ public enum Request: Sendable {
     case leave(url: String)
     case delete(out: String)
     case sweep(root: String)
+    /// The terms version to accept, the first-run lines, and the documents' titles.
+    case legal
+    /// One built-in document: `terms`, `privacy`, `biometric`, `health_data`, or `licenses`.
+    case legalDocument(id: String)
     /// `ow_job_start` takes a scan request with `v` and without `op`.
     case job(ScanRequest)
 
@@ -123,6 +127,8 @@ public enum Request: Sendable {
         case .leave(let url): return Self.encode(op: "leave", ["url": url])
         case .delete(let out): return Self.encode(op: "delete", ["out": out])
         case .sweep(let root): return Self.encode(op: "sweep", ["root": root])
+        case .legal: return Self.encode(op: "legal", [String: String]())
+        case .legalDocument(let id): return Self.encode(op: "legal_document", ["id": id])
         case .job(let scan): return Self.encode(op: nil, scan)
         }
     }

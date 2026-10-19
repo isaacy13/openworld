@@ -160,6 +160,16 @@ public enum ScanState: Equatable, Sendable {
     case refused(Line)
 }
 
+/// First run: shown before Start until the terms version the core names is accepted.
+public enum TermsState: Equatable, Sendable {
+    case loading
+    /// Show First run. `changed`: an older version was accepted, so its line goes on top.
+    case firstRun(changed: Bool)
+    case accepted
+    /// The core refused `legal`. Nothing counts as accepted, so Start stays closed.
+    case refused(Line)
+}
+
 /// The confirmation before an FBI page opens. `url` is the one the core's `leave` approved.
 public struct LeavePrompt: Identifiable, Equatable, Sendable {
     public var title: Line
@@ -182,6 +192,9 @@ public final class ScanModel {
     public private(set) var demoBuild = false
     public private(set) var copy = CopyTable()
     public private(set) var options = ScanOptions()
+    public private(set) var terms: TermsState = .loading
+    /// The `legal` answer, for First run and About.
+    public private(set) var legal: LegalAnswer?
     /// The last launch found a scan the system stopped before it finished.
     public var interruptedScans = 0
     /// An action that did not work (delete, leave). Shown once.
@@ -191,9 +204,13 @@ public final class ScanModel {
     private let media: any MediaReader
     public let places: Places
     private let device: @MainActor () -> DeviceFacts
+    /// This app's own preferences. Only the accepted terms version is kept there.
+    private let defaults: UserDefaults
     /// The file being reviewed. It stays while its scan runs, so Back returns to it.
     public private(set) var review: Review?
     @ObservationIgnored private var probed: ProbedMedia?
+    /// A file that arrived before Continue. It is not read until the terms are accepted.
+    @ObservationIgnored private var held: ImportedFile?
     @ObservationIgnored private var runner: ScanRunner?
     @ObservationIgnored private var choice = 0
     @ObservationIgnored private var estimateRound = 0
@@ -201,21 +218,68 @@ public final class ScanModel {
     @ObservationIgnored private var closing = false
     @ObservationIgnored var estimateTask: Task<Void, Never>?
 
-    public init(core: any Core, media: any MediaReader, places: Places, device: @escaping @MainActor () -> DeviceFacts) {
+    /// Where the accepted terms version is kept.
+    nonisolated public static let acceptedTermsKey = "acceptedTermsVersion"
+
+    public init(core: any Core, media: any MediaReader, places: Places, defaults: UserDefaults = .standard, device: @escaping @MainActor () -> DeviceFacts) {
         self.core = core
         self.media = media
         self.places = places
+        self.defaults = defaults
         self.device = device
+    }
+
+    // MARK: First run
+
+    /// Continue: keep the version in this app's preferences and open Start. Nothing is sent.
+    /// A file that arrived before Continue opens on Review.
+    public func acceptTerms() async {
+        guard case .firstRun = terms, let legal else { return }
+        defaults.set(legal.version, forKey: Self.acceptedTermsKey)
+        await refreshTerms()
+    }
+
+    /// The preferences changed: Continue in another window opens Start here too.
+    public func refreshTerms() async {
+        guard case .firstRun = terms, let legal, defaults.string(forKey: Self.acceptedTermsKey) == legal.version else { return }
+        terms = .accepted
+        if let file = held {
+            held = nil
+            await choose(file)
+        }
+    }
+
+    public var termsAccepted: Bool { terms == .accepted }
+
+    /// One built-in document, read and decoded off the main actor: the licenses are
+    /// thousands of paragraphs.
+    public func document(_ id: String) async -> Answer<LegalDocument> {
+        await ask(.legalDocument(id: id), LegalDocument.self)
+    }
+
+    /// Equal to the stored version opens Start; anything else, or a refusal, shows First run.
+    private func readTerms(_ answer: Answer<LegalAnswer>) {
+        switch answer {
+        case .ok(let answer):
+            legal = answer
+            let accepted = defaults.string(forKey: Self.acceptedTermsKey)
+            terms = accepted == answer.version ? .accepted : .firstRun(changed: accepted != nil)
+        case .refused(_, let line):
+            legal = nil
+            terms = .refused(line)
+        }
     }
 
     // MARK: Start
 
-    /// Read the sentence table, the bundle rows, and the poster pack.
+    /// Read the terms, the sentence table, the bundle rows, and the poster pack.
     public func bootstrap(interruptedScans: Int = 0) async {
         self.interruptedScans = interruptedScans
+        async let legalAnswer = ask(.legal, LegalAnswer.self)
         async let copyAnswer = ask(.copy, CopyAnswer.self)
         async let versionAnswer = ask(.version, VersionAnswer.self)
         async let bundlesAnswer = ask(.bundles(catalog: places.bundles.path), BundlesAnswer.self)
+        readTerms(await legalAnswer)
         let table = await copyAnswer.value
         copy = CopyTable(texts: table?.copy ?? [:], disclosure: table?.disclosure ?? [])
         demoBuild = await versionAnswer.value?.demoPosters ?? false
@@ -289,6 +353,13 @@ public final class ScanModel {
     /// Read the chosen file and estimate the scan. Nothing is scanned yet.
     public func choose(_ file: ImportedFile) async {
         guard !isScanning else { return }
+        guard termsAccepted else {
+            if let old = held, old != file {
+                Importer.discard(old, imports: places.imports)
+            }
+            held = file
+            return
+        }
         if let old = review?.file, old != file {
             Importer.discard(old, imports: places.imports)
         }
@@ -346,7 +417,7 @@ public final class ScanModel {
     }
 
     public var canAnalyze: Bool {
-        guard case .review(let current) = state, case .ready(let estimate) = current.estimate, estimate.canStart, probed != nil else {
+        guard termsAccepted, case .review(let current) = state, case .ready(let estimate) = current.estimate, estimate.canStart, probed != nil else {
             return false
         }
         if case .ready = posters { return true }
@@ -481,10 +552,15 @@ public final class ScanModel {
     }
 
     /// The window is closing. A running scan is stopped, and its result deleted when it ends.
+    /// A file still waiting for Continue is discarded.
     public func close() {
         closing = true
         stop(.cancel)
         startOver()
+        if let file = held {
+            held = nil
+            Importer.discard(file, imports: places.imports)
+        }
     }
 
     // MARK: Helpers

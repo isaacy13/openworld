@@ -6,10 +6,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 #if os(iOS)
 import UIKit
+#else
+import AppKit
 #endif
 
-/// One window: its own model, its own scan. Start → Review → Scan, by value, so Back
-/// and swipe-back step through the same screens.
+/// One window: its own model, its own scan. First run until the terms are accepted, then
+/// Start → Review → Scan, by value, so Back and swipe-back step through the same screens.
 struct RootView: View {
     let services: AppServices
     @State private var model: ScanModel
@@ -26,14 +28,16 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationStack(path: Binding(get: { model.path }, set: { model.navigate(to: $0) })) {
-            StartView(model: model, dropTargeted: dropTargeted, chooseFile: { showFiles = true }, pickPhoto: pickPhoto)
-                .navigationDestination(for: Screen.self) { screen in
-                    switch screen {
-                    case .review: ReviewView(model: model)
-                    case .scan: ScanView(model: model)
-                    }
-                }
+        // One container, so the launch task and the handlers below stay with the window.
+        ZStack {
+            switch model.terms {
+            case .accepted:
+                screens
+            case .loading:
+                Color.page.ignoresSafeArea()
+            case .firstRun, .refused:
+                FirstRunView(model: model)
+            }
         }
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 640)
@@ -60,7 +64,7 @@ struct RootView: View {
             Text(line.localized())
         }
         .focusedSceneValue(\.chooseFile, {
-            if !model.isScanning { showFiles = true }
+            if model.termsAccepted, !model.isScanning { showFiles = true }
         })
         .task {
             let killed = await services.prepare()
@@ -89,10 +93,17 @@ struct RootView: View {
         }
         .onDisappear {
             if model.isScanning { ScanKeeper.shared.ended() }
+            #if os(macOS)
+            // Closing First run without Continue closes the app on a computer.
+            if !model.termsAccepted { NSApplication.shared.terminate(nil) }
+            #endif
             model.close()
         }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in
             model.deviceChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in
+            Task { await model.refreshTerms() }
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification).receive(on: RunLoop.main)) { _ in
@@ -102,6 +113,18 @@ struct RootView: View {
             model.deviceChanged()
         }
         #endif
+    }
+
+    private var screens: some View {
+        NavigationStack(path: Binding(get: { model.path }, set: { model.navigate(to: $0) })) {
+            StartView(model: model, dropTargeted: dropTargeted, chooseFile: { showFiles = true }, pickPhoto: pickPhoto)
+                .navigationDestination(for: Screen.self) { screen in
+                    switch screen {
+                    case .review: ReviewView(model: model)
+                    case .scan: ScanView(model: model)
+                    }
+                }
+        }
     }
 
     private var alertShown: Binding<Bool> {

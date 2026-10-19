@@ -59,9 +59,30 @@ final class NativeCoreTests: XCTestCase {
         XCTAssertNotNil(ask(.sweep(root: places.results.path), SweepAnswer.self).value)
     }
 
+    func testLegalNamesTheVersionAndReadsTheTerms() throws {
+        _ = try linked()
+        let legal = try XCTUnwrap(ask(.legal, LegalAnswer.self).value)
+        XCTAssertFalse(legal.version.isEmpty)
+        XCTAssertEqual(legal.firstRun.first?.code, "welcome")
+        XCTAssertEqual(legal.accept.code, "accept_terms")
+        XCTAssertEqual(legal.changed.code, "terms_changed")
+        XCTAssertEqual(legal.documents.map(\.id), ["terms", "privacy", "biometric", "health_data", "licenses"])
+        let terms = try XCTUnwrap(ask(.legalDocument(id: "terms"), LegalDocument.self).value)
+        XCTAssertEqual(terms.id, "terms")
+        XCTAssertEqual(terms.title.code, "doc_terms")
+        XCTAssertGreaterThan(terms.paragraphs.count, 3)
+        XCTAssertTrue(terms.paragraphs.contains { $0.contains(legal.contact) })
+        guard case .refused(let code, _) = ask(.legalDocument(id: "nope"), LegalDocument.self) else {
+            return XCTFail("an unknown document reads")
+        }
+        XCTAssertEqual(code, "no_document")
+    }
+
     func testTheDemoSceneIsACandidateThroughTheModel() async throws {
-        let model = ScanModel(core: try linked(), media: SceneMedia(), places: places) { .computer }
+        let model = ScanModel(core: try linked(), media: SceneMedia(), places: places, defaults: temporaryDefaults()) { .computer }
         await model.bootstrap()
+        XCTAssertEqual(model.terms, .firstRun(changed: false))
+        await model.acceptTerms()
         await model.installDemoPosters()
         let source = places.imports.deletingLastPathComponent().appendingPathComponent("scene.png")
         try Data("a picture".utf8).write(to: source)
@@ -92,8 +113,9 @@ final class NativeCoreTests: XCTestCase {
 
     func testClosingTheWindowMidScanLeavesNothingOnDisk() async throws {
         let gate = DispatchSemaphore(value: 0)
-        let model = ScanModel(core: try linked(), media: SceneMedia(frames: 3, gate: gate), places: places) { .computer }
+        let model = ScanModel(core: try linked(), media: SceneMedia(frames: 3, gate: gate), places: places, defaults: temporaryDefaults()) { .computer }
         await model.bootstrap()
+        await model.acceptTerms()
         await model.installDemoPosters()
         let source = places.imports.deletingLastPathComponent().appendingPathComponent("scene.mov")
         try Data("a video".utf8).write(to: source)

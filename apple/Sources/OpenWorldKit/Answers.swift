@@ -213,6 +213,37 @@ public struct CopyAnswer: Decodable, Equatable, Sendable {
     public var disclosure: [Line]?
 }
 
+/// `legal`: what First run and About show. Each document's text is read on its own.
+public struct LegalAnswer: Decodable, Equatable, Sendable {
+    /// The terms version Continue accepts.
+    public var version: String
+    public var contact: String
+    public var firstRun: [Line]
+    public var accept: Line
+    /// Above the first-run lines when an older version was accepted.
+    public var changed: Line
+    public var documents: [DocumentRow]
+
+    enum CodingKeys: String, CodingKey {
+        case version, contact
+        case firstRun = "first_run"
+        case accept, changed, documents
+    }
+}
+
+/// One built-in document's link.
+public struct DocumentRow: Decodable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var title: Line
+}
+
+/// `legal_document`: the built-in text as plain paragraphs.
+public struct LegalDocument: Decodable, Equatable, Sendable {
+    public var id: String
+    public var title: Line
+    public var paragraphs: [String]
+}
+
 /// What a scan sends while it runs.
 public enum ScanEvent: Decodable, Equatable, Sendable {
     case progress(framesAnalyzed: UInt64, frame: UInt64)

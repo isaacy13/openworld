@@ -23,6 +23,8 @@ final class FakeCore: Core, @unchecked Sendable {
         "delete": Samples.delete,
         "sweep": Samples.sweep,
         "posters_update": Samples.postersUpdateOff,
+        "legal": Samples.legal,
+        "legal_document": Samples.legalTerms,
     ]
     /// Sent during `posters_update`, before it answers.
     var updateEvents: [String] = []
@@ -182,6 +184,15 @@ func temporaryPlaces() throws -> Places {
     )
     try places.prepare()
     return places
+}
+
+/// Preferences of the test's own, holding `accepted` as the accepted terms version.
+func temporaryDefaults(accepted: String? = nil) -> UserDefaults {
+    let defaults = UserDefaults(suiteName: "openworld-tests-\(UUID().uuidString)")!
+    if let accepted {
+        defaults.set(accepted, forKey: ScanModel.acceptedTermsKey)
+    }
+    return defaults
 }
 
 /// Wait for the main actor to reach a state, or fail after two seconds.

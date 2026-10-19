@@ -7,10 +7,12 @@ final class ScanModelTests: XCTestCase {
     // XCTest makes a new instance for every test.
     let core = FakeCore()
     let places = try! temporaryPlaces()
+    /// The current terms are accepted, so Start opens. The first-run tests make their own.
+    let defaults = temporaryDefaults(accepted: "2026-10-19")
     var deviceFacts = DeviceFacts(kind: "phone", thermal: "nominal", battery: 0.8, charging: false)
 
-    func model(media: FakeMedia = FakeMedia()) -> ScanModel {
-        ScanModel(core: core, media: media, places: places) { [unowned self] in self.deviceFacts }
+    func model(media: FakeMedia = FakeMedia(), defaults: UserDefaults? = nil) -> ScanModel {
+        ScanModel(core: core, media: media, places: places, defaults: defaults ?? self.defaults) { [unowned self] in self.deviceFacts }
     }
 
     func imported(_ name: String = "clip.mov", origin: ImportedFile.Origin = .files, modified: Date? = Date()) throws -> ImportedFile {
@@ -36,6 +38,101 @@ final class ScanModelTests: XCTestCase {
         XCTAssertFalse(model.copy.disclosure.contains { $0.code == "no_clearance" })
         // The start screen's non-affiliation line, from the core by code.
         XCTAssertEqual(model.notAffiliated, Line(code: "not_affiliated", text: "OpenWorld is not part of, or endorsed by, the FBI or any government agency."))
+    }
+
+    // MARK: First run
+
+    func testNothingAcceptedShowsFirstRunAndHoldsAFile() async throws {
+        let model = model(defaults: temporaryDefaults())
+        XCTAssertEqual(model.terms, .loading)
+        await model.bootstrap()
+        XCTAssertEqual(model.terms, .firstRun(changed: false))
+        let legal = try XCTUnwrap(model.legal)
+        XCTAssertEqual(legal.version, "2026-10-19")
+        XCTAssertEqual(legal.contact, "support@onexengineering.com")
+        XCTAssertEqual(legal.firstRun.first?.code, "welcome")
+        XCTAssertEqual(legal.accept.code, "accept_terms")
+        XCTAssertEqual(legal.documents.map(\.id), ["terms", "privacy", "biometric", "health_data", "licenses"])
+        XCTAssertEqual(legal.documents.first?.title, Line(code: "doc_terms", text: "Terms of Use"))
+        // A file that arrives before Continue waits: it is not read or estimated.
+        await model.choose(try imported())
+        XCTAssertEqual(model.state, .start)
+        XCTAssertFalse(core.requests.contains { $0.contains(#""op":"estimate""#) })
+        XCTAssertFalse(model.canAnalyze)
+        XCTAssertNil(model.analyze())
+    }
+
+    func testTheAcceptedVersionOpensStart() async {
+        let model = model()
+        await model.bootstrap()
+        XCTAssertEqual(model.terms, .accepted)
+        XCTAssertTrue(model.termsAccepted)
+        XCTAssertEqual(model.state, .start)
+        XCTAssertTrue(core.requests.contains(Request.legal.json))
+    }
+
+    func testAnOlderVersionShowsFirstRunWithTheChangedLine() async {
+        let model = model(defaults: temporaryDefaults(accepted: "2025-01-01"))
+        await model.bootstrap()
+        XCTAssertEqual(model.terms, .firstRun(changed: true))
+        XCTAssertEqual(model.legal?.changed.code, "terms_changed")
+        XCTAssertFalse(model.termsAccepted)
+    }
+
+    func testContinueStoresTheVersionAndOpensTheWaitingFile() async throws {
+        let defaults = temporaryDefaults(accepted: "2025-01-01")
+        let model = model(defaults: defaults)
+        await model.bootstrap()
+        let file = try imported()
+        await model.choose(file)
+        XCTAssertEqual(model.state, .start)
+        await model.acceptTerms()
+        XCTAssertEqual(defaults.string(forKey: ScanModel.acceptedTermsKey), "2026-10-19")
+        XCTAssertEqual(model.terms, .accepted)
+        guard case .review(let review) = model.state else { return XCTFail("review, got \(model.state)") }
+        XCTAssertEqual(review.file, file)
+        XCTAssertTrue(model.canAnalyze)
+        // The next launch opens Start.
+        let next = self.model(defaults: defaults)
+        await next.bootstrap()
+        XCTAssertEqual(next.terms, .accepted)
+    }
+
+    func testContinueInAnotherWindowCountsHere() async {
+        let defaults = temporaryDefaults()
+        let first = model(defaults: defaults)
+        let second = model(defaults: defaults)
+        await first.bootstrap()
+        await second.bootstrap()
+        await first.acceptTerms()
+        XCTAssertEqual(second.terms, .firstRun(changed: false))
+        await second.refreshTerms()
+        XCTAssertEqual(second.terms, .accepted)
+    }
+
+    func testARefusedLegalIsShownAndNothingIsAccepted() async throws {
+        core.answers["legal"] = nil
+        let defaults = temporaryDefaults()
+        let model = model(defaults: defaults)
+        await model.bootstrap()
+        XCTAssertEqual(model.terms, .refused(.internalFailure))
+        XCTAssertNil(model.legal)
+        await model.acceptTerms()
+        XCTAssertEqual(model.terms, .refused(.internalFailure))
+        XCTAssertNil(defaults.string(forKey: ScanModel.acceptedTermsKey))
+        await model.choose(try imported())
+        XCTAssertEqual(model.state, .start)
+    }
+
+    func testADocumentIsReadOrItsRefusalHeadline() async {
+        let model = model()
+        guard case .ok(let terms) = await model.document("terms") else { return XCTFail("terms") }
+        XCTAssertEqual(terms.title.code, "doc_terms")
+        XCTAssertEqual(terms.paragraphs.first, "OpenWorld Terms of Use")
+        XCTAssertEqual(core.requests.last, #"{"id":"terms","op":"legal_document","v":1}"#)
+        core.answers["legal_document"] = Samples.noDocument
+        let missing = await model.document("nope")
+        XCTAssertEqual(missing, .refused(code: "no_document", headline: Line(code: "no_document", text: "That document is not in this build. Refusing.")))
     }
 
     func testUpdatePostersIsTheCoresRefusalAndKeepsThePack() async {
@@ -240,7 +337,7 @@ final class ScanModelTests: XCTestCase {
             // No change notice comes: the device was already like this.
             let core = FakeCore()
             let gate = DispatchSemaphore(value: 0)
-            let model = ScanModel(core: core, media: FakeMedia(gate: gate), places: places) { facts }
+            let model = ScanModel(core: core, media: FakeMedia(gate: gate), places: places, defaults: defaults) { facts }
             await model.bootstrap()
             await model.choose(try imported())
             let task = try XCTUnwrap(model.analyze())
