@@ -41,7 +41,9 @@ public struct Review: Equatable, Sendable {
     public var file: ImportedFile
     /// Nil while the file is being read.
     public var media: MediaSummary?
+    /// The core's warnings about the file and its disclosure, from the last estimate.
     public var warnings: [Line]
+    public var disclosure: [Line]
     public var estimate: EstimateState
 }
 
@@ -161,6 +163,8 @@ public final class ScanModel {
     @ObservationIgnored private var runner: ScanRunner?
     @ObservationIgnored private var choice = 0
     @ObservationIgnored private var estimateRound = 0
+    /// The window is closing: a scan still running is deleted when it ends, never shown.
+    @ObservationIgnored private var closing = false
     @ObservationIgnored var estimateTask: Task<Void, Never>?
 
     public init(core: any Core, media: any MediaReader, places: Places, device: @escaping @MainActor () -> DeviceFacts) {
@@ -217,7 +221,7 @@ public final class ScanModel {
         }
         choice += 1
         let mine = choice
-        var next = Review(file: file, media: nil, warnings: [], estimate: .loading)
+        var next = Review(file: file, media: nil, warnings: [], disclosure: [], estimate: .loading)
         review = next
         probed = nil
         state = .review(next)
@@ -227,7 +231,6 @@ public final class ScanModel {
             guard mine == choice else { return }
             probed = found
             next.media = MediaSummary(facts: found.facts, kind: found.kind, recorded: found.recorded, countIsEstimate: found.countIsEstimate)
-            next.warnings = FileWarnings.lines(modified: fileTime(file, found), recorded: found.recorded, now: Date(), copy: copy)
             setReview(next)
             await estimate()
         } catch {
@@ -260,7 +263,10 @@ public final class ScanModel {
         let answer = await ask(.estimate(request(file: current.file, probed: probed, out: "")), Estimate.self)
         guard mine == estimateRound, var latest = review, latest.file == current.file else { return }
         switch answer {
-        case .ok(let estimate): latest.estimate = .ready(estimate)
+        case .ok(let estimate):
+            latest.estimate = .ready(estimate)
+            latest.warnings = estimate.warnings
+            latest.disclosure = estimate.disclosure
         case .refused(_, let line): latest.estimate = .refused(line)
         }
         setReview(latest)
@@ -291,8 +297,11 @@ public final class ScanModel {
         let marker = journal.begin(folder)
         let runner = ScanRunner()
         self.runner = runner
+        closing = false
         state = .scanning(ScanProgress(totalFrames: probed.facts.frames, plannedAnalyzed: estimate.framesAnalyzed, startedAt: Date()))
         let updates = runner.run(core: core, request: job, plan: probed.plan)
+        // A device already hot or low sends no change notice: check it now.
+        deviceChanged()
         return Task {
             for await update in updates {
                 self.apply(update, folder: folder, file: current.file)
@@ -309,7 +318,13 @@ public final class ScanModel {
             state = .scanning(progress)
         case .finished(let report):
             runner = nil
-            if report.status == .refused {
+            if closing {
+                // A closed window's scan leaves nothing on disk. Deleted before its journal
+                // marker ends, so a kill now still deletes it at the next launch.
+                _ = core.call(Request.delete(out: folder.path).json)
+                state = .start
+                startOver()
+            } else if report.status == .refused {
                 // A refusal after the folder was made leaves only the core's marker in it.
                 let core = self.core
                 Task.detached { _ = core.call(Request.delete(out: folder.path).json) }
@@ -392,8 +407,9 @@ public final class ScanModel {
         state = .start
     }
 
-    /// The window is closing.
+    /// The window is closing. A running scan is stopped, and its result deleted when it ends.
     public func close() {
+        closing = true
         stop(.cancel)
         startOver()
     }

@@ -16,7 +16,9 @@ struct ReviewView: View {
                 EstimateCard(estimate: review.estimate)
                 classes
                 options
-                disclosure
+                if !review.disclosure.isEmpty {
+                    disclosure(review.disclosure)
+                }
                 actions
             }
         }
@@ -25,7 +27,7 @@ struct ReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .sheet(isPresented: $showDisclosure) {
-            DisclosureSheet(lines: model.copy.disclosure)
+            DisclosureSheet(lines: model.review?.disclosure ?? [])
         }
     }
 
@@ -102,11 +104,12 @@ struct ReviewView: View {
 
     // MARK: Disclosure
 
-    private var disclosure: some View {
+    /// The core's disclosure from the estimate.
+    private func disclosure(_ lines: [Line]) -> some View {
         Card {
             Label("What happens to this file", systemImage: "lock.shield")
                 .font(.headline)
-            ForEach(model.copy.disclosure.prefix(3), id: \.self) { line in
+            ForEach(lines.prefix(3), id: \.self) { line in
                 Text(line.localized())
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -120,7 +123,7 @@ struct ReviewView: View {
     private var actions: some View {
         VStack(spacing: 12) {
             if case .refused(let line) = model.posters {
-                LineLabel(line: line, systemImage: "exclamationmark.triangle", tone: .incomplete)
+                LineLabel(line: line, systemImage: "xmark.octagon", tone: .error)
                     .font(.subheadline)
                 if model.demoBuild {
                     Button("Install demo posters") {

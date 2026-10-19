@@ -175,10 +175,10 @@ public struct ScanJournal: Sendable {
 
 /// Work done once per launch, before any window scans.
 public enum Housekeeping {
-    /// Ends what a killed scan left, sweeps expired results, and deletes imports left from
-    /// before `startedAt` (this launch). Returns how many scans the system stopped before
-    /// they finished.
-    public static func launch(core: any Core, places: Places, startedAt: Date = Date()) -> Int {
+    /// Ends what a killed scan left, sweeps expired results, deletes imports left from
+    /// before `startedAt` (this launch), and sweeps stale share-inbox slots in
+    /// `shareContainer`. Returns how many scans the system stopped before they finished.
+    public static func launch(core: any Core, places: Places, startedAt: Date = Date(), shareContainer: URL? = nil) -> Int {
         let killed = ScanJournal(folder: places.journal).interrupted()
         for out in killed {
             // The core deletes only a folder it made.
@@ -186,6 +186,9 @@ public enum Housekeeping {
         }
         _ = core.call(Request.sweep(root: places.results.path).json)
         Importer.sweep(imports: places.imports, before: startedAt)
+        if let shareContainer {
+            Inbox.sweep(in: shareContainer, now: startedAt)
+        }
         return killed.count
     }
 }

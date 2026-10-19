@@ -148,9 +148,14 @@ struct RootView: View {
         }
     }
 
-    /// A file saved from the share sheet arrives on Start, like any other choice.
+    /// A file saved from the share sheet arrives on Start or Review, like any other choice.
+    /// It never replaces a scan or a result: it waits in the inbox until the next activation.
     private func takeSharedFile() {
-        guard !model.isScanning, let file = services.nextSharedFile() else { return }
+        switch model.state {
+        case .start, .review: break
+        case .scanning, .result, .refused: return
+        }
+        guard let file = services.nextSharedFile() else { return }
         Task { await model.choose(file) }
     }
 }

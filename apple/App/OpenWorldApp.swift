@@ -54,7 +54,14 @@ final class AppServices {
             let core = core
             let places = places
             let startedAt = startedAt
-            launch = Task.detached(priority: .userInitiated) { Housekeeping.launch(core: core, places: places, startedAt: startedAt) }
+            #if os(iOS)
+            let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Inbox.appGroup)
+            #else
+            let container: URL? = nil
+            #endif
+            launch = Task.detached(priority: .userInitiated) {
+                Housekeeping.launch(core: core, places: places, startedAt: startedAt, shareContainer: container)
+            }
         }
         let killed = await launch?.value ?? 0
         defer { interruptedTold = true }

@@ -3,8 +3,6 @@
 import XCTest
 
 final class PolicyTests: XCTestCase {
-    let copy = CopyTable(texts: ["old_file": "This file is older than about 30 days.", "timestamps_disagree": "The file timestamps disagree."])
-
     func testStopPolicy() {
         XCTAssertNil(StopPolicy.reason(for: DeviceFacts(kind: "phone", thermal: "fair", battery: 0.5, charging: false)))
         XCTAssertEqual(StopPolicy.reason(for: DeviceFacts(kind: "phone", thermal: "serious")), .heat)
@@ -14,15 +12,6 @@ final class PolicyTests: XCTestCase {
         // UIDevice reports -1 when the level is unknown.
         XCTAssertNil(StopPolicy.reason(for: DeviceFacts(kind: "phone", battery: -1, charging: false)))
         XCTAssertNil(StopPolicy.reason(for: .computer))
-    }
-
-    func testFileWarningsMatchTheCoreRules() {
-        let now = Date(timeIntervalSince1970: 100 * 86400)
-        let old = Date(timeIntervalSince1970: 10 * 86400)
-        XCTAssertEqual(FileWarnings.lines(modified: old, recorded: now, now: now, copy: copy).map(\.code), ["old_file", "timestamps_disagree"])
-        XCTAssertEqual(FileWarnings.lines(modified: now, recorded: now.addingTimeInterval(-3600), now: now, copy: copy), [])
-        XCTAssertEqual(FileWarnings.lines(modified: nil, recorded: old, now: now, copy: copy), [])
-        XCTAssertEqual(FileWarnings.lines(modified: old, recorded: nil, now: now, copy: copy).first?.text, "This file is older than about 30 days.")
     }
 
     func testExifDates() throws {

@@ -6,9 +6,32 @@ import Foundation
 /// compiled into the share extension, so it uses nothing else from the kit.
 public enum Inbox {
     public static let appGroup = "group.app.openworld"
+    /// A copy the share sheet never finished is removed after an hour.
+    public static let partialAge: TimeInterval = 3600
+    /// A file nobody picked up is removed after two days, like the desktop's imports.
+    public static let maxAge: TimeInterval = 2 * 86400
 
     public static func folder(in container: URL) -> URL {
         container.appendingPathComponent("Inbox", isDirectory: true)
+    }
+
+    /// The inbox folder, protected until the first unlock and kept out of backups.
+    @discardableResult
+    public static func prepare(in container: URL) throws -> URL {
+        let fm = FileManager.default
+        let root = folder(in: container)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        #if os(iOS)
+        // Files made inside take the folder's protection.
+        try? fm.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: root.path)
+        #endif
+        #if os(iOS) || os(macOS)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var url = root
+        try? url.setResourceValues(values)
+        #endif
+        return root
     }
 
     /// Copy `source` into the inbox under its own name, keeping its modified time.
@@ -16,7 +39,7 @@ public enum Inbox {
     @discardableResult
     public static func store(_ source: URL, in container: URL) throws -> URL {
         let fm = FileManager.default
-        let slot = folder(in: container).appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let slot = try prepare(in: container).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fm.createDirectory(at: slot, withIntermediateDirectories: true)
         let partial = slot.appendingPathComponent(".partial")
         let dest = slot.appendingPathComponent(safeName(source.lastPathComponent))
@@ -47,6 +70,22 @@ public enum Inbox {
             files.append((file, created))
         }
         return files.sorted { $0.1 < $1.1 }.map(\.0)
+    }
+
+    /// Remove slots with no whole file after `partialAge`, and every slot after `maxAge`.
+    /// A slot's age is its folder's last change: the copy starting, or finishing.
+    public static func sweep(in container: URL, now: Date = Date()) {
+        let fm = FileManager.default
+        guard let root = try? prepare(in: container),
+              let slots = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        for slot in slots {
+            guard let changed = (try? fm.attributesOfItem(atPath: slot.path))?[.modificationDate] as? Date else { continue }
+            let age = now.timeIntervalSince(changed)
+            let whole = ((try? fm.contentsOfDirectory(atPath: slot.path)) ?? []).contains { !$0.hasPrefix(".") }
+            if age > maxAge || (!whole && age > partialAge) {
+                try? fm.removeItem(at: slot)
+            }
+        }
     }
 
     /// Remove a picked-up file and its slot.

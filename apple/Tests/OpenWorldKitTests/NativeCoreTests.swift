@@ -35,7 +35,6 @@ final class NativeCoreTests: XCTestCase {
         XCTAssertTrue(version.demoPosters, "the shells' test builds read demo posters")
         let copy = try XCTUnwrap(ask(.copy, CopyAnswer.self).value)
         XCTAssertEqual(copy.copy["no_clearance"], "No candidate is not a clearance.")
-        XCTAssertTrue(CopyTable.disclosureCodes.allSatisfy { copy.copy[$0] != nil })
         let rows = try XCTUnwrap(ask(.bundles(catalog: places.bundles.path), BundlesAnswer.self).value)
         XCTAssertEqual(rows.bundles.first?.id, "fast")
         XCTAssertEqual(ask(.postersCheck(posters: places.posters.path), PostersAnswer.self).value, nil)
@@ -61,6 +60,10 @@ final class NativeCoreTests: XCTestCase {
         }
         XCTAssertTrue(estimate.canStart)
         XCTAssertEqual(estimate.framesAnalyzed, 1)
+        // Review shows the core's disclosure, and every line has its sentence.
+        XCTAssertEqual(review.disclosure, estimate.disclosure)
+        XCTAssertTrue(estimate.disclosure.contains { $0.code == "no_clearance" })
+        XCTAssertTrue(estimate.disclosure.allSatisfy { model.copy.texts[$0.code] == $0.text })
         await model.analyze()?.value
         guard case .result(let result) = model.state else { return XCTFail("result: \(model.state)") }
         XCTAssertEqual(result.report.status, .complete)
@@ -74,6 +77,27 @@ final class NativeCoreTests: XCTestCase {
         await model.deleteResult()
         XCTAssertEqual(model.state, .start)
         XCTAssertFalse(FileManager.default.fileExists(atPath: result.folder.path))
+    }
+
+    func testClosingTheWindowMidScanLeavesNothingOnDisk() async throws {
+        let gate = DispatchSemaphore(value: 0)
+        let model = ScanModel(core: try linked(), media: SceneMedia(frames: 3, gate: gate), places: places) { .computer }
+        await model.bootstrap()
+        await model.installDemoPosters()
+        let source = places.imports.deletingLastPathComponent().appendingPathComponent("scene.mov")
+        try Data("a video".utf8).write(to: source)
+        await model.choose(try Importer.copy(source, into: places.imports, origin: .files))
+        let task = try XCTUnwrap(model.analyze())
+        let started = await eventually {
+            guard case .scanning(let progress) = model.state else { return false }
+            return !progress.faces.isEmpty
+        }
+        XCTAssertTrue(started)
+        model.close()
+        gate.signal()
+        await task.value
+        XCTAssertEqual(model.state, .start)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: places.results.path), [], "no partial result is left")
     }
 
     func testAStopIsIncompleteAndAShortDecodeIsIncomplete() async throws {
@@ -212,9 +236,17 @@ struct ScenePlan: DecodePlan {
     }
 }
 
+/// The demo still, or that many copies of it as a 30 fps video.
 struct SceneMedia: MediaReader {
+    var frames: UInt64 = 1
+    var gate: DispatchSemaphore?
+
     func probe(_ file: ImportedFile) async throws -> ProbedMedia {
-        ProbedMedia(facts: MediaFacts(width: DemoScene.width, height: DemoScene.height), kind: .photo, recorded: nil, plan: ScenePlan(frames: 1, gate: nil))
+        let video = frames > 1
+        let facts = video
+            ? MediaFacts(width: DemoScene.width, height: DemoScene.height, fps: 30, frames: frames, durationSec: Double(frames) / 30, video: true)
+            : MediaFacts(width: DemoScene.width, height: DemoScene.height)
+        return ProbedMedia(facts: facts, kind: video ? .video : .photo, recorded: nil, plan: ScenePlan(frames: frames, gate: gate))
     }
 }
 

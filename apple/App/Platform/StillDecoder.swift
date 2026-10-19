@@ -6,7 +6,8 @@ import OpenWorldKit
 
 /// Photos and animated images through ImageIO. A photo is turned upright by ImageIO and
 /// pushed as RGBA. HEIC and Live Photos are their still image. A GIF, APNG, WebP, or
-/// HEIC sequence pushes every frame, timed by its delays.
+/// HEIC sequence pushes every frame, timed by its delays. Any other file with more than
+/// one picture and no frame delays is refused: it is never scanned for its first picture alone.
 enum StillDecoder {
     static let animatedTypes: Set<String> = ["com.compuserve.gif", "public.png", "org.webmproject.webp", "public.heics"]
 
@@ -16,7 +17,8 @@ enum StillDecoder {
               let type = CGImageSourceGetType(source) as String? else { return nil }
         let count = CGImageSourceGetCount(source)
         guard count > 0 else { return nil }
-        if count > 1, animatedTypes.contains(type) {
+        if count > 1 {
+            guard animatedTypes.contains(type) || hasDelays(source, count: count) else { throw ProbeFailure.badCodec }
             return try animation(url, source: source, count: count)
         }
         let index = CGImageSourceGetPrimaryImageIndex(source)
@@ -52,6 +54,13 @@ enum StillDecoder {
         let timing = AnimationTiming.rate(delays: delays)
         let facts = MediaFacts(width: size.width, height: size.height, fps: timing.fps, frames: UInt64(count), durationSec: timing.duration, video: true)
         return ProbedMedia(facts: facts, kind: .animation, recorded: nil, plan: AnimationPlan(url: url, count: count))
+    }
+
+    /// Some frame carries a GIF, APNG, WebP, or HEICS delay: the pictures are a sequence.
+    private static func hasDelays(_ source: CGImageSource, count: Int) -> Bool {
+        (0..<count).contains { index in
+            delay(CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]) != nil
+        }
     }
 
     private static func delay(_ properties: [CFString: Any]) -> Double? {
