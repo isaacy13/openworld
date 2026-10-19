@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   # A manual dispatch needs this file on the default branch. Until then, a change to it or its script runs it.
   push:
-    paths: [".github/workflows/measure.yml", "eval/real_faces.py"]
+    paths: [".github/workflows/measure.yml", "eval/real_faces.py", "eval/posters.py"]
 
 permissions:
   contents: read
@@ -44,6 +44,8 @@ jobs:
           restore-keys: public-faces-
       - run: cargo build --release --manifest-path core/Cargo.toml -p openworld-cli --features eval --target-dir target-eval
       - run: cargo build --release --manifest-path eval/real/Cargo.toml
+      # Also reads the public FBI list and its photos from fbi.gov, politely paced. They are
+      # not cached or uploaded; only counts and rates reach the curve.
       - name: full measurement
         run: >
           python eval/real_faces.py --bin target-eval/release/openworld

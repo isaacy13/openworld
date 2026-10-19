@@ -29,10 +29,18 @@ so this measures faces about that size, not larger ones.
 The labeled person in an LFW photo is the detected face nearest the middle. If
 that face did not pass the gates, the photo has no compared face: another face
 in the photo is someone else, and is never used in its place.
+
+The poster-photo measurement (eval/posters.py) reads the public FBI list,
+keeps the posters the core would keep, and downloads their photos from fbi.gov.
+Poster photos are compared at their own size, through the same gates. It counts
+false matches between posters and between posters and every LFW face, by the
+sex and race the poster states, and misses between one poster's own photos.
+That section alone decides `real_posters_allowed` (see GATE_FMR below).
 """
 
 import argparse
 import csv
+import datetime
 import hashlib
 import json
 import math
@@ -56,6 +64,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import posters  # noqa: E402
 import stats  # noqa: E402
 from stats import rate  # noqa: E402
 
@@ -111,6 +120,25 @@ HELD_OUT_PINS = {
 
 CURVE_SCHEMA = "openworld.curve.v1"
 PICKER_LINE = "LFW curve measured. Real FBI photos stay off."
+PICKER_LINE_ON = "LFW and poster-photo curves measured. Real FBI posters are on because the poster-photo check passed."
+# The poster-photo gate. These numbers are the owner's to change. Real posters
+# are allowed only on a full run (every LFW person, every kept poster, the FBI
+# list read to its total) where:
+# - for poster x poster and for poster x LFW, the upper 95% bound of the false
+#   match rate (the wider of Wilson and the identity bootstrap) is at or under
+#   GATE_FMR, and
+# - for every sex and race group the posters state with at least
+#   GATE_MIN_GROUP_COMPARISONS comparisons, the upper bound is at or under
+#   GATE_GROUP_FMR. A smaller group is listed as not enough data; it does not
+#   block on its own.
+# Zero false matches in n comparisons still has a Wilson upper bound of about
+# 3.84 / n. So GATE_FMR needs about 1.92 million comparisons (some 1,960
+# compared poster photos for poster x poster), and a group needs about 384,000
+# before it can pass: a group between GATE_MIN_GROUP_COMPARISONS and that
+# blocks even with no false match.
+GATE_FMR = 2e-6
+GATE_GROUP_FMR = 1e-5
+GATE_MIN_GROUP_COMPARISONS = 100_000
 # A scan compares every face in a file with every enabled poster, so the cutoff
 # is set where one comparison in a million is a false match.
 CUTOFF_FMR = 1e-6
@@ -180,16 +208,38 @@ def fetch(data: Path, need):
 def download(url: str, target: Path, attempts=6, rate_limit_waits=30):
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_suffix(target.suffix + ".part")
+
+    def once():
+        # Some hosts refuse Python's default User-Agent.
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=120) as response, part.open("wb") as out:
+            while block := response.read(1 << 20):
+                out.write(block)
+        part.replace(target)
+
+    retrying(once, attempts, rate_limit_waits)
+
+
+def get_bytes(url: str, attempts=6, rate_limit_waits=30, opener=None, limit=None):
+    """The body of `url`, with the same retries as `download`. Over `limit` bytes is an error."""
+
+    def once():
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with (opener.open if opener else urllib.request.urlopen)(request, timeout=120) as response:
+            body = response.read() if limit is None else response.read(limit + 1)
+        if limit is not None and len(body) > limit:
+            raise OSError(f"{url}: over {limit} bytes")
+        return body
+
+    return retrying(once, attempts, rate_limit_waits)
+
+
+def retrying(action, attempts=6, rate_limit_waits=30):
+    """`action()`, tried again after a network error, with a growing wait."""
     failures = waits = 0
     while True:
         try:
-            # Some hosts refuse Python's default User-Agent.
-            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(request, timeout=120) as response, part.open("wb") as out:
-                while block := response.read(1 << 20):
-                    out.write(block)
-            part.replace(target)
-            return
+            return action()
         except OSError as error:
             # A rate limit is waited out; it does not count as a failure.
             if isinstance(error, urllib.error.HTTPError) and error.code == 429 and waits < rate_limit_waits:
@@ -553,7 +603,68 @@ def measure_lfw(args, vectors, data, threshold, extra_thresholds=()):
         section["ten_fold"] = {"pairs": len(scores), "pairs_without_a_compared_face": missing,
                                "accuracy_mean": round(mean, 4), "accuracy_std": round(std, 4)}
     quality = {"lfw_enlarged_2x": gate_summary(big, paths), "lfw_native_size": gate_summary(native, paths)}
-    return section, quality, cutoff
+    return section, quality, cutoff, (embeddings, names)
+
+
+# FBI poster photos.
+
+
+def measure_posters(args, vectors, data, threshold, public):
+    """The poster-photo section. `public` is the LFW faces and their people, as measured above.
+
+    It is never an error for the run: when the list cannot be read, the section
+    says so and real posters stay off."""
+    if args.no_posters:
+        return {"measured": False, "note": "Skipped with --no-posters."}
+    fetched_on = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    try:
+        items, total = posters.fetch_list(lambda url: get_bytes(url), pause=posters.PAUSE_SECONDS)
+    except (OSError, ValueError) as error:
+        print(f"the FBI list could not be read: {error}", file=sys.stderr)
+        return {"measured": False, "note": f"The FBI list could not be read on {fetched_on} ({type(error).__name__})."}
+    kept, listing = posters.summarize_list(items, total)
+    chosen = posters.sample_posters(kept, args.posters)
+    print(f"FBI list: {listing['items_read']} of {total} read, {len(kept)} kept, {len(chosen)} measured", file=sys.stderr)
+    opener = posters.fbi_opener()
+    posters.download_photos(chosen, data / "fbi-posters",
+                            lambda url: get_bytes(url, attempts=3, opener=opener, limit=posters.PHOTO_MAX_BYTES),
+                            pause=posters.PAUSE_SECONDS)
+    paths = sorted({image["path"] for p in chosen for image in p["images"] if image.get("path")})
+    rows = vectors.rows(paths, enlarge=1) if paths else {}
+    for poster in chosen:
+        for image in poster["images"]:
+            if not image.get("path"):
+                continue
+            row = rows[image["path"]]
+            if "error" in row:
+                image["outcome"] = "not_decoded"
+                continue
+            face = center_face(row)
+            image["outcome"] = outcome(face)
+            if is_compared(face):
+                image["embedding"] = face["embedding"]
+    embeddings, names = public
+    section = {
+        "measured": True,
+        "source": f"{posters.FBI_LIST}, read on {fetched_on} (UTC). Photos downloaded from fbi.gov, not committed.",
+        "fetched_on": fetched_on,
+        "sample": None if args.posters is None or args.posters >= len(kept) else {"posters": args.posters},
+        "list": listing,
+        "faces": "Poster photos at their own size, the center face of each, through the scan's gates. The public: LFW faces as in the lfw section.",
+        **posters.statistics(chosen, embeddings, names, threshold),
+        "quality": gate_summary(rows, paths),
+        "not": POSTER_NOT,
+    }
+    return section
+
+
+POSTER_NOT = [
+    "Sex and race are the words on the FBI poster, as the API returns them. They are not self-described, and many posters leave them out (unknown).",
+    "The public here is LFW: celebrity press photos, enlarged 2x. A scan reads the user's own photos and video, which this does not measure.",
+    "A poster's photos include age-progressions, drawings, and photos taken years apart. The miss rate between them is not the miss rate for a current photo.",
+    "The same person can be on two posters. Posters with the same name or the same photo file are merged; a person under two names is still counted as two, which only raises the false match rate.",
+    "The FBI list changes every day. This is the list on the day it was read.",
+]
 
 
 # Held-out pairs.
@@ -1192,8 +1303,58 @@ NOT = [
     "The clips are built from stills: a face drifting and growing on a gray screen, H.264 at CRF 23. They are not real footage with motion blur, lighting changes, or crowds.",
     "A video template averages up to five frames. Its false match rate is checked only on the stranger clips here; the per-comparison rate is the single-photo LFW rate.",
     "Wilson intervals treat pairs as independent. The identity bootstrap resamples people. Neither covers a different population or a different camera.",
-    "This curve does not allow real FBI posters. real_posters_allowed is false.",
 ]
+NOT_OFF = "This curve does not allow real FBI posters. real_posters_allowed is false."
+NOT_ON = ("This curve allows real FBI posters because the poster-photo check passed (poster_domain.gate). "
+          "That check is not legal review, source clearance, or an independent audit.")
+
+
+def poster_gate(section, full_run):
+    """Whether real posters may be on, from the poster-photo section's counts alone.
+
+    `full_run` is true when every LFW person was measured. The manifest cutoff
+    rule is checked apart, by full_run_rules."""
+    failures, thin = [], []
+    if not full_run:
+        failures.append("a sampled run never turns real posters on")
+    if not section or not section.get("measured"):
+        failures.append("there is no poster-photo measurement")
+    else:
+        if section.get("sample") is not None:
+            failures.append("only a sample of the posters was measured")
+        listing = section.get("list") or {}
+        if not listing.get("complete"):
+            failures.append(f"the FBI list was not read to its total ({listing.get('items_read')} of {listing.get('total')})")
+        for kind in posters.IMPOSTOR_SETS:
+            part = section["impostor"][kind]
+            fm = part["false_match"]
+            if not fm["trials"]:
+                failures.append(f"{kind}: no comparisons")
+            elif stats.upper95(fm) > GATE_FMR:
+                failures.append(f"{kind}: false match upper bound {stats.upper95(fm):.3g} is over {GATE_FMR:g} ({fm['count']}/{fm['trials']})")
+            for field, groups in sorted(part["by_group"].items()):
+                for value, entry in sorted(groups.items()):
+                    name = f"{kind} {field}={value}"
+                    if entry["trials"] < GATE_MIN_GROUP_COMPARISONS:
+                        thin.append(f"{name}: {entry['trials']} comparisons")
+                    elif stats.upper95(entry) > GATE_GROUP_FMR:
+                        failures.append(f"{name}: false match upper bound {stats.upper95(entry):.3g} is over {GATE_GROUP_FMR:g} ({entry['count']}/{entry['trials']})")
+    return {
+        "allowed": not failures,
+        "rule": (f"A full run, the FBI list read to its total, every kept poster measured. For poster x poster and poster x LFW, "
+                 f"the upper 95% bound of the false match rate (the wider of Wilson and the identity bootstrap) at or under {GATE_FMR:g}. "
+                 f"For every sex and race group with at least {GATE_MIN_GROUP_COMPARISONS:,} comparisons, at or under {GATE_GROUP_FMR:g}. "
+                 f"A smaller group is listed under not_enough_data and does not block on its own."),
+        "gate_fmr": GATE_FMR,
+        "gate_group_fmr": GATE_GROUP_FMR,
+        "min_group_comparisons": GATE_MIN_GROUP_COMPARISONS,
+        "failures": failures,
+        "not_enough_data": thin,
+    }
+
+
+def picker_line_for(allowed):
+    return PICKER_LINE_ON if allowed else PICKER_LINE
 
 
 def manifest_threshold(bundles, bundle):
@@ -1241,6 +1402,33 @@ def sample_rates(curve, published):
         for g in ("all", "not_occluded", "occluded"):
             add(f"WIDER {band} {g}", curve["wider_face_val"][band][g], published["wider_face_val"][band][g])
     return out
+
+
+def poster_rates(curve, published):
+    """(rates, note) for the poster-photo section. The note says why the rates were skipped.
+
+    The FBI list changes daily and a sample reads fewer posters, so a group
+    found on only one side is left out rather than failed."""
+    here, there = curve.get("poster_domain") or {}, published.get("poster_domain") or {}
+    if not there.get("measured"):
+        return [], "The published curve has no poster-photo measurement; its poster rates are not checked."
+    if not here.get("measured"):
+        return [], "This run has no poster-photo measurement; the published poster rates are not checked."
+    out = [("posters with a compared face", here["posters_with_a_compared_face"], there["posters_with_a_compared_face"])]
+    for kind in posters.IMPOSTOR_SETS:
+        a, b = here["impostor"][kind], there["impostor"][kind]
+        out.append((f"posters {kind} false_match", a["false_match"], b["false_match"]))
+        for field, groups in sorted(b["by_group"].items()):
+            for value, pub in sorted(groups.items()):
+                sample = a["by_group"].get(field, {}).get(value)
+                if sample is not None and sample["trials"]:
+                    out.append((f"posters {kind} {field}={value} false_match", sample, pub))
+    # The all-pairs miss rate is weighted toward posters with many photos, so a
+    # sample cannot estimate it. One pair per poster can be.
+    kind = "false_non_match_one_pair_per_poster"
+    if here["genuine"][kind]["trials"]:
+        out.append((f"posters genuine {kind}", here["genuine"][kind], there["genuine"][kind]))
+    return out, None
 
 
 def invariants(curve):
@@ -1296,10 +1484,14 @@ def operating_threshold(curve, target):
     return None
 
 
-def check(curve, published):
-    """A run against the published curve: the same operating point, and every rate inside its own interval."""
+def check(curve, published, notes=None):
+    """A run against the published curve: the same operating point, and every rate inside its own interval.
+
+    A rate that cannot be checked is skipped with a line added to `notes`."""
     failures = []
-    for key, want in (("schema", CURVE_SCHEMA), ("real_posters_allowed", False), ("picker_line", PICKER_LINE)):
+    # The published switch must be what its own poster-photo section gives.
+    allowed = poster_gate(published.get("poster_domain"), published.get("sample") is None)["allowed"]
+    for key, want in (("schema", CURVE_SCHEMA), ("real_posters_allowed", allowed), ("picker_line", picker_line_for(allowed))):
         if published.get(key) != want:
             failures.append(f"the published curve's {key} is {published.get(key)!r}, not {want!r}")
     if published.get("bundle") != curve["bundle"]:
@@ -1317,6 +1509,10 @@ def check(curve, published):
     elif abs(here - there) > CHECK_SCORE_TOLERANCE:
         failures.append(f"the score at FMR {CHECK_FMR:g} is {here:.4f} here and {there:.4f} published")
     rates = sample_rates(curve, published)
+    extra, note = poster_rates(curve, published)
+    rates += extra
+    if note and notes is not None:
+        notes.append(note)
     # Many rates are checked at once: each gets a wider interval so that all of
     # them together hold at 95%, and a fixed sample does not fail by chance.
     z = stats.z_for(sum(1 for _, sample, pub in rates if sample and pub and pub["trials"] and sample["trials"]))
@@ -1333,10 +1529,16 @@ def check(curve, published):
     return failures
 
 
-def build_curve(bundle, manifest, threshold, cutoff, sample, lfw, held_out, scans, wider, quality, hardware_info):
-    """The curve file. `sample` names the sample sizes, or is None for a full run."""
+def build_curve(bundle, manifest, threshold, cutoff, sample, lfw, held_out, scans, wider, quality, hardware_info, poster_domain=None):
+    """The curve file. `sample` names the sample sizes, or is None for a full run.
+
+    `real_posters_allowed` and the picker line come from the poster-photo gate."""
     fm = lfw["at_manifest_threshold"]["false_match"]
     upper = stats.upper95(fm)
+    poster_domain = dict(poster_domain or {"measured": False, "note": "Not measured in this run."})
+    gate = poster_gate(poster_domain, sample is None)
+    poster_domain["gate"] = gate
+    allowed = gate["allowed"]
     return {
         "schema": CURVE_SCHEMA,
         "bundle": bundle,
@@ -1344,8 +1546,8 @@ def build_curve(bundle, manifest, threshold, cutoff, sample, lfw, held_out, scan
         "models": manifest.get("models"),
         "weights": {f["role"]: f["sha256"] for f in manifest.get("files", [])},
         "threshold": threshold,
-        "picker_line": PICKER_LINE,
-        "real_posters_allowed": False,
+        "picker_line": picker_line_for(allowed),
+        "real_posters_allowed": allowed,
         "cutoff_rule": f"Lowest LFW all-pairs score with a false match rate at or under {CUTOFF_FMR:g}, on faces enlarged 2x. The manifest threshold may not be under it.",
         "measured_cutoff": cutoff,
         "sample": sample,
@@ -1361,16 +1563,18 @@ def build_curve(bundle, manifest, threshold, cutoff, sample, lfw, held_out, scan
         "held_out_pairs": held_out,
         "scans": scans,
         "wider_face_val": wider,
+        "poster_domain": poster_domain,
         "quality": quality,
         "hardware": hardware_info,
         "sources": {
             "lfw": "Labeled Faces in the Wild, all 13,233 images, pairs.txt view 2. Downloaded, not committed.",
             "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed.",
             "held_out": "CALFW and CPLFW pairs, read from a mirror at a pinned commit. Downloaded, not committed.",
+            "fbi_posters": "The public FBI wanted list, read on the day of the run; the posters the core keeps, photos from fbi.gov. Downloaded, not committed. Not pinned: the list changes daily.",
             "pins": {**PINS, **{f"{k} set": v for k, v in HELD_OUT_PINS.items()}},
-            "urls": SOURCES,
+            "urls": {**SOURCES, "fbi_list": (posters.FBI_LIST,)},
         },
-        "not": NOT,
+        "not": [*NOT, NOT_ON if allowed else NOT_OFF],
     }
 
 
@@ -1389,6 +1593,8 @@ def main():
     parser.add_argument("--scan-people", type=int, default=100)
     parser.add_argument("--video-people", type=int, default=20)
     parser.add_argument("--variant-people", type=int, help="found enrolled people to put in phone-made files; all when absent")
+    parser.add_argument("--posters", type=int, help="kept FBI posters to measure; every one when absent")
+    parser.add_argument("--no-posters", action="store_true", help="skip the FBI poster photos; real posters then stay off")
     args = parser.parse_args()
     data = Path(args.data)
     fetch(data, list(SOURCES))
@@ -1397,17 +1603,23 @@ def main():
     # A sample is also measured at the published operating points, to compare like with like.
     extra = [op["threshold"] for op in published["lfw"]["operating_points"] if op.get("threshold") is not None] if published else []
     vectors = Vectors(args.eval_bin, args.bundles, args.bundle, data / "cache", args.jobs)
-    lfw, quality, cutoff = measure_lfw(args, vectors, data, threshold, extra)
+    lfw, quality, cutoff, public = measure_lfw(args, vectors, data, threshold, extra)
     print(f"LFW cutoff at FMR {CUTOFF_FMR:g}: {cutoff}; manifest {threshold}", file=sys.stderr)
+    poster_domain = measure_posters(args, vectors, data, threshold, public)
+    del public
     with tempfile.TemporaryDirectory() as tmp:
         scans, scan_providers = measure_scans(args, vectors, data, threshold, Path(tmp))
     wider, quality["wider_face_val"] = measure_wider(args, vectors, data)
     held_out, held_quality = measure_held_out(args, vectors, data, threshold)
     quality.update(held_quality)
     sample = {"people": args.people, "wider_images": args.wider_images, "scan_people": args.scan_people,
-              "video_people": args.video_people, "variant_people": args.variant_people} if args.people is not None else None
+              "video_people": args.video_people, "variant_people": args.variant_people,
+              "posters": args.posters} if args.people is not None else None
     curve = build_curve(args.bundle, manifest, threshold, cutoff, sample, lfw, held_out, scans, wider, quality,
-                        hardware(args, vectors.providers, scan_providers))
+                        hardware(args, vectors.providers, scan_providers), poster_domain)
+    gate = curve["poster_domain"]["gate"]
+    print(f"real posters {'allowed' if gate['allowed'] else 'off'}: " + ("; ".join(gate["failures"]) or "the poster-photo check passed"),
+          file=sys.stderr)
     text = json.dumps(curve, indent=2) + "\n"
     if args.out:
         Path(args.out).write_text(text)
@@ -1416,7 +1628,10 @@ def main():
     if sample is None:
         failures += full_run_rules(curve)
     if published is not None:
-        failures += check(curve, published)
+        notes = []
+        failures += check(curve, published, notes)
+        for note in notes:
+            print(note, file=sys.stderr)
     if failures:
         raise SystemExit("\n".join(failures))
     print("real faces ok", file=sys.stderr)
