@@ -40,7 +40,7 @@ enum VideoDecoder {
         let fps = rate > 0 ? rate : (duration > 0 ? Double(frames) / duration : 0)
         guard fps > 0 || frames == 1 else { throw ProbeFailure.badCodec }
 
-        let tags = formats.first.map(Self.colorTags) ?? (nil, nil)
+        let tags = formats.first.map(Self.colorTags) ?? (matrix: nil, primaries: nil)
         let bt709 = ColorMatrix.isBT709(matrix: tags.matrix, primaries: tags.primaries, height: upright.height)
         let facts = MediaFacts(
             width: upright.width,
