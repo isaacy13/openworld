@@ -64,16 +64,17 @@ SOURCES = {
     "lfw.tgz": (
         "https://ndownloader.figshare.com/files/5976018",
         "https://figshare.com/ndownloader/files/5976018",
-        "http://vis-www.cs.umass.edu/lfw/lfw.tgz",
+        "https://api.figshare.com/v2/file/download/5976018",
     ),
     "pairs.txt": (
         "https://ndownloader.figshare.com/files/5976006",
         "https://figshare.com/ndownloader/files/5976006",
-        "http://vis-www.cs.umass.edu/lfw/pairs.txt",
+        "https://api.figshare.com/v2/file/download/5976006",
     ),
     "WIDER_val.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip",),
     "wider_face_split.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip",),
 }
+USER_AGENT = "openworld-eval (+https://github.com/isaacy13/openworld)"
 # A published curve is only comparable to a run on the same bytes.
 PINS = {
     "lfw.tgz": "055f7d9c632d7370e6fb4afc7468d40f970c34a80d4c6f50ffec63f5a8d536c0",
@@ -179,7 +180,9 @@ def download(url: str, target: Path, attempts=6):
     part = target.with_suffix(target.suffix + ".part")
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as out:
+            # Some hosts refuse Python's default User-Agent.
+            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(request, timeout=120) as response, part.open("wb") as out:
                 while block := response.read(1 << 20):
                     out.write(block)
             part.replace(target)
