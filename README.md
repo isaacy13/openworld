@@ -78,6 +78,10 @@ python3 eval/real_faces.py --bin core/target/release/openworld --eval-bin eval/r
 | Miss rate, all 242,257 same-person LFW pairs | 1.5% |
 | Stills through `openworld scan`: 100 enrolled people, 100 strangers | 93 found, 0 on the wrong poster, 0 strangers carded |
 | 1280x720 H.264 clips, the enrolled face on screen for one second | 20 of 20 found, under complete and under measured |
+| The 93 stills it found, saved as a JPEG stored a quarter turn off with an orientation tag | 93 found, 0 on the wrong poster |
+| The same faces in a 4032x3024 JPEG, the face about 560 px | 92 found at 640 and at full resolution |
+| The same faces in a 4032x3024 JPEG, the face about 190 px, as in a group photo | 0 found at 640, each result naming the size it left out; 92 found at full resolution |
+| The same faces in a 1080x1920 clip stored turned, with a display rotation | 93 found, under complete and under measured |
 | WIDER FACE validation, faces 72 px and up, at 640 px | 91.8% found (1,068 of 1,163), 95.3% when not occluded |
 | Held out from the cutoff: CALFW, 3,000 different-person pairs | 0 false matches (95% interval up to 0.13%) |
 | Held out from the cutoff: CALFW, 3,000 same-person pairs years apart | 1,116 missed, or 37.2% (35.5% to 38.9%) |
@@ -91,7 +95,8 @@ Read those numbers with these limits:
 - LFW faces are about 94 px, under the 112 px compare rule. At their own size, 99.98% of LFW faces are seen and 2.9% are compared. Every LFW number above enlarges the photo twice. The embedder still reads a 112 px aligned crop.
 - The cutoff is the lowest score whose all-pairs false match rate is at or under one in a hundred thousand (0.5062), rounded up. The all-pairs miss rate is weighted toward the few people with hundreds of photos. One pair per person is what one poster against one photo sees: about one enrolled person in seventeen is missed.
 - WIDER FACE misses are mostly occluded, turned, masked, or cut off by the frame.
-- Real FBI photos stay off. This curve sets `real_posters_allowed` to false.
+- The phone-file rows score within 0.01 of the plain still on average. A 640 px scan of a 12-megapixel group photo leaves those faces out and says so. Full resolution finds them.
+- Real FBI photos stay off. LFW is the wrong domain for a surveillance operating point, so this curve cannot by itself turn them on. It sets `real_posters_allowed` to false.
 
 ## Posters
 

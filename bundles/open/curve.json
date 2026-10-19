@@ -363,6 +363,154 @@
           1.0
         ]
       }
+    },
+    "phone_files": {
+      "jpeg_stored_sideways_with_tag": {
+        "what": "A JPEG stored a quarter turn off, with the orientation tag that shows it upright.",
+        "640 px, complete": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0008272362011735157,
+            "median": -0.0016851425170898438,
+            "worst": -0.013990461826324463
+          }
+        }
+      },
+      "photo_12mp_large_face": {
+        "what": "A 4032x3024 JPEG, the face about 560 px.",
+        "640 px, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0024581772665823657,
+            "median": -0.0005713105201721191,
+            "worst": -0.07848316431045532
+          }
+        },
+        "full resolution, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.00253687911136176,
+            "median": -0.0005713105201721191,
+            "worst": -0.07848316431045532
+          }
+        }
+      },
+      "photo_12mp_group_face": {
+        "what": "A 4032x3024 JPEG, the face about 190 px, as in a group photo.",
+        "640 px, complete": {
+          "found": {
+            "count": 0,
+            "trials": 93,
+            "rate": 0.0,
+            "wilson95": [
+              0.0,
+              0.0396689026203615
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0
+        },
+        "full resolution, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0013136668230897637,
+            "median": -0.00144881010055542,
+            "worst": -0.10132738947868347
+          }
+        }
+      },
+      "portrait_video_with_rotation": {
+        "what": "A 1080x1920 H.264 clip stored as 1920x1080 with a display rotation, the face on screen for one second.",
+        "640 px, complete": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0038035024878799273,
+            "median": -0.0035766959190368652,
+            "worst": -0.1394329071044922
+          }
+        },
+        "640 px, measured": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.004083195681213051,
+            "median": -0.00399702787399292,
+            "worst": -0.1397693157196045
+          }
+        }
+      }
     }
   },
   "wider_face_val": {
