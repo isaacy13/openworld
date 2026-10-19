@@ -143,7 +143,8 @@ mod tests {
         let places = Places::new(root.path(), root.path().join("bundles"));
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_760_000_000);
         let first = places.new_result(now);
-        assert!(!first.to_string_lossy().contains(':'));
+        // The folder name only: a Windows path starts with a drive letter and a colon.
+        assert!(!first.file_name().unwrap().to_string_lossy().contains(':'));
         fs::create_dir_all(&first).unwrap();
         assert_ne!(places.new_result(now), first);
     }
