@@ -367,6 +367,19 @@ fn every_page_of_a_tiff_is_scanned() {
 }
 
 #[test]
+fn different_people_at_one_spot_on_tiff_pages_are_different_faces() {
+    let lab = Lab::new();
+    let at = spot(MISSING_ID, &[0]);
+    // The person on the poster, then a stranger in the same place on the next page.
+    let pages = [scene_at(MISSING_ID, at), scene_at(STRANGER_ID, at)];
+    let file = lab.write("people.tif", &tiff(&pages.iter().map(|p| TiffPage::rgb(p, 1)).collect::<Vec<_>>()));
+    let report = lab.scan(&file);
+    assert_candidate(&report, MISSING_POSTER);
+    assert_eq!(report.counts.faces_seen, 2, "{}", describe(&report));
+    assert!(report.tracks.iter().all(|t| t.first_frame == t.last_frame), "{}", describe(&report));
+}
+
+#[test]
 fn a_multipage_tiff_whose_pages_cannot_all_be_read_is_refused() {
     let lab = Lab::new();
     let (shown, _) = scene(MISSING_ID, &[0]);

@@ -198,9 +198,12 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
                 stats.frames_decoded = stats.frames_decoded.saturating_add(1);
                 stats.probe.frames = stats.probe.frames.saturating_add(1);
                 stats.probe.motion_cover = true;
-                if !keep {
+                if !keep || jpeg_cut_short(path) {
                     stats.clean = false;
                 }
+            } else {
+                // The cover was never read, so the file was not fully scanned.
+                stats.clean = false;
             }
         }
         return Ok(stats);
@@ -217,7 +220,8 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
             _ => MediaError::BadCodec,
         })?;
         let keep_going = on_frame(0, &image);
-        return Ok(DecodeStats { frames_decoded: 1, clean: keep_going, probe: info });
+        // The JPEG decoder paints missing data gray and says nothing: a cut file is not clean.
+        return Ok(DecodeStats { frames_decoded: 1, clean: keep_going && !jpeg_cut_short(path), probe: info });
     }
     // An animated PNG skips the still path so every frame is read. The camera
     // tag on that file is the same turn a still PNG gets.
@@ -1158,6 +1162,64 @@ fn open_oriented(path: &Path) -> image::ImageResult<RgbImage> {
     let mut image = DynamicImage::from_decoder(decoder)?;
     image.apply_orientation(orientation);
     Ok(image.to_rgb8())
+}
+
+/// True when a JPEG ends before its end-of-image marker. Segments are skipped
+/// by their lengths and scan data byte by byte, so data appended after the
+/// marker, like a motion photo's clip, is not read. Not a JPEG: false.
+pub fn jpeg_cut_short(path: &Path) -> bool {
+    let Ok(file) = File::open(path) else {
+        return false;
+    };
+    let mut bytes = BufReader::new(file).bytes().map_while(Result::ok);
+    if (bytes.next(), bytes.next()) != (Some(0xFF), Some(0xD8)) {
+        return false;
+    }
+    let mut pending = None;
+    loop {
+        let marker = match pending.take() {
+            Some(marker) => marker,
+            None => {
+                // A marker is 0xFF, any fill 0xFFs, then its code.
+                if bytes.by_ref().find(|&b| b == 0xFF).is_none() {
+                    return true;
+                }
+                match bytes.by_ref().find(|&b| b != 0xFF) {
+                    Some(code) => code,
+                    None => return true,
+                }
+            }
+        };
+        match marker {
+            0xD9 => return false,
+            0x01 | 0xD0..=0xD7 => continue,
+            _ => {}
+        }
+        let (Some(high), Some(low)) = (bytes.next(), bytes.next()) else {
+            return true;
+        };
+        let length = usize::from(high) << 8 | usize::from(low);
+        if length < 2 || bytes.by_ref().take(length - 2).count() != length - 2 {
+            return true;
+        }
+        if marker != 0xDA {
+            continue;
+        }
+        // Scan data runs to the next marker that is not a stuffed zero or a restart.
+        loop {
+            if bytes.by_ref().find(|&b| b == 0xFF).is_none() {
+                return true;
+            }
+            match bytes.by_ref().find(|&b| b != 0xFF) {
+                Some(0x00 | 0xD0..=0xD7) => {}
+                Some(code) => {
+                    pending = Some(code);
+                    break;
+                }
+                None => return true,
+            }
+        }
+    }
 }
 
 /// True when a PNG carries an animation control chunk before the first image data.
@@ -2344,6 +2406,36 @@ fn read_tiff_pages(path: &Path) -> Result<Vec<RgbImage>, MediaError> {
 #[cfg(test)]
 mod tests {
     use super::open_oriented;
+
+    #[test]
+    fn a_jpeg_cut_short_is_told_from_a_whole_one_with_data_after_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let image = image::RgbImage::from_fn(320, 240, |x, y| image::Rgb([(x * 7 % 256) as u8, (y * 13 % 256) as u8, ((x ^ y) % 256) as u8]));
+        let whole = dir.path().join("whole.jpg");
+        image.save(&whole).unwrap();
+        let bytes = std::fs::read(&whole).unwrap();
+        assert!(!super::jpeg_cut_short(&whole));
+        let cut = dir.path().join("cut.jpg");
+        std::fs::write(&cut, &bytes[..bytes.len() / 4]).unwrap();
+        assert!(super::jpeg_cut_short(&cut));
+        // A motion photo's clip after the end marker, with stray marker bytes in it.
+        let appended = dir.path().join("appended.jpg");
+        std::fs::write(&appended, [bytes.as_slice(), &[0xFF, 0xD8, 0xFF, 0xDA, 0x00]].concat()).unwrap();
+        assert!(!super::jpeg_cut_short(&appended));
+        // A progressive JPEG has several scans.
+        let progressive = dir.path().join("progressive.jpg");
+        let made = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-i"])
+            .arg(&whole)
+            .args(["-c:v", "mjpeg", "-q:v", "3", "-huffman", "optimal", "-flags", "+ilme"])
+            .arg(&progressive)
+            .status()
+            .is_ok_and(|s| s.success());
+        if made {
+            assert!(!super::jpeg_cut_short(&progressive));
+        }
+        assert!(!super::jpeg_cut_short(&dir.path().join("missing.jpg")));
+    }
 
     #[cfg(unix)]
     fn sleeper() -> std::sync::Arc<std::sync::Mutex<std::process::Child>> {

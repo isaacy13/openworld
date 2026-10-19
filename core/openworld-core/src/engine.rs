@@ -278,7 +278,13 @@ impl Engine {
                 return false;
             }
         }
-        for id in update.ended {
+        // Pictures that are not a video, like TIFF pages, each decide alone: a face
+        // at the same spot on the next page is not the same person.
+        let mut ended = update.ended;
+        if !self.cfg.video {
+            ended.extend(self.tracker.close_all());
+        }
+        for id in ended {
             if let Err(message) = self.close(id, events) {
                 self.failure = Some(runtime_line(&message));
                 return false;

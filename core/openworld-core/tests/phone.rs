@@ -10,7 +10,7 @@ use common::*;
 use image::RgbImage;
 use openworld_core::copy::{self, Copy};
 use openworld_core::ffi;
-use openworld_core::report::ScanReport;
+use openworld_core::report::{ScanReport, Status};
 use openworld_core::scan::{estimate_for, open_pushed_job, Job, ScanRequest};
 use openworld_core::{Coverage, DecodeEnd, MediaFacts};
 use serde_json::{json, Value};
@@ -48,6 +48,23 @@ fn a_phone_scan_of_pushed_frames_finds_the_marker_without_ffmpeg() {
     assert_eq!(report.counts.frames_declared, Some(1));
     assert_eq!(report.tracks.len(), 2, "{}", describe(&report));
     assert!(req.out.join("result.json").is_file());
+}
+
+#[test]
+fn a_phone_scan_of_a_jpeg_cut_short_is_incomplete_though_its_decoder_filled_the_gap() {
+    let lab = Lab::new();
+    let scene = openworld_core::fixture::demo_scene().image;
+    let whole = lab.path("whole.jpg");
+    scene.save(&whole).unwrap();
+    let bytes = std::fs::read(&whole).unwrap();
+    let mut req = lab.request(lab.write("cut.jpg", &bytes[..bytes.len() / 2]));
+    req.media = Some(facts(W, H, 1, 0.0));
+    let mut job = open_pushed_job(&req, SystemTime::now()).unwrap();
+    // The platform decoder hands over a whole picture with gray where data was missing.
+    assert!(job.engine().push(0, &scene, &mut |_| {}));
+    let report = finish(job, true);
+    assert_eq!(report.status, Status::Incomplete, "{}", describe(&report));
+    assert_not_a_clearance(&report);
 }
 
 #[test]

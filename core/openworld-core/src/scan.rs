@@ -178,6 +178,8 @@ pub struct Job {
     pub stop: StopFlag,
     /// Pictures the platform decoder promised, for a pushed scan.
     pub declared_frames: Option<u64>,
+    /// The file is cut short where the platform decoder may not say so.
+    damaged: bool,
 }
 
 impl Job {
@@ -185,7 +187,8 @@ impl Job {
         self.engine.as_mut().expect("job is open until finished")
     }
 
-    pub fn finish(mut self, end: DecodeEnd, events: &mut dyn FnMut(Event)) -> ScanReport {
+    pub fn finish(mut self, mut end: DecodeEnd, events: &mut dyn FnMut(Event)) -> ScanReport {
+        end.clean &= !self.damaged;
         let engine = self.engine.take().expect("job is finished once");
         let (report, perception) = engine.finish_keeping(end, events);
         keep_perception(&self.bundle, self.accelerate, perception);
@@ -217,7 +220,7 @@ pub fn open_job(req: &ScanRequest, fps: f64, video: bool, warnings: Vec<Line>, n
         now,
     };
     let engine = Engine::new(bundle.clone(), pack, cfg, perception).map_err(report::refused_line)?;
-    Ok(Job { engine: Some(engine), bundle, accelerate: req.accelerate, stop, declared_frames: None })
+    Ok(Job { engine: Some(engine), bundle, accelerate: req.accelerate, stop, declared_frames: None, damaged: false })
 }
 
 fn mtime_of(req: &ScanRequest) -> Option<SystemTime> {
@@ -245,6 +248,8 @@ pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanRe
     let warnings = media_warnings(mtime_of(req), container, now);
     let mut job = open_job(req, media.fps, media.video || media.frames > 1, warnings, now)?;
     job.declared_frames = Some(media.frames);
+    // Phone decoders paint a cut JPEG's missing rows gray too.
+    job.damaged = decode::jpeg_cut_short(&req.input);
     Ok(job)
 }
 
