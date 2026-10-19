@@ -182,7 +182,8 @@ public final class ScanModel {
         async let copyAnswer = ask(.copy, CopyAnswer.self)
         async let versionAnswer = ask(.version, VersionAnswer.self)
         async let bundlesAnswer = ask(.bundles(catalog: places.bundles.path), BundlesAnswer.self)
-        copy = CopyTable(texts: await copyAnswer.value?.copy ?? [:])
+        let table = await copyAnswer.value
+        copy = CopyTable(texts: table?.copy ?? [:], disclosure: table?.disclosure ?? [])
         demoBuild = await versionAnswer.value?.demoPosters ?? false
         let rows = await bundlesAnswer.value
         bundles = rows?.bundles ?? []

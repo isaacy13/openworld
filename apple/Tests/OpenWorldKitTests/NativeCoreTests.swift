@@ -35,6 +35,8 @@ final class NativeCoreTests: XCTestCase {
         XCTAssertTrue(version.demoPosters, "the shells' test builds read demo posters")
         let copy = try XCTUnwrap(ask(.copy, CopyAnswer.self).value)
         XCTAssertEqual(copy.copy["no_clearance"], "No candidate is not a clearance.")
+        XCTAssertFalse(copy.disclosure?.isEmpty ?? true)
+        XCTAssertFalse(copy.disclosure?.contains { $0.code == "no_clearance" } ?? true)
         let rows = try XCTUnwrap(ask(.bundles(catalog: places.bundles.path), BundlesAnswer.self).value)
         XCTAssertEqual(rows.bundles.first?.id, "fast")
         XCTAssertEqual(ask(.postersCheck(posters: places.posters.path), PostersAnswer.self).value, nil)

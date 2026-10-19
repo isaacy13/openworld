@@ -100,6 +100,12 @@ struct StartView: View {
                         .font(.headline)
                     Text("The system stopped the last scan before it finished. It is not a clearance.")
                         .fixedSize(horizontal: false, vertical: true)
+                    // The core's disclosure for a scan that did not finish.
+                    ForEach(model.copy.disclosure, id: \.self) { line in
+                        Text(line.localized())
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             } icon: {
                 Image(systemName: "exclamationmark.triangle")

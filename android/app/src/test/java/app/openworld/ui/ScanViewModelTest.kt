@@ -223,7 +223,8 @@ class ScanViewModelTest {
         val done = vm.screen() as ScanState.Done
         assertEquals(Status.INCOMPLETE, done.report.status)
         assertEquals("scan_killed", done.report.reason?.code)
-        assertTrue(done.report.disclosure.none { it.code == "no_clearance" })
+        // No estimate has run, so the disclosure is the core's from the copy call.
+        assertEquals(FakeCore.DISCLOSURE - "no_clearance", done.report.disclosure.map { it.code })
         val delete = core.calls.single { it.getString("op") == "delete" }
         assertEquals(leftover.path, delete.getString("out"))
         assertTrue(marker.marks.isEmpty())
@@ -246,6 +247,32 @@ class ScanViewModelTest {
         assertTrue(vm.screen() is ScanState.Done)
         // This scan ended only its own mark.
         assertEquals(setOf(other), marker.marks)
+    }
+
+    @Test
+    fun aRecreatedScreenClearsLeftoverCopiesButNotTheOneARunningScanReads() = runTest(dispatcher) {
+        val leftover = File(root, "imports/old.mp4")
+        imports.files += leftover
+        val vm = model()
+        assertTrue(imports.files.isEmpty())
+        imports.files += setOf(file.file, leftover)
+        vm.openImported(file)
+        advanceUntilIdle()
+        val during = mutableListOf<Set<File>>()
+        reader.beforeFrame = { i ->
+            if (i == 1) {
+                // What a recreated screen's setup does while this scan runs.
+                imports.clear()
+                during += imports.files.toSet()
+            }
+        }
+        vm.analyze()
+        advanceUntilIdle()
+        assertEquals(listOf(setOf(file.file)), during)
+        assertEquals(Status.COMPLETE, (vm.screen() as ScanState.Done).report.status)
+        // The scan ended, so its copy is deleted and no longer held.
+        assertTrue(imports.files.isEmpty())
+        assertTrue(imports.held.isEmpty())
     }
 
     @Test

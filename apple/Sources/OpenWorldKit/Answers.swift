@@ -161,6 +161,8 @@ public struct SweepAnswer: Decodable, Equatable, Sendable {
 
 public struct CopyAnswer: Decodable, Equatable, Sendable {
     public var copy: [String: String]
+    /// For a report the shell makes itself. It has no clearance line.
+    public var disclosure: [Line]?
 }
 
 /// What a scan sends while it runs.

@@ -59,7 +59,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     @Volatile private var copy = Copy.EMPTY
     @Volatile private var bundles: List<BundleRow> = emptyList()
     @Volatile private var bundleNote: Line? = null
-    /** The disclosure from the core's last estimate, for a new review and a shell-made report. */
+    /** The disclosure from the core's last estimate, for a new review. */
     @Volatile private var disclosure: List<Line> = emptyList()
     private val ready = CompletableDeferred<Unit>()
     /** One core call at a time outside a scan, so estimates never pile up. */
@@ -82,6 +82,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
             copy = Copy.from(env.core.call(request("copy")))
             val version = env.core.call(request("version"))
             env.core.call(request("sweep") { put("root", env.paths.results.path) })
+            // Not the copy a scan still running in this process reads.
             runCatching { env.imports.clear() }
             loadCatalog()
             val (pack, why) = checkPosters()
@@ -293,6 +294,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     /** Blocking, on the scan thread. Any failure here ends as Incomplete or a refusal, never a clearance. */
     private fun runScan(session: Session, job: JSONObject, review: ScanState.Review, info: MediaInfo, out: File, startedAt: Long): ScanState.Done {
         try {
+            // A recreated screen's setup clears imports; this scan's copy stays until it ends.
+            env.imports.hold(review.file)
             env.marker.begin(out)
             val started = try {
                 env.core.start(job) { event -> onEvent(event, out, startedAt) }
@@ -333,7 +336,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     private fun failedReport(out: File?) =
-        Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line("not_fully_decoded"), incompleteDisclosure(), out)
+        Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line("not_fully_decoded"), copy.disclosure, out)
 
     /** Events arrive on the scan thread. */
     private fun onEvent(event: JSONObject, out: File, startedAt: Long) {
@@ -457,13 +460,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
 
     private fun preselected(): String = bundles.firstOrNull { it.preselected }?.id ?: bundles.firstOrNull()?.id ?: "fast"
 
-    /**
-     * The disclosure for a report the core never wrote: the core's last one, without the clearance
-     * line, which only a complete scan may show.
-     */
-    private fun incompleteDisclosure(): List<Line> = disclosure.filter { it.code != NO_CLEARANCE }
-
-    private fun killedReport() = Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line(Shell.SCAN_KILLED), incompleteDisclosure(), null)
+    /** The disclosure is the core's for a report it never wrote, without the clearance line. */
+    private fun killedReport() = Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line(Shell.SCAN_KILLED), copy.disclosure, null)
 
     private fun scanRequest(op: String?, review: ScanState.Review, info: MediaInfo, out: File?): JSONObject = request(op) {
         put("input", review.file.file.path)
@@ -521,9 +519,6 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     companion object {
-        /** The disclosure line only a complete scan may show. */
-        private const val NO_CLEARANCE = "no_clearance"
-
         fun factory(env: AppEnv): ViewModelProvider.Factory = viewModelFactory {
             initializer { ScanViewModel(env) }
         }

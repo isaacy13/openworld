@@ -35,7 +35,7 @@ pub enum Call {
     Delete { out: PathBuf },
     /// Remove expired results under `root`.
     Sweep { root: PathBuf },
-    /// Every sentence, by code.
+    /// Every sentence, by code, and the disclosure for a report a shell makes itself.
     Copy {},
     Version {},
 }
@@ -114,7 +114,8 @@ pub fn run(call: Call, stop: Option<&StopFlag>, events: &mut dyn FnMut(Event)) -
             Err(line) => refusal(line),
         },
         Call::Sweep { root } => json!({ "ok": true, "removed": crate::outdir::sweep(&root, std::time::SystemTime::now()) }),
-        Call::Copy {} => json!({ "ok": true, "copy": copy::product_copy() }),
+        // A report a shell makes itself (a scan the system killed) is never complete.
+        Call::Copy {} => json!({ "ok": true, "copy": copy::product_copy(), "disclosure": crate::report::disclosure(false) }),
         Call::Version {} => json!({
             "ok": true,
             "api": API_VERSION,
@@ -151,6 +152,10 @@ mod tests {
         assert_eq!(ask("not json")["refusal"], "bad_request");
         assert_eq!(ask(r#"{"op":"copy"}"#)["refusal"], "bad_version");
         assert_eq!(ask(r#"{"v":1,"op":"copy"}"#)["ok"], true);
+        // The disclosure for a shell's own report leaves out the clearance line.
+        let disclosure = ask(r#"{"v":1,"op":"copy"}"#)["disclosure"].as_array().unwrap().clone();
+        assert_eq!(disclosure.len(), copy::DISCLOSURE.len() - 1);
+        assert!(disclosure.iter().all(|line| line["code"] != copy::NO_CLEARANCE.0 && line["text"].is_string()));
         assert_eq!(ask(r#"{"v":1,"op":"nope"}"#)["refusal"], "bad_request");
         assert_eq!(ask(r#"{"v":1,"op":"copy","nope":1}"#)["refusal"], "bad_request");
         // A misspelled option is refused, not ignored.

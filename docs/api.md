@@ -28,7 +28,7 @@ Every request has `"v": 1` and an `"op"`. Unknown fields are refused. Every answ
 | `leave` | `url` | `{message: Line, url}`; refuses `only_fbi` for anything but an `https://www.fbi.gov/...` page |
 | `delete` | `out` | refuses `delete_foreign` for a folder that is not an OpenWorld result |
 | `sweep` | `root` | `removed`: expired results deleted under `root` |
-| `copy` | | `copy`: `{code: text}` |
+| `copy` | | `copy`: `{code: text}`, `disclosure: [Line]` for a report the shell makes itself (a scan the system killed), without the clearance line |
 
 ### Scan request
 

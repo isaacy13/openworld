@@ -37,7 +37,7 @@ class FakeCore : Core {
             "copy" -> JSONObject().put("ok", true).put(
                 "copy",
                 JSONObject().put("incomplete", "Incomplete.").put("not_fully_decoded", "The file was not fully decoded."),
-            )
+            ).put("disclosure", JSONArray().apply { DISCLOSURE.filter { it != "no_clearance" }.forEach { put(line(it)) } })
             "version" -> JSONObject().put("ok", true).put("demo_posters", true)
             "sweep" -> JSONObject().put("ok", true).put("removed", 0)
             "bundles" -> JSONObject().put("ok", true).put("note", line("bundle_note")).put(
@@ -192,16 +192,27 @@ class FakeDevice : Device {
     fun fire(reason: String) = onStop?.invoke(reason)
 }
 
+/** Copies on disk as a set of files, held the way [app.openworld.platform.AndroidImports] holds them. */
 class FakeImports : Imports {
     val deleted = mutableListOf<Imported>()
+    val files = mutableSetOf<File>()
+    val held = mutableSetOf<File>()
 
     override suspend fun copy(uri: Uri, onProgress: (Float?) -> Unit): Imported = error("tests open copies directly")
 
     override fun delete(imported: Imported) {
         deleted += imported
+        files -= imported.file
+        held -= imported.file
     }
 
-    override fun clear() = Unit
+    override fun hold(imported: Imported) {
+        held += imported.file
+    }
+
+    override fun clear() {
+        files.retainAll(held)
+    }
 }
 
 /** Marks that survive the process, and the scans running in this one, like [app.openworld.platform.PrefsMarker]. */
