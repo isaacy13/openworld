@@ -97,7 +97,43 @@ pub enum Msg {
 }
 
 /// Run one job to its end. `emit` may be called many times (scan events).
+/// A panic in the library still answers, so the window never waits forever.
 pub fn run(job: Job, places: &Places, emit: &mut dyn FnMut(Msg)) {
+    let failed = failure(&job);
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_job(job, places, emit)));
+    if ran.is_err() {
+        emit(failed());
+    }
+}
+
+/// The answer for a job the library panicked in. A scan's partial folder is removed.
+fn failure(job: &Job) -> Box<dyn FnOnce() -> Msg> {
+    fn internal<T>() -> Result<T, Line> {
+        Err(Line::of(copy::R_INTERNAL))
+    }
+    match job {
+        Job::Startup => Box::new(move || Msg::Bundles(internal())),
+        Job::Posters | Job::InstallDemo => Box::new(move || Msg::Posters(internal())),
+        Job::Facts { ticket, .. } => {
+            let ticket = *ticket;
+            Box::new(move || Msg::Facts { ticket, result: internal() })
+        }
+        Job::Estimate { ticket, .. } => {
+            let ticket = *ticket;
+            Box::new(move || Msg::Estimate { ticket, result: internal() })
+        }
+        Job::Scan { req, .. } => {
+            let out = req.out.clone();
+            Box::new(move || {
+                let _ = delete(&out);
+                Msg::ScanDone(Box::new(report::refused(copy::R_INTERNAL)))
+            })
+        }
+        Job::Delete { .. } => Box::new(move || Msg::Deleted(internal())),
+    }
+}
+
+fn run_job(job: Job, places: &Places, emit: &mut dyn FnMut(Msg)) {
     match job {
         Job::Startup => {
             sweep(&places.results);

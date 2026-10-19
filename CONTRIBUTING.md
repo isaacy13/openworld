@@ -18,7 +18,7 @@ cargo test --manifest-path core/Cargo.toml
 cargo clippy --manifest-path core/Cargo.toml -p openworld-core -p openworld-cli -- -D warnings
 ```
 
-The desktop app is in `desktop/` (`cargo run --manifest-path desktop/Cargo.toml`, needs GTK 4 and libadwaita), Android in `android/` (`./gradlew assembleDebug testDebugUnitTest`), and the Apple apps in `apple/` (see `apple/README.md`).
+The desktop app is in `desktop/` (`cargo run --manifest-path desktop/Cargo.toml`, needs GTK 4 and libadwaita), Android in `android/` (`./gradlew assembleDebug testDebugUnitTest`), and the Apple apps in `apple/` (on a Mac: `apple/scripts/build-core.sh`, then `xcodegen generate` in `apple/`; `swift test --package-path apple` runs the kit's tests anywhere).
 
 ## Pull requests
 

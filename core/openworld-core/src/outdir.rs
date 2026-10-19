@@ -35,7 +35,7 @@ pub fn prepare(dir: &Path, protect: &[&Path]) -> Result<(), Line> {
     if dir.exists() {
         let empty = fs::read_dir(dir).map(|mut entries| entries.next().is_none()).unwrap_or(false);
         if is_result(dir) {
-            fs::remove_dir_all(dir).map_err(|_| Line::of(copy::R_OUT_REPLACE))?;
+            remove_result(dir).map_err(|_| Line::of(copy::R_OUT_REPLACE))?;
         } else if !empty {
             return Err(Line::of(copy::R_OUT_FOREIGN));
         }
@@ -100,7 +100,24 @@ pub fn delete(dir: &Path) -> Result<Line, Line> {
     if !is_result(dir) {
         return Err(Line::of(copy::R_DELETE_FOREIGN));
     }
-    fs::remove_dir_all(dir).map(|()| Line::of(copy::DELETED)).map_err(|_| Line::of(copy::R_DELETE_FAILED))
+    remove_result(dir).map(|()| Line::of(copy::DELETED)).map_err(|_| Line::of(copy::R_DELETE_FAILED))
+}
+
+/// Remove a result folder with its marker last, so a removal that fails part way
+/// leaves a folder that is still ours to delete, retry, or sweep.
+fn remove_result(dir: &Path) -> std::io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name() == MARKER {
+            continue;
+        }
+        if entry.file_type()?.is_dir() {
+            fs::remove_dir_all(entry.path())?;
+        } else {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    fs::remove_dir_all(dir)
 }
 
 /// Remove every expired result folder directly under `root`. Returns how many.
@@ -123,7 +140,7 @@ pub fn sweep(root: &Path, now: SystemTime) -> usize {
             .and_then(|value| value.get("expires_at").and_then(|v| v.as_str()).and_then(parse_rfc3339))
             .or_else(|| marker_expiry(&dir))
             .is_some_and(|expires| expires <= now);
-        if expired && fs::remove_dir_all(&dir).is_ok() {
+        if expired && remove_result(&dir).is_ok() {
             removed += 1;
         }
     }
@@ -194,6 +211,26 @@ mod tests {
         assert!(input.is_file());
         // Beside the input is fine.
         prepare(&root.path().join("videos-result"), &[&input, &posters]).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_delete_that_fails_part_way_leaves_a_folder_still_ours_to_delete() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("result");
+        prepare(&dir, &[]).unwrap();
+        let crops = dir.join("crops");
+        fs::create_dir_all(&crops).unwrap();
+        fs::write(crops.join("face_1.jpg"), b"face").unwrap();
+        fs::set_permissions(&crops, fs::Permissions::from_mode(0o555)).unwrap();
+        // Root may remove it anyway; anyone else cannot until the folder is writable.
+        if delete(&dir).is_err() {
+            assert!(is_result(&dir), "the marker stays while anything else does");
+            fs::set_permissions(&crops, fs::Permissions::from_mode(0o755)).unwrap();
+            delete(&dir).unwrap();
+        }
+        assert!(!dir.exists());
     }
 
     #[test]

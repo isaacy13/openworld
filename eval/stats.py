@@ -16,6 +16,7 @@ photos the weight `w_a`. Pairs between two copies of one person are left out.
 """
 
 import math
+from statistics import NormalDist
 
 import numpy as np
 
@@ -233,11 +234,18 @@ def at_least_one(p, n):
     return float(-math.expm1(n * math.log1p(-p)))
 
 
-def agrees(published_rate, sample_entry):
-    """True when the published rate lies inside the sample's own widest 95% interval."""
+def z_for(tests):
+    """The z that keeps `tests` two-sided checks at 95% together (Bonferroni)."""
+    return NormalDist().inv_cdf(1 - 0.025 / max(1, tests))
+
+
+def agrees(published_rate, sample_entry, z=Z95):
+    """True when the published rate lies inside the sample's own widest interval at `z`."""
     if published_rate is None:
         return True
     if not sample_entry.get("trials"):
         return False
     lo, hi = interval(sample_entry)
+    wlo, whi = wilson(sample_entry["count"], sample_entry["trials"], z)
+    lo, hi = min(lo, wlo), max(hi, whi)
     return lo - 1e-12 <= published_rate <= hi + 1e-12

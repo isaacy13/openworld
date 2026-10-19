@@ -280,9 +280,9 @@ fn a_class_that_is_off_is_not_compared_and_the_cutoff_is_the_same() {
         assert_eq!(card.band, same.band);
     }
 
+    // Nothing to compare with is refused, never a scan that compared nothing.
     let neither = scan(false, false);
-    assert_no_candidate(&neither);
-    assert!(neither.classes.as_ref().is_some_and(|l| l.is(copy::NO_CLASS)));
+    assert_refused(&neither, copy::CHOOSE_CLASS);
     // The shells cannot start such a scan.
     let call = json!({"v": 1, "op": "scan", "input": input, "bundles": catalog(), "posters": lab.posters, "out": lab.out(), "missing": false, "wanted": false});
     let answer = openworld_core::invoke::call(&call.to_string(), None, &mut |_| {});

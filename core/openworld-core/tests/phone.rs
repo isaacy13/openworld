@@ -68,6 +68,28 @@ fn a_phone_scan_of_a_jpeg_cut_short_is_incomplete_though_its_decoder_filled_the_
 }
 
 #[test]
+fn a_phone_scan_with_no_class_on_is_refused_before_any_frame() {
+    let lab = Lab::new();
+    let mut req = pushed_request(&lab, facts(W, H, 1, 0.0));
+    (req.missing, req.wanted) = (false, false);
+    let refused = open_pushed_job(&req, SystemTime::now()).err().expect("refused");
+    assert!(refused.headline.is(copy::CHOOSE_CLASS), "{}", describe(&refused));
+    assert!(!req.out.exists());
+}
+
+#[test]
+fn a_larger_later_picture_is_looked_at_for_its_own_size() {
+    let lab = Lab::new();
+    let small = blank(320, 240);
+    let large = openworld_core::fixture::demo_scene().image;
+    let mut job = open_pushed_job(&pushed_request(&lab, facts(320, 240, 2, 30.0)), SystemTime::now()).unwrap();
+    assert!(job.engine().push(0, &small, &mut |_| {}));
+    assert!(job.engine().push(1, &large, &mut |_| {}));
+    let report = finish(job, true);
+    assert_eq!(report.detection_long_side, large.width().max(large.height()), "{}", describe(&report));
+}
+
+#[test]
 fn a_pushed_scan_whose_result_cannot_be_written_is_incomplete() {
     let lab = Lab::new();
     let req = pushed_request(&lab, facts(W, H, 1, 0.0));
@@ -132,6 +154,8 @@ fn a_phone_request_is_checked_before_any_frame() {
         (Some(facts(64, 64, 2, f64::NAN)), copy::R_NO_FPS),
         (Some(facts(64, 64, 2, f64::INFINITY)), copy::R_NO_FPS),
         (Some(facts(16_000, 16_000, 1, 0.0)), copy::R_TOO_LARGE),
+        // A count no file holds: planning it would list every frame number.
+        (Some(facts(64, 64, 1_000_000_000_000, 30.0)), copy::R_TOO_LARGE),
     ];
     for (media, code) in cases {
         let mut req = lab.request(lab.path("clip.mov"));
@@ -139,7 +163,7 @@ fn a_phone_request_is_checked_before_any_frame() {
         let refused = open_pushed_job(&req, SystemTime::now()).err().unwrap_or_else(|| panic!("{media:?} opened"));
         assert_refused(&refused, code);
         assert!(!req.out.exists(), "{media:?}");
-        if media.is_some() && code != copy::R_TOO_LARGE {
+        if media.is_some() {
             assert!(estimate_for(&req).unwrap_err().headline.is(code), "estimate {media:?}");
         }
     }

@@ -36,7 +36,7 @@ Removed from the code, the manifests, the poster schema, and the screens. Reason
 
 ## 6. Scores can differ by hardware
 
-The cutoff is measured on the CPU provider. `openworld bench` times each provider that registers and reports the lowest cosine between its embeddings and the CPU's on the same crops. A provider whose embeddings drift (lowest cosine under 0.99) is not described by the curve and should fall back to the CPU for embedding. Benchmarks run on Linux and Windows in CI now; Apple devices are measured when the owner's Mac is available.
+The cutoff is measured on the CPU provider. `openworld bench` times each provider that registers and reports the lowest cosine between its embeddings and the CPU's on the same crops. A provider whose embeddings drift (lowest cosine under 0.99) is not described by the curve, so the embedder always runs on the CPU; only the detector is accelerated. Benchmarks run on Linux and Windows in CI now; Apple devices are measured when the owner's Mac is available.
 
 ## 7. Words and screens
 

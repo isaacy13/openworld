@@ -146,7 +146,7 @@ fn perception_for(bundle: &Bundle, pack: &PosterPack, accelerate: bool) -> Resul
     if pack.embedder_sha256.as_deref().map(str::trim) != Some(embedder) || embedder.is_empty() {
         return Err(Line::of(copy::R_PACK_EMBEDDER));
     }
-    let key = format!("{}:{embedder}:{accelerate}", bundle.id);
+    let key = model_key(bundle, accelerate);
     if let Ok(mut cache) = MODELS.lock() {
         if let Some(index) = cache.iter().position(|(k, _)| *k == key) {
             return Ok(cache.swap_remove(index).1);
@@ -162,11 +162,21 @@ fn keep_perception(bundle: &Bundle, accelerate: bool, perception: Box<dyn Percep
     if perception.kind() == PERCEPTION_FIDUCIAL {
         return;
     }
-    let embedder = bundle.weight("embedder").map(|w| w.sha256.clone()).unwrap_or_default();
+    let folder = model_folder(bundle);
     if let Ok(mut cache) = MODELS.lock() {
-        cache.retain(|(k, _)| !k.starts_with(&format!("{}:", bundle.id)));
-        cache.push((format!("{}:{embedder}:{accelerate}", bundle.id), perception));
+        cache.retain(|(k, _)| !k.starts_with(&folder));
+        cache.push((model_key(bundle, accelerate), perception));
     }
+}
+
+/// Cached networks are found by the bundle folder and every weight they were built from.
+fn model_key(bundle: &Bundle, accelerate: bool) -> String {
+    let weights: Vec<&str> = bundle.weights.iter().map(|w| w.sha256.as_str()).collect();
+    format!("{}{}|{accelerate}", model_folder(bundle), weights.join(","))
+}
+
+fn model_folder(bundle: &Bundle) -> String {
+    format!("{}|", bundle.dir.display())
 }
 
 /// A scan ready for frames: everything that can refuse has been checked, and
@@ -178,8 +188,8 @@ pub struct Job {
     pub stop: StopFlag,
     /// Pictures the platform decoder promised, for a pushed scan.
     pub declared_frames: Option<u64>,
-    /// The file is cut short where the platform decoder may not say so.
-    damaged: bool,
+    /// Why the file cannot be fully read from the frames a phone pushes.
+    damaged: Option<Line>,
 }
 
 impl Job {
@@ -188,7 +198,10 @@ impl Job {
     }
 
     pub fn finish(mut self, mut end: DecodeEnd, events: &mut dyn FnMut(Event)) -> ScanReport {
-        end.clean &= !self.damaged;
+        if let Some(reason) = self.damaged.take() {
+            end.clean = false;
+            end.reason.get_or_insert(reason);
+        }
         let engine = self.engine.take().expect("job is finished once");
         let (report, perception) = engine.finish_keeping(end, events);
         keep_perception(&self.bundle, self.accelerate, perception);
@@ -200,6 +213,10 @@ impl Job {
 pub fn open_job(req: &ScanRequest, fps: f64, video: bool, warnings: Vec<Line>, now: SystemTime) -> Result<Job, ScanReport> {
     let bundle = require_bundle(&req.bundles, &req.bundle)?;
     let pack = load_pack(&req.posters, now).map_err(report::refused_line)?;
+    // A face compared with no poster is not compared: refuse before anything runs.
+    if pack.enabled(req.missing, req.wanted).is_empty() {
+        return Err(report::refused(if req.missing || req.wanted { copy::R_PACK_NO_CLASS } else { copy::CHOOSE_CLASS }));
+    }
     let perception = perception_for(&bundle, &pack, req.accelerate).map_err(report::refused_line)?;
     // Every refusal comes before the result folder is touched.
     pack.check_vectors(perception.dim()).map_err(report::refused_line)?;
@@ -220,7 +237,7 @@ pub fn open_job(req: &ScanRequest, fps: f64, video: bool, warnings: Vec<Line>, n
         now,
     };
     let engine = Engine::new(bundle.clone(), pack, cfg, perception).map_err(report::refused_line)?;
-    Ok(Job { engine: Some(engine), bundle, accelerate: req.accelerate, stop, declared_frames: None, damaged: false })
+    Ok(Job { engine: Some(engine), bundle, accelerate: req.accelerate, stop, declared_frames: None, damaged: None })
 }
 
 fn mtime_of(req: &ScanRequest) -> Option<SystemTime> {
@@ -229,18 +246,24 @@ fn mtime_of(req: &ScanRequest) -> Option<SystemTime> {
         .or_else(|| fs::metadata(&req.input).and_then(|m| m.modified()).ok())
 }
 
-/// A scan of frames the platform decoder will push. Nothing is decoded here.
-pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanReport> {
-    let media = req.media.as_ref().ok_or_else(|| report::refused(copy::R_BAD_REQUEST))?;
+/// What a phone says about its file, checked before anything is planned or opened.
+fn check_media(media: &MediaFacts) -> Result<(), ScanReport> {
     if media.width == 0 || media.height == 0 || media.frames == 0 {
         return Err(report::refused(copy::R_BAD_CODEC));
     }
-    if u64::from(media.width) * u64::from(media.height) > decode::MAX_PIXELS {
+    if u64::from(media.width) * u64::from(media.height) > decode::MAX_PIXELS || media.frames > decode::MAX_FRAMES {
         return Err(report::refused(copy::R_TOO_LARGE));
     }
     if !media.fps.is_finite() || (media.frames > 1 && media.fps <= 0.0) {
         return Err(report::refused(copy::R_NO_FPS));
     }
+    Ok(())
+}
+
+/// A scan of frames the platform decoder will push. Nothing is decoded here.
+pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanReport> {
+    let media = req.media.as_ref().ok_or_else(|| report::refused(copy::R_BAD_REQUEST))?;
+    check_media(media)?;
     let container = media
         .container_unix
         .and_then(crate::timeutil::system_time_from_unix)
@@ -248,8 +271,15 @@ pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanRe
     let warnings = media_warnings(mtime_of(req), container, now);
     let mut job = open_job(req, media.fps, media.video || media.frames > 1, warnings, now)?;
     job.declared_frames = Some(media.frames);
-    // Phone decoders paint a cut JPEG's missing rows gray too.
-    job.damaged = decode::jpeg_cut_short(&req.input);
+    // Phone decoders paint a cut JPEG's missing rows gray too, and a shell that
+    // pushes only a motion photo's still has not scanned its clip.
+    job.damaged = if decode::jpeg_cut_short(&req.input) {
+        Some(Line::of(copy::NOT_FULLY_DECODED))
+    } else if media.frames == 1 && decode::has_motion_clip(&req.input) {
+        Some(Line::of(copy::MOTION_CLIP_UNREAD))
+    } else {
+        None
+    };
     Ok(job)
 }
 
@@ -325,12 +355,7 @@ fn on_screen_frames(fps: f64, count: u64, delays: Option<Vec<f64>>) -> Option<Ve
 pub fn estimate_for(req: &ScanRequest) -> Result<Estimate, ScanReport> {
     let now = SystemTime::now();
     let (frames, fps, duration, long, short, cover, delays, container) = if let Some(media) = &req.media {
-        if media.width == 0 || media.height == 0 || media.frames == 0 {
-            return Err(report::refused(copy::R_BAD_CODEC));
-        }
-        if !media.fps.is_finite() || (media.frames > 1 && media.fps <= 0.0) {
-            return Err(report::refused(copy::R_NO_FPS));
-        }
+        check_media(media)?;
         let duration = if media.duration_sec > 0.0 { media.duration_sec } else if media.fps > 0.0 { media.frames as f64 / media.fps } else { 0.0 };
         let container = media.container_unix.and_then(crate::timeutil::system_time_from_unix).or_else(|| decode::container_created(&req.input));
         (media.frames, media.fps, duration, media.width.max(media.height), media.width.min(media.height), false, None, container)

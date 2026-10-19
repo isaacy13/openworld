@@ -32,7 +32,11 @@ def fetch(bundle: Path) -> int:
         want = pin.get("sha256", "").strip()
         if not url or not want:
             continue
-        target = bundle / pin["path"]
+        target = (bundle / pin["path"]).resolve()
+        if not target.is_relative_to(bundle.resolve()):
+            print(f"{manifest['id']} {pin['role']}: {pin['path']} is outside the bundle. Refusing.", file=sys.stderr)
+            failures += 1
+            continue
         if target.is_file() and sha256(target) == want:
             print(f"{manifest['id']} {pin['role']}: already pinned")
             continue

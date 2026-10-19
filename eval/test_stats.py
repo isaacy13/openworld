@@ -62,6 +62,12 @@ class Intervals(unittest.TestCase):
         self.assertFalse(stats.agrees(0.25, entry))
         self.assertTrue(stats.agrees(None, entry))
         self.assertFalse(stats.agrees(0.25, stats.rate(0, 0)))
+        # Checked together with many other rates, the interval is wider.
+        self.assertGreater(stats.z_for(40), stats.Z95)
+        self.assertAlmostEqual(stats.z_for(1), stats.Z95, places=6)
+        plain = stats.rate(3, 100)
+        self.assertFalse(stats.agrees(0.15, plain))
+        self.assertTrue(stats.agrees(0.15, plain, stats.z_for(1000)))
 
     def test_unit_weights_reproduce_the_point_rate(self):
         ga = np.array([0, 0, 1, 2, 2])

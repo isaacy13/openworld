@@ -18,7 +18,7 @@ use openworld_core::decode::{self, container_created, gif_delays, picture_delays
 use openworld_core::estimate::Coverage;
 use openworld_core::geom::{frames_on_screen, sample_indices};
 use openworld_core::report::TrackStatus;
-use openworld_core::scan::estimate_for;
+use openworld_core::scan::{estimate_for, open_pushed_job};
 use openworld_core::timeutil::parse_rfc3339;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -719,6 +719,25 @@ fn a_motion_photo_keeps_a_face_that_is_not_on_the_still() {
     let report = lab.scan(&photo);
     assert_eq!(report.counts.frames_decoded, 9, "{}", describe(&report));
     assert_candidate(&report, MISSING_POSTER);
+}
+
+#[test]
+fn a_phone_that_pushes_only_a_motion_photos_still_gets_an_incomplete_scan() {
+    let lab = Lab::new();
+    let clip = scene_clip(&lab);
+    let xmp = xmp_packet(&format!(
+        "<rdf:Description xmlns:GCamera=\"http://ns.google.com/photos/1.0/camera/\" \
+         GCamera:MotionPhoto=\"1\" GCamera:MicroVideo=\"1\" GCamera:MicroVideoOffset=\"{}\"/>",
+        clip.len()
+    ));
+    let photo = lab.write("motion.jpg", &jpeg_with_xmp(&blank_cover(), xmp.as_bytes(), &clip));
+    let mut req = lab.request(&photo);
+    req.media = Some(openworld_core::MediaFacts { width: 64, height: 64, fps: 0.0, frames: 1, duration_sec: 0.0, video: false, container_unix: None });
+    let mut job = open_pushed_job(&req, std::time::SystemTime::now()).unwrap();
+    assert!(job.engine().push(0, &blank(64, 64), &mut |_| {}));
+    let report = job.finish(openworld_core::DecodeEnd { clean: true, declared_frames: Some(1), reason: None }, &mut |_| {});
+    assert_eq!(report.reason.as_ref().map(|l| l.code.as_str()), Some(copy::MOTION_CLIP_UNREAD.0), "{}", describe(&report));
+    assert_not_a_clearance(&report);
 }
 
 #[test]

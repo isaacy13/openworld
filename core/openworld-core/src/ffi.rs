@@ -65,7 +65,7 @@ fn emit(events: Option<(OwEventFn, usize)>) -> impl FnMut(Event) {
 }
 
 fn panicked() -> String {
-    invoke::refusal(Line::with("internal", "The scan library failed. Refusing.".into(), &[])).to_string()
+    invoke::refusal(Line::of(crate::copy::R_INTERNAL)).to_string()
 }
 
 /// Answer one request. Returns JSON. Scan events, if any, go to `on_event`.
@@ -164,18 +164,20 @@ pub extern "C" fn ow_job_push_pixels(
 ) -> i32 {
     with_job(job, |j| {
         let bpp = if layout == OW_RGB { 3 } else { 4 };
-        let Some(len) = (stride as usize).checked_mul(height as usize) else {
-            return false;
-        };
-        if pixels.is_null() || width == 0 || height == 0 || (stride as usize) < width as usize * bpp {
+        let (row_len, stride) = (width as usize * bpp, stride as usize);
+        if pixels.is_null() || !frame_fits(width, height) || stride < row_len {
             return false;
         }
+        // The last row ends at its pixels: a platform buffer need not pad it to the stride.
+        let Some(len) = stride.checked_mul(height as usize - 1).and_then(|n| n.checked_add(row_len)) else {
+            return false;
+        };
         let src = unsafe { std::slice::from_raw_parts(pixels, len) };
         let mut rgb = std::mem::take(&mut j.rgb);
         rgb.clear();
         rgb.reserve(width as usize * height as usize * 3);
-        for row in src.chunks(stride as usize).take(height as usize) {
-            for px in row[..width as usize * bpp].chunks_exact(bpp) {
+        for row in 0..height as usize {
+            for px in src[row * stride..row * stride + row_len].chunks_exact(bpp) {
                 match layout {
                     OW_BGRA => rgb.extend_from_slice(&[px[2], px[1], px[0]]),
                     _ => rgb.extend_from_slice(&px[..3]),
@@ -207,12 +209,18 @@ pub extern "C" fn ow_job_push_yuv420(
     rotation: u32,
 ) -> i32 {
     with_job(job, |j| {
-        if y.is_null() || u.is_null() || v.is_null() || width == 0 || height == 0 || uv_step == 0 || (y_stride as usize) < width as usize {
+        if y.is_null() || u.is_null() || v.is_null() || !frame_fits(width, height) || uv_step == 0 || (y_stride as usize) < width as usize {
             return false;
         }
         let (cw, ch) = (width.div_ceil(2) as usize, height.div_ceil(2) as usize);
-        let y_len = y_stride as usize * (height as usize - 1) + width as usize;
-        let uv_len = uv_stride as usize * (ch - 1) + (cw - 1) * uv_step as usize + 1;
+        let y_len = (y_stride as usize).checked_mul(height as usize - 1).and_then(|n| n.checked_add(width as usize));
+        let uv_len = (uv_stride as usize)
+            .checked_mul(ch - 1)
+            .and_then(|n| n.checked_add((cw - 1).checked_mul(uv_step as usize)?))
+            .and_then(|n| n.checked_add(1));
+        let (Some(y_len), Some(uv_len)) = (y_len, uv_len) else {
+            return false;
+        };
         let (yp, up, vp) = unsafe {
             (std::slice::from_raw_parts(y, y_len), std::slice::from_raw_parts(u, uv_len), std::slice::from_raw_parts(v, uv_len))
         };
@@ -242,6 +250,11 @@ pub extern "C" fn ow_job_push_yuv420(
         }
         push(j, index, rgb, width, height, rotation)
     })
+}
+
+/// A pushed frame has pixels and is within the picture limit, checked before any copy.
+fn frame_fits(width: u32, height: u32) -> bool {
+    width > 0 && height > 0 && u64::from(width) * u64::from(height) <= crate::decode::MAX_PIXELS
 }
 
 fn push(j: &mut OwJob, index: u64, rgb: Vec<u8>, width: u32, height: u32, rotation: u32) -> bool {
@@ -442,5 +455,26 @@ mod tests {
         assert!(ow_job_start(bad.as_ptr(), None, std::ptr::null_mut(), &mut refusal).is_null());
         assert_eq!(answer(refusal)["ok"], false);
         assert!(ow_job_start(std::ptr::null(), None, std::ptr::null_mut(), std::ptr::null_mut()).is_null());
+    }
+
+    #[test]
+    fn a_padded_buffer_whose_last_row_is_not_padded_is_read_and_a_huge_frame_is_not() {
+        let (root, posters, bundles) = setup();
+        let request = serde_json::json!({
+            "v": 1, "bundles": bundles, "posters": posters, "out": root.path().join("tight"),
+            "media": {"width": 4, "height": 3, "frames": 2, "fps": 30.0, "video": true}
+        });
+        let request = CString::new(request.to_string()).unwrap();
+        let job = ow_job_start(request.as_ptr(), None, std::ptr::null_mut(), std::ptr::null_mut());
+        // Rows of 12 bytes at a stride of 16; the last row stops at its pixels.
+        let mut pixels = vec![0u8; 16 * 2 + 12];
+        for row in 0..3 {
+            pixels[row * 16..row * 16 + 12].fill(77);
+        }
+        assert_eq!(ow_job_push_pixels(job, 0, pixels.as_ptr(), 4, 3, 16, OW_RGB, 0), 1);
+        assert!(unsafe { &*job }.rgb.iter().all(|&b| b == 77));
+        // Over the picture limit: refused before a byte is read.
+        assert_eq!(ow_job_push_pixels(job, 1, pixels.as_ptr(), 20_000, 20_000, 60_000, OW_RGB, 0), 0);
+        ow_job_free(job);
     }
 }

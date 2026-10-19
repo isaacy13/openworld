@@ -445,6 +445,18 @@
         }
       }
     },
+    "internal": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scan library failed. Refusing."
+          }
+        }
+      }
+    },
     "leave_missing": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -517,6 +529,18 @@
         }
       }
     },
+    "motion_clip_unread": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video in this motion photo was not scanned."
+          }
+        }
+      }
+    },
     "no_agency": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -573,6 +597,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "The decoder did not report a frame rate. Refusing."
+          }
+        }
+      }
+    },
+    "no_posters_in_class": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The poster pack has no posters in the classes you chose. Refusing."
           }
         }
       }

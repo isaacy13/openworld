@@ -66,7 +66,9 @@ pub fn load(bundle: &Bundle, accelerate: bool) -> Result<FaceModels, String> {
     let embedder_bytes = bundle.verified_bytes("embedder").map_err(|err| err.text)?;
     let (mut detector, provider) = crate::runtime::session(&detector_bytes, accelerate)
         .map_err(|err| format!("The detector did not load. Refusing. {err}"))?;
-    let (mut embedder, _) = crate::runtime::session(&embedder_bytes, accelerate)
+    // The cutoff was measured on CPU embeddings, and a provider that drifts would
+    // move scores near it. Five embeddings a face cost little on the CPU.
+    let (mut embedder, _) = crate::runtime::session(&embedder_bytes, false)
         .map_err(|err| format!("The embedder did not load. Refusing. {err}"))?;
     let side = square_side(&detector);
     let detector_kind = check_detector(&mut detector, side.unwrap_or(640))?;

@@ -39,6 +39,9 @@ pub enum MediaError {
 
 /// A picture with more pixels than this is refused before it is decoded: 120 megapixels.
 pub const MAX_PIXELS: u64 = 120_000_000;
+/// A video with more pictures than this is refused: two days at 60 a second.
+/// Plans list frame numbers, and a header can claim any count.
+pub const MAX_FRAMES: u64 = 10_368_000;
 /// Pages of a TIFF, or frames of an animated WebP, read before refusing.
 const MAX_STILL_FRAMES: u64 = 10_000;
 /// A container header read into memory is never larger than this.
@@ -294,6 +297,11 @@ fn motion_clip(path: &Path) -> Result<Option<MotionClip>, MediaError> {
 /// `MicroVideoOffset` or a MotionPhoto item length is the video at the end of the file.
 /// A JPEG stores that length in an XMP marker. An AVIF or HEIF stores it in a `uuid` box,
 /// and the clip itself is an `mpvd` box. A Samsung trailer holds the clip before `SEFT` instead.
+/// The file carries a motion photo's clip, read from its headers only.
+pub fn has_motion_clip(path: &Path) -> bool {
+    !matches!(motion_video(path), MotionVideo::None)
+}
+
 fn motion_video(path: &Path) -> MotionVideo {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -1616,6 +1624,11 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (None, Some(presented)) => presented,
         (None, None) => return Err(MediaError::BadCodec),
     };
+    // The size FFmpeg will deliver, after any sample-aspect stretch.
+    fits(width, height)?;
+    if frames > MAX_FRAMES {
+        return Err(MediaError::TooLarge);
+    }
     Ok(Probe {
         width,
         height,

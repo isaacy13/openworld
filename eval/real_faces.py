@@ -1316,14 +1316,18 @@ def check(curve, published):
         failures.append(f"the score at FMR {CHECK_FMR:g} is missing ({here} here, {there} published)")
     elif abs(here - there) > CHECK_SCORE_TOLERANCE:
         failures.append(f"the score at FMR {CHECK_FMR:g} is {here:.4f} here and {there:.4f} published")
-    for name, sample, pub in sample_rates(curve, published):
+    rates = sample_rates(curve, published)
+    # Many rates are checked at once: each gets a wider interval so that all of
+    # them together hold at 95%, and a fixed sample does not fail by chance.
+    z = stats.z_for(sum(1 for _, sample, pub in rates if sample and pub and pub["trials"] and sample["trials"]))
+    for name, sample, pub in rates:
         if sample is None or pub is None:
             failures.append(f"{name}: missing ({'here' if sample is None else 'in the published curve'})")
         elif not pub["trials"]:
             continue
         elif not sample["trials"]:
             failures.append(f"{name}: no trials here, {pub['trials']} published")
-        elif not stats.agrees(pub["rate"], sample):
+        elif not stats.agrees(pub["rate"], sample, z):
             lo, hi = stats.interval(sample)
             failures.append(f"{name}: {sample['count']}/{sample['trials']} here; the published {pub['rate']:.6g} is outside [{lo:.6g}, {hi:.6g}]")
     return failures

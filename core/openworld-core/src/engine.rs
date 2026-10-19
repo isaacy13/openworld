@@ -258,11 +258,15 @@ impl Engine {
         if !self.take_sample(index) {
             return true;
         }
-        if self.det_long == 0 {
-            self.original_long = frame.width().max(frame.height());
-            self.det_long = auto_long_side(self.original_long, self.perception.min_face_px());
+        // Sized per frame: a motion photo's cover or a later TIFF page can be larger
+        // than the first picture. The report names the largest.
+        let original_long = frame.width().max(frame.height());
+        let det_long = auto_long_side(original_long, self.perception.min_face_px());
+        if original_long > self.original_long {
+            self.original_long = original_long;
+            self.det_long = det_long;
         }
-        let detections = match self.perception.detect(frame, self.det_long) {
+        let detections = match self.perception.detect(frame, det_long) {
             Ok(found) => found,
             Err(message) => {
                 self.failure = Some(runtime_line(&message));

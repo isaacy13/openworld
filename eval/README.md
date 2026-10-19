@@ -17,7 +17,7 @@ Real FBI posters stay off. The curve says `real_posters_allowed: false`, and not
 - **Hardware.** The machine, the provider (CPU), and `openworld bench`: timings per provider and how far an accelerated provider's scores drift from the CPU's.
 - **Chance per scan.** Expected false candidates = FMR x posters x compared faces, for 50, 200, and 1,000 posters and 10, 100, and 1,000 faces, with the upper bound. `chance.fmr_at_cutoff` drives the line each scan prints.
 
-The photos are downloaded into `--data` and refused unless their SHA-256 matches the pins in `real_faces.py`. No photo is committed. Only counts, rates, and thresholds are written.
+The photos are downloaded into `--data` and refused unless their SHA-256 matches the pins in `real_faces.py`. CALFW and CPLFW are pinned as whole sets, so only a full run checks them; a sampled run says so in its log. No photo is committed. Only counts, rates, and thresholds are written.
 
 ## Run
 

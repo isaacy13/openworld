@@ -370,3 +370,13 @@ fn a_phone_job_that_declares_a_hundred_frames_and_pushes_two_is_incomplete() {
     assert_eq!(report["reason"]["code"], "not_fully_decoded");
     assert_eq!(report["counts"]["frames_declared"], 100);
 }
+
+#[test]
+fn a_video_stretched_past_the_pixel_limit_by_its_sample_aspect_is_refused() {
+    let lab = Lab::new();
+    // 1920x1080 shown 100 times as wide: 192,000 x 1080, 207 megapixels a frame.
+    let clip = lab.path("wide.mp4");
+    encode(lab.dir.path(), &[blank(1920, 1080), blank(1920, 1080)], 25, &["-c:v", "libx264", "-vf", "setsar=100"], &clip);
+    assert!(matches!(decode::probe(&clip), Err(decode::MediaError::TooLarge)));
+    assert_refused(&lab.scan(&clip), copy::R_TOO_LARGE);
+}

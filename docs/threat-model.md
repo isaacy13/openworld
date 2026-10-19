@@ -25,7 +25,7 @@ What OpenWorld protects, from whom, and how. Scope: the v0 apps (import-only, on
 | **Malicious media** (decompression bombs, malformed containers, argument injection). | Pictures over 120 MP refuse before decoding; frames are streamed one at a time; container headers are read by seeking with fixed bounds; parsers are iterative with depth limits; FFmpeg reads only local `file:` inputs with a protocol whitelist; FFmpeg's error pipe is drained; no panic crosses the FFI boundary. |
 | **Destroying user files** through a crafted result path. | A scan only writes to a new or empty folder or one it marked; it refuses a folder that holds the input, the posters, or the bundles; delete and sweep touch only marked folders. |
 | **Overstating coverage** (a partial scan read as "no match"). | Complete needs a clean decode and an agreeing frame count. Every stop has a reason and makes the scan Incomplete. The clearance sentence is never shown on an incomplete scan. |
-| **A compromised build or dependency.** | ONNX Runtime and the weights are pinned by SHA-256. CI actions run with read-only tokens. Planned: SHA-pinned actions, signed release artifacts, an SBOM, cargo-deny in CI. |
+| **A compromised build or dependency.** | ONNX Runtime and the weights are pinned by SHA-256. CI actions run with read-only tokens, and cargo-deny checks licenses and advisories. Planned: SHA-pinned actions, signed release artifacts, an SBOM, Gradle dependency verification. |
 | **A compromised FBI origin.** | Out of scope for a checksum. The pack records what was fetched and when; a later on-disk edit fails the hash. |
 
 ## Trust boundaries

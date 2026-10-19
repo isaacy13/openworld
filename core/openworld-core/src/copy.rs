@@ -52,6 +52,7 @@ pub const STOPPED_HEAT: Copy = ("stopped_heat", "The device got too hot, so the 
 pub const STOPPED_BATTERY: Copy = ("stopped_battery", "The battery ran low, so the scan stopped.");
 pub const STOPPED_BACKGROUND: Copy = ("stopped_background", "The app left the screen, so the scan stopped.");
 pub const NOT_FULLY_DECODED: Copy = ("not_fully_decoded", "The file was not fully decoded.");
+pub const MOTION_CLIP_UNREAD: Copy = ("motion_clip_unread", "The video in this motion photo was not scanned.");
 /// For the shells: a scan the system ended, found at the next launch.
 pub const SCAN_KILLED: Copy = ("scan_killed", "The system closed OpenWorld before the scan finished.");
 pub const RESULT_UNWRITTEN: Copy = ("result_unwritten", "The result could not be written.");
@@ -129,6 +130,8 @@ pub const R_PACK_UNREADABLE: Copy = ("unreadable_pack", "The poster pack could n
 pub const R_PACK_VECTORS: Copy = ("bad_vectors", "The poster pack vectors are not valid for this bundle. Refusing.");
 pub const R_PACK_EMBEDDER: Copy = ("embedder_mismatch", "The poster pack was made with another embedder. Refusing.");
 pub const R_PACK_PERCEPTION: Copy = ("unknown_perception", "The poster pack perception is not recognized. Refusing.");
+pub const R_PACK_NO_CLASS: Copy = ("no_posters_in_class", "The poster pack has no posters in the classes you chose. Refusing.");
+pub const R_INTERNAL: Copy = ("internal", "The scan library failed. Refusing.");
 pub const R_FIXTURE_OFF: Copy = ("fixture_off", "This build does not read demo posters. Refusing.");
 pub const R_OUT_CREATE: Copy = ("out_create", "The output directory could not be created. Refusing.");
 pub const R_OUT_FOREIGN: Copy = ("out_foreign", "That folder is not empty and is not an OpenWorld result. Choose an empty folder. Refusing.");
@@ -253,13 +256,14 @@ pub fn product_copy() -> Value {
     let all: &[Copy] = &[
         POSSIBLE_CANDIDATE, NO_CLEARANCE, INCOMPLETE, NOT_COMPARED, BELOW_CUTOFF, FACE_UNSCORED, TOO_BRIEF, FIXTURE_MARKERS,
         NO_CLASS, CHOOSE_CLASS, CANCELLED, STOPPED_HEAT, STOPPED_BATTERY, STOPPED_BACKGROUND, NOT_FULLY_DECODED,
-        SCAN_KILLED, RESULT_UNWRITTEN, WHY_SMALL, WHY_UNALIGNED, WHY_CONFIDENCE, WHY_POSE, WHY_BLUR, WHY_EXPOSURE, BAND_NEAR, BAND_ABOVE,
+        MOTION_CLIP_UNREAD, SCAN_KILLED, RESULT_UNWRITTEN, WHY_SMALL, WHY_UNALIGNED, WHY_CONFIDENCE, WHY_POSE, WHY_BLUR, WHY_EXPOSURE, BAND_NEAR, BAND_ABOVE,
         BAND_WELL, LEAVING, NOT_SENDING, LEAVE_WANTED, LEAVE_MISSING, ONLY_FBI, UNAUTHENTICATED, ON_DEVICE, NOTHING_UPLOADED,
         NOBODY_ENROLLED, NO_TRAINING, NO_AGENCY, NOT_IDENTIFICATION, NOT_REAL_PROOF, OLD_FILE, TIMESTAMP_DISAGREE,
         POSTERS_STALE, CPU_NOTE, GPU_NOTE, HEAT_NOTE, ALREADY_WARM, BATTERY_NOTE, SUGGEST_COMPUTER, ESTIMATE_CAVEAT,
         ESTIMATE_ROUGH, BRIEF_FACE, COVERAGE_COMPLETE, COVERAGE_MEASURED, NOT_MEASURED, CHANCE_UNKNOWN, BUNDLE_NOTE, NO_CAMERA,
         R_UNREADABLE, R_BAD_CODEC, R_NO_FPS, R_TOO_LARGE, R_NO_PROGRAM, R_CATALOG, R_NO_BUNDLE, R_NO_WEIGHTS, R_RUNTIME,
         R_PACK_MISSING, R_PACK_HASH, R_PACK_EXPIRED, R_PACK_OLD, R_PACK_FUTURE, R_PACK_UNREADABLE, R_PACK_VECTORS,
+        R_PACK_NO_CLASS, R_INTERNAL,
         R_PACK_EMBEDDER, R_PACK_PERCEPTION, R_FIXTURE_OFF, R_OUT_CREATE, R_OUT_FOREIGN, R_OUT_OVERLAP, R_OUT_REPLACE,
         R_BAD_REQUEST, R_REAL_POSTERS_OFF, R_DELETE_FOREIGN, R_DELETE_FAILED, DELETED,
         class_note(true, true), class_note(true, false), class_note(false, true),
