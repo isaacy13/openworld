@@ -197,6 +197,10 @@ pub fn load_bundle(dir: &Path) -> Result<Bundle, Line> {
             "The bundle {id} says it is official, but it is not the manifest this build trusts. Refusing.",
         ));
     }
+    // A replaced official folder must not pass as the bundle the shells pre-select.
+    if !manifest.official && OFFICIAL_BUNDLES.iter().any(|(pin_id, _, _)| *pin_id == id) {
+        return Err(bundle_line("reserved_id", &id, "The bundle {id} is not official, but uses an official bundle's name. Refusing."));
+    }
     if !manifest.official && (!manifest.unofficial || !manifest.unofficial_notice.to_ascii_lowercase().contains("unofficial")) {
         return Err(bundle_line("unofficial_unstated", &id, "Bundle {id} is unofficial and the manifest does not say so. Refusing."));
     }
@@ -347,6 +351,9 @@ pub(crate) mod tests {
         let dir = dev_bundle(root.path(), "fast", 0.5, &[]);
         edit(&dir, "official = false", "official = true");
         assert_eq!(load_bundle(&dir).unwrap_err().code, "not_official");
+        // Honestly unofficial, it still cannot take the official name.
+        edit(&dir, "official = true", "official = false");
+        assert_eq!(load_bundle(&dir).unwrap_err().code, "reserved_id");
     }
 
     #[test]

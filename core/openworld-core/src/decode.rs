@@ -23,8 +23,11 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::SystemTime;
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
@@ -40,6 +43,65 @@ pub const MAX_PIXELS: u64 = 120_000_000;
 const MAX_STILL_FRAMES: u64 = 10_000;
 /// A container header read into memory is never larger than this.
 const MAX_HEADER_BYTES: u64 = 4 * 1024 * 1024;
+/// FFmpeg or ffprobe that writes nothing for this long is stopped: a crafted
+/// file must not hang a scan that no Stop can reach while the read blocks.
+const STALL: Duration = Duration::from_secs(120);
+
+/// Kills `child` when `limit` passes without a beat on the returned sender.
+/// Dropping the sender ends the watch. The handle says whether it killed.
+fn watch(child: &Arc<Mutex<Child>>, limit: Duration) -> (mpsc::Sender<()>, JoinHandle<bool>) {
+    let (beat, beats) = mpsc::channel();
+    let child = Arc::clone(child);
+    let dog = std::thread::spawn(move || loop {
+        match beats.recv_timeout(limit) {
+            Ok(()) => {}
+            Err(RecvTimeoutError::Disconnected) => return false,
+            Err(RecvTimeoutError::Timeout) => {
+                if let Ok(mut child) = child.lock() {
+                    let _ = child.kill();
+                }
+                return true;
+            }
+        }
+    });
+    (beat, dog)
+}
+
+trait WatchedOutput {
+    /// `Command::output`, stopped when the program goes `STALL` without writing.
+    fn watched_output(&mut self) -> std::io::Result<Output>;
+}
+
+impl WatchedOutput for Command {
+    fn watched_output(&mut self) -> std::io::Result<Output> {
+        let mut child = self.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        let (Some(mut stdout), Some(mut stderr)) = (child.stdout.take(), child.stderr.take()) else {
+            let _ = child.kill();
+            return Err(std::io::Error::other("no pipes"));
+        };
+        let errors = std::thread::spawn(move || {
+            let mut text = Vec::new();
+            let _ = stderr.read_to_end(&mut text);
+            text
+        });
+        let child = Arc::new(Mutex::new(child));
+        let (beat, dog) = watch(&child, STALL);
+        let mut out = Vec::new();
+        let mut chunk = [0u8; 64 * 1024];
+        while let Ok(n @ 1..) = stdout.read(&mut chunk) {
+            out.extend_from_slice(&chunk[..n]);
+            let _ = beat.send(());
+        }
+        drop(beat);
+        let stalled = dog.join().unwrap_or(true);
+        let status = child.lock().map_err(|_| std::io::Error::other("lock"))?.wait()?;
+        let stderr = errors.join().unwrap_or_default();
+        if stalled {
+            return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "stalled"));
+        }
+        Ok(Output { status, stdout: out, stderr })
+    }
+}
 
 fn fits(width: u32, height: u32) -> Result<(), MediaError> {
     if width == 0 || height == 0 {
@@ -1391,7 +1453,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         ])
         .args(["-protocol_whitelist", "file"])
         .arg(ffmpeg_input(path))
-        .output()
+        .watched_output()
         .map_err(|_| MediaError::BadCodec)?;
     if !output.status.success() {
         return Err(MediaError::BadCodec);
@@ -1524,7 +1586,7 @@ fn shown_video_stream(path: &Path) -> Result<usize, MediaError> {
         ])
         .args(["-protocol_whitelist", "file"])
         .arg(ffmpeg_input(path))
-        .output()
+        .watched_output()
         .map_err(|_| MediaError::BadCodec)?;
     if !output.status.success() {
         return Err(MediaError::BadCodec);
@@ -1587,7 +1649,7 @@ fn video_packets(path: &Path, shown: usize) -> Option<Packets> {
         ])
         .args(["-protocol_whitelist", "file"])
         .arg(ffmpeg_input(path))
-        .output()
+        .watched_output()
         .ok()?;
     if !output.status.success() {
         return None;
@@ -1737,6 +1799,8 @@ fn decode_video(path: &Path, info: &Probe, turn: bool, on_frame: &mut impl FnMut
         tail
     });
     let mut stdout = child.stdout.take().ok_or(MediaError::BadCodec)?;
+    let child = Arc::new(Mutex::new(child));
+    let (beat, dog) = watch(&child, STALL);
     let mut decoded = 0u64;
     let mut stopped = false;
     let mut extra = 0u64;
@@ -1747,7 +1811,10 @@ fn decode_video(path: &Path, info: &Probe, turn: bool, on_frame: &mut impl FnMut
         while filled < frame_bytes {
             match stdout.read(&mut buf[filled..]) {
                 Ok(0) => break,
-                Ok(n) => filled += n,
+                Ok(n) => {
+                    filled += n;
+                    let _ = beat.send(());
+                }
                 Err(_) => {
                     torn = true;
                     break;
@@ -1777,10 +1844,16 @@ fn decode_video(path: &Path, info: &Probe, turn: bool, on_frame: &mut impl FnMut
             break;
         }
     }
+    drop(beat);
+    let stalled = dog.join().unwrap_or(true);
+    let mut child = child.lock().map_err(|_| MediaError::BadCodec)?;
     if stopped || torn {
         let _ = child.kill();
     }
-    let finished = child.wait().map(|status| status.success()).unwrap_or(false);
+    let exited = child.wait().map(|status| status.success()).unwrap_or(false);
+    // A stalled FFmpeg was killed, so it did not finish.
+    let finished = exited && !stalled;
+    drop(child);
     let _ = errors.join();
     if decoded == 0 && !stopped {
         return Err(MediaError::BadCodec);
@@ -1962,7 +2035,7 @@ fn video_frame_delays(path: &Path) -> Option<Vec<f64>> {
         ])
         .args(["-protocol_whitelist", "file"])
         .arg(ffmpeg_input(path))
-        .output()
+        .watched_output()
         .ok()?;
     if !output.status.success() {
         return None;
@@ -2271,6 +2344,35 @@ fn read_tiff_pages(path: &Path) -> Result<Vec<RgbImage>, MediaError> {
 #[cfg(test)]
 mod tests {
     use super::open_oriented;
+
+    #[cfg(unix)]
+    fn sleeper() -> std::sync::Arc<std::sync::Mutex<std::process::Child>> {
+        let child = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+        std::sync::Arc::new(std::sync::Mutex::new(child))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_silent_program_is_stopped_and_a_beating_one_is_not() {
+        use std::time::{Duration, Instant};
+        let child = sleeper();
+        let start = Instant::now();
+        let (_beat, dog) = super::watch(&child, Duration::from_millis(200));
+        assert!(dog.join().unwrap(), "the silent program was stopped");
+        assert!(!child.lock().unwrap().wait().unwrap().success());
+        assert!(start.elapsed() < Duration::from_secs(5));
+
+        let child = sleeper();
+        let (beat, dog) = super::watch(&child, Duration::from_millis(200));
+        for _ in 0..6 {
+            std::thread::sleep(Duration::from_millis(50));
+            beat.send(()).unwrap();
+        }
+        drop(beat);
+        assert!(!dog.join().unwrap(), "a program that keeps writing is left alone");
+        assert!(child.lock().unwrap().try_wait().unwrap().is_none());
+        child.lock().unwrap().kill().unwrap();
+    }
 
     #[test]
     fn a_sample_aspect_that_does_not_fit_keeps_the_coded_width() {

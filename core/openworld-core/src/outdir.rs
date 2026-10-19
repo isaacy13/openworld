@@ -10,7 +10,7 @@
 use crate::copy::{self, Copy, Line};
 use crate::timeutil::parse_rfc3339;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 pub const MARKER: &str = ".openworld-result";
@@ -65,25 +65,25 @@ fn is_file(path: &Path) -> bool {
     path.exists() && !path.is_dir()
 }
 
-/// The absolute form of a path whose tail may not exist yet.
+/// The absolute form of a path whose tail may not exist yet. Parts are read in
+/// order: one that exists is resolved, links included, and a `..` after one that
+/// does not is applied by name, since a missing folder cannot be a link.
 fn absolute(path: &Path) -> PathBuf {
-    let mut existing = path.to_path_buf();
-    let mut tail = Vec::new();
-    while !existing.exists() {
-        match (existing.parent(), existing.file_name()) {
-            (Some(parent), Some(name)) => {
-                tail.push(name.to_os_string());
-                existing = parent.to_path_buf();
+    let mut out = if path.is_absolute() { PathBuf::new() } else { std::env::current_dir().and_then(|d| d.canonicalize()).unwrap_or_default() };
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
             }
-            _ => break,
+            Component::Normal(name) => {
+                out.push(name);
+                if let Ok(real) = out.canonicalize() {
+                    out = real;
+                }
+            }
+            Component::Prefix(_) | Component::RootDir => out.push(part.as_os_str()),
         }
-        if existing.as_os_str().is_empty() {
-            existing = PathBuf::from(".");
-        }
-    }
-    let mut out = existing.canonicalize().unwrap_or(existing);
-    for name in tail.into_iter().rev() {
-        out.push(name);
     }
     out
 }
@@ -179,9 +179,18 @@ mod tests {
         fs::write(&input, b"video").unwrap();
         let posters = root.path().join("posters");
         fs::create_dir_all(&posters).unwrap();
-        for out in [root.path().join("videos"), root.path().to_path_buf(), posters.join("result")] {
+        // A `..` after a folder that does not exist yet, and a link to the posters, lead inside too.
+        let sneaky = root.path().join("new/../posters/result");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&posters, root.path().join("link")).unwrap();
+        #[cfg(unix)]
+        let linked = Some(root.path().join("link/result"));
+        #[cfg(not(unix))]
+        let linked = None;
+        for out in [root.path().join("videos"), root.path().to_path_buf(), posters.join("result"), sneaky].into_iter().chain(linked) {
             assert_eq!(prepare(&out, &[&input, &posters]).unwrap_err(), Line::of(copy::R_OUT_OVERLAP), "{out:?}");
         }
+        assert!(!root.path().join("new").exists());
         assert!(input.is_file());
         // Beside the input is fine.
         prepare(&root.path().join("videos-result"), &[&input, &posters]).unwrap();
