@@ -151,8 +151,9 @@ struct TrackState {
     quality_last_t: f64,
     rejects: [u32; 6],
     top: Vec<Entry>,
-    /// The best frame, encoded, for the evidence picture of a candidate.
+    /// The best frame, encoded, for the evidence picture of a candidate, and its rank.
     best_frame: Option<(u64, Vec<u8>)>,
+    best_rank: f32,
     first_crop: Option<String>,
 }
 
@@ -331,6 +332,7 @@ impl Engine {
                     rejects: [0; 6],
                     top: Vec::new(),
                     best_frame: None,
+                    best_rank: f32::MIN,
                     first_crop: crop,
                 },
             );
@@ -365,8 +367,10 @@ impl Engine {
             Slot::Push => state.top.push(entry),
             Slot::Replace(i) => state.top[i] = entry,
         }
-        let best = state.top.iter().map(|e| e.rank).fold(f32::MIN, f32::max);
-        if measured.rank >= best {
+        // Encoding the evidence frame costs more than detecting, so it is redone
+        // only when a clearly better frame arrives.
+        if state.best_frame.is_none() || measured.rank > state.best_rank * 1.05 {
+            state.best_rank = measured.rank;
             state.best_frame = Some((index, encode_jpeg(&shrink(frame, EVIDENCE_LONG), 88)));
         }
         Ok(())
