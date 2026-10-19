@@ -1,5 +1,5 @@
 name: fbi-probe
-# Temporary: which User-Agent does api.fbi.gov accept from a GitHub runner? Removed after one run.
+# Temporary: which User-Agent do the FBI poster photo hosts accept from a GitHub runner? Removed after it answers.
 on:
   push:
     paths: [".github/workflows/fbi-probe.yml"]
@@ -10,10 +10,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - run: |
-          url='https://api.fbi.gov/wanted/v1/list?page=1&pageSize=1'
-          for ua in "" "OpenWorld/0.1.0" "OpenWorld/0.1.0 (OneX Engineering)" "OpenWorld/0.1.0 (+https://github.com/isaacy13/openworld)" "openworld-eval (+https://github.com/isaacy13/openworld)" "OpenWorld/0.1.0 (https://github.com/isaacy13/openworld)" "openworld-eval/1"; do
-            if [ -z "$ua" ]; then code=$(curl -sS -o /dev/null -w '%{http_code}' "$url"); else code=$(curl -sS -o /dev/null -w '%{http_code}' -A "$ua" "$url"); fi
-            echo "$code  ${ua:-curl default}"
-            sleep 2
+          list=$(curl -sS -A "OpenWorld/0.1.0" 'https://api.fbi.gov/wanted/v1/list?page=1&pageSize=3')
+          echo "$list" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(i["url"]); [print(" ", im.get("original"), "|", im.get("large")) for im in i.get("images", [])[:1]] for i in d["items"]]'
+          photo=$(echo "$list" | python3 -c 'import json,sys; d=json.load(sys.stdin); im=d["items"][0]["images"][0]; print(im.get("original") or im.get("large"))')
+          large=$(echo "$list" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["items"][0]["images"][0].get("large"))')
+          for u in "$photo" "$large"; do
+            for ua in "" "OpenWorld/0.1.0" "OpenWorld/0.1.0 (+https://github.com/isaacy13/openworld)" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"; do
+              if [ -z "$ua" ]; then code=$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' "$u"); else code=$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' -A "$ua" "$u"); fi
+              echo "$code  ${ua:-curl default}  $u"
+              sleep 2
+            done
           done
-          curl -sS -o /dev/null -w '%{http_code}  photo host\n' -A "OpenWorld/0.1.0" https://www.fbi.gov/wanted
