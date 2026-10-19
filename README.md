@@ -27,7 +27,7 @@ One Rust library (`core/`) does all of it. The apps only show what it returns ([
 
 | Bundle | Models | Cutoff | Measured |
 | --- | --- | --- | --- |
-| **Fast** (selected) | YuNet 2023mar (MIT) + SFace 2021dec (Apache-2.0) | 0.63: false match rate at or under one in a million on LFW | `eval/real_faces.py`; the result reads "Not measured yet" until `bundles/fast/curve.json` is published for this pipeline |
+| **Fast** (selected) | YuNet 2023mar (MIT) + SFace 2021dec (Apache-2.0) | 0.63, above the measured cutoff of 0.5923 | [`bundles/fast/curve.json`](bundles/fast/curve.json): 65 false matches in 81 million LFW pairs (8.0e-7). It misses 13% of LFW same-person pairs and 73% of cross-age pairs (CALFW). |
 | **Accurate** | Larger SCRFD + ResNet-100 ArcFace (no redistributable weights yet) | 0.60 | Not measured yet |
 
 Every result says how many false candidates chance alone would give that scan. With *f* the false match rate, *N* posters, and *M* faces, that is about *f·N·M*. It is why the cutoff is strict.
