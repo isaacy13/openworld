@@ -38,9 +38,9 @@ sealed interface ScanState {
         val bundleNote: Line? = null,
         val coverage: String = COMPLETE,
         val estimate: EstimateState = EstimateState.Loading,
-        /** Age and timestamp cautions for the file card. */
+        /** Age and timestamp cautions for the file card, from the core's estimate. */
         val warnings: List<Line> = emptyList(),
-        /** Every disclosure line, for the "What happens to this file" card. */
+        /** Every disclosure line, from the core's estimate, for the "What happens to this file" card. */
         val disclosure: List<Line> = emptyList(),
     ) : ScanState {
         val bothOff: Boolean get() = !missing && !wanted

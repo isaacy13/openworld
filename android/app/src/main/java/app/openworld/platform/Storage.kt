@@ -6,23 +6,34 @@ import android.content.res.AssetManager
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
-/** The in-progress marker, written synchronously so a killed process still leaves it. */
+/**
+ * In-progress marks, one per result folder, written synchronously so a killed process still leaves
+ * them. A mark whose scan is still running in this process (a recreated screen) is not a leftover.
+ */
 class PrefsMarker(context: Context) : ScanMarker {
     private val prefs = context.applicationContext.getSharedPreferences("scan", Context.MODE_PRIVATE)
 
     override fun begin(out: File) {
-        prefs.edit().putString(KEY, out.path).commit()
+        // Running first, so a leftover check between the two never sees an unclaimed mark.
+        running += out.path
+        prefs.edit().putString(KEY_PREFIX + out.path, out.path).commit()
     }
 
-    override fun end() {
-        prefs.edit().remove(KEY).commit()
+    override fun end(out: File) {
+        prefs.edit().remove(KEY_PREFIX + out.path).commit()
+        running -= out.path
     }
 
-    override fun leftover(): File? = prefs.getString(KEY, null)?.let(::File)
+    override fun leftovers(): List<File> = prefs.all.entries
+        .filter { it.key.startsWith(KEY_PREFIX) && it.key.removePrefix(KEY_PREFIX) !in running }
+        .map { File(it.key.removePrefix(KEY_PREFIX)) }
 
     private companion object {
-        const val KEY = "in_progress"
+        const val KEY_PREFIX = "in_progress:"
+        /** Scans begun in this process and not yet ended. Gone with the process, as a killed scan is. */
+        val running: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     }
 }
 

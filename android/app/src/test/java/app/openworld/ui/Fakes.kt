@@ -55,6 +55,8 @@ class FakeCore : Core {
                     .put("detection_line", line("detect_full")).put("coverage_line", line("coverage_complete"))
                     .put("notes", JSONArray().put(line("heat_note"))).put("caveat", line("estimate_caveat"))
                     .put("classes", line(if (canStart) "classes_both" else "choose_class")).put("can_start", canStart)
+                    .put("warnings", JSONArray().apply { if (request.has("file_mtime_unix")) put(line("old_file")) })
+                    .put("disclosure", JSONArray().apply { DISCLOSURE.forEach { put(line(it)) } })
             }
             "leave" -> leave(request.getString("url"))
             "delete" -> JSONObject().put("ok", true).put("deleted", true).put("headline", line("deleted"))
@@ -75,6 +77,12 @@ class FakeCore : Core {
         .put("preselected", preselected).put("curve_line", line("not_measured")).put("weights_ready", preselected).put("official", true)
 
     companion object {
+        /** The core's disclosure codes, in its order. */
+        val DISCLOSURE = listOf(
+            "on_device", "nothing_uploaded", "nobody_enrolled", "no_training", "no_agency",
+            "not_identification", "no_clearance", "unauthenticated", "not_real_proof",
+        )
+
         fun refusal(code: String): JSONObject =
             JSONObject().put("ok", false).put("status", "refused").put("refusal", code).put("headline", line(code))
     }
@@ -196,17 +204,22 @@ class FakeImports : Imports {
     override fun clear() = Unit
 }
 
-class FakeMarker(var path: File? = null) : ScanMarker {
+/** Marks that survive the process, and the scans running in this one, like [app.openworld.platform.PrefsMarker]. */
+class FakeMarker : ScanMarker {
+    val marks = mutableSetOf<File>()
+    val running = mutableSetOf<File>()
     val begun = mutableListOf<File>()
 
     override fun begin(out: File) {
         begun += out
-        path = out
+        running += out
+        marks += out
     }
 
-    override fun end() {
-        path = null
+    override fun end(out: File) {
+        marks -= out
+        running -= out
     }
 
-    override fun leftover(): File? = path
+    override fun leftovers(): List<File> = marks.filter { it !in running }
 }

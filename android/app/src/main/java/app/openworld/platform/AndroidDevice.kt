@@ -69,11 +69,14 @@ class AndroidDevice(context: Context) : Device {
         return Pair(level.toFloat() / scale, charging)
     }
 
-    /** The core's words for heat: nominal, fair, serious, critical. */
+    /**
+     * The core's words for heat, as Apple's thermal states use them: nominal, fair, serious, critical.
+     * The scan stops at serious ([PowerManager.THERMAL_STATUS_SEVERE]) and above.
+     */
     private fun thermalName(status: Int): String = when {
         status <= PowerManager.THERMAL_STATUS_NONE -> "nominal"
-        status == PowerManager.THERMAL_STATUS_LIGHT -> "fair"
-        status == PowerManager.THERMAL_STATUS_MODERATE -> "serious"
+        status <= PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+        status == PowerManager.THERMAL_STATUS_SEVERE -> "serious"
         else -> "critical"
     }
 

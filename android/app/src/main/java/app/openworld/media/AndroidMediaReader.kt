@@ -237,7 +237,6 @@ class AndroidMediaReader(private val activityManager: ActivityManager) : MediaRe
                         lastOutput = SystemClock.elapsedRealtime()
                     }
                     out >= 0 -> {
-                        lastOutput = SystemClock.elapsedRealtime()
                         val end = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         var keep = true
                         if (bufferInfo.size > 0) {
@@ -249,6 +248,8 @@ class AndroidMediaReader(private val activityManager: ActivityManager) : MediaRe
                             index++
                         }
                         decoder.releaseOutputBuffer(out, false)
+                        // The stall timer measures the decoder's silence, not the time the core took.
+                        lastOutput = SystemClock.elapsedRealtime()
                         if (!keep) return false
                         if (end) return true
                     }

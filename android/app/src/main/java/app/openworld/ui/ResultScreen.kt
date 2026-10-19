@@ -245,7 +245,7 @@ fun ResultScreen(
                 full { ToneCard(OpenWorldColors.status.candidate, Icons.Outlined.WarningAmber) { Text(text(banner)) } }
             }
             if (done.motionPhoto) {
-                full { ToneCard(OpenWorldColors.status.candidate, Icons.Outlined.WarningAmber) { Text(stringResource(R.string.motion_photo_note)) } }
+                full { ToneCard(OpenWorldColors.status.incomplete, Icons.Outlined.WarningAmber) { Text(stringResource(R.string.motion_photo_note)) } }
             }
             report.candidates.forEach { candidate ->
                 full { CandidateCard(candidate, onShowFrame = { frameOf = candidate.trackId }, onLeave = { onLeave(candidate) }) }
@@ -486,17 +486,14 @@ private fun DetailsCard(report: Report) {
                         Detail(R.string.details_classes, report.classes)
                         DetailText(
                             R.string.details_bundle,
-                            listOf("${report.bundleName} ${report.bundleVersion}".trim()) +
-                                report.weights.map { "${it.role}: ${it.name} · SHA-256 ${it.sha256}" },
+                            listOf("${report.bundleName} ${report.bundleVersion}".trim()),
+                            hashes = report.weights.map { "${it.role}: ${it.name} · SHA-256 ${it.sha256}" },
                         )
                         report.posters?.let { pack ->
                             DetailText(
                                 R.string.details_posters,
-                                listOf(
-                                    pack.id,
-                                    stringResource(R.string.details_created, pack.createdAt, pack.expiresAt),
-                                    "SHA-256 ${pack.sha256}",
-                                ),
+                                listOf(pack.id, stringResource(R.string.details_created, pack.createdAt, pack.expiresAt)),
+                                hashes = listOf("SHA-256 ${pack.sha256}"),
                             )
                         }
                         DetailText(R.string.details_device, listOfNotNull(report.provider.ifEmpty { null }, report.deviceNote?.let { text(it) }))
@@ -516,17 +513,15 @@ private fun Detail(label: Int, line: Line?) {
     if (line != null) DetailText(label, listOf(text(line)))
 }
 
+/** A labelled detail. `hashes` follow `values` in a monospace face. */
 @Composable
-private fun DetailText(label: Int, values: List<String>) {
-    if (values.all { it.isBlank() }) return
+private fun DetailText(label: Int, values: List<String>, hashes: List<String> = emptyList()) {
+    if ((values + hashes).all { it.isBlank() }) return
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        values.filter { it.isNotBlank() }.forEach { value ->
-            val mono = value.contains("SHA-256")
-            Text(
-                value,
-                style = if (mono) MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace) else MaterialTheme.typography.bodyMedium,
-            )
+        values.filter { it.isNotBlank() }.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        hashes.filter { it.isNotBlank() }.forEach {
+            Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
         }
     }
 }

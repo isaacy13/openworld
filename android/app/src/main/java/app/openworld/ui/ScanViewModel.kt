@@ -47,7 +47,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import kotlin.math.abs
 
 /**
  * The scan flow. Every core call and every decode runs on `env.io`; the screens only read [state].
@@ -60,6 +59,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     @Volatile private var copy = Copy.EMPTY
     @Volatile private var bundles: List<BundleRow> = emptyList()
     @Volatile private var bundleNote: Line? = null
+    /** The disclosure from the core's last estimate, for a new review and a shell-made report. */
+    @Volatile private var disclosure: List<Line> = emptyList()
     private val ready = CompletableDeferred<Unit>()
     /** One core call at a time outside a scan, so estimates never pile up. */
     private val calls = Mutex()
@@ -84,17 +85,18 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
             runCatching { env.imports.clear() }
             loadCatalog()
             val (pack, why) = checkPosters()
-            val leftover = env.marker.leftover()
-            if (leftover != null) {
-                env.core.call(request("delete") { put("out", leftover.path) })
-                env.marker.end()
+            // Only scans no longer running in this process: a recreated screen leaves its own scan alone.
+            val leftover = env.marker.leftovers()
+            for (out in leftover) {
+                env.core.call(request("delete") { put("out", out.path) })
+                env.marker.end(out)
             }
             _state.update { it.copy(demoBuild = version.optBoolean("demo_posters"), posters = pack, postersRefusal = why) }
             leftover
         }
         ready.complete(Unit)
         _state.update { s ->
-            val killed = leftover != null
+            val killed = leftover.isNotEmpty()
             val idle = s.screen is ScanState.Start && (s.screen as ScanState.Start).importing == null
             when {
                 killed && idle -> s.copy(ready = true, screen = ScanState.Done("", killedReport()))
@@ -186,7 +188,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
         probeJob?.cancel()
         estimateJob?.cancel()
         _state.update {
-            it.copy(screen = ScanState.Review(file = imported, bundleId = preselected(), disclosure = disclosure(true)))
+            it.copy(screen = ScanState.Review(file = imported, bundleId = preselected(), disclosure = disclosure))
         }
         probeJob = viewModelScope.launch {
             ready.await()
@@ -202,7 +204,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
             updateReview(imported) { r ->
                 val base = r.copy(bundles = bundles, bundleNote = bundleNote, bundleId = r.bundleId.takeIf { id -> bundles.any { it.id == id } } ?: preselected())
                 when (probe) {
-                    is Probe.Ready -> base.copy(media = MediaState.Ready(probe.info), warnings = cautions(imported, probe.info))
+                    is Probe.Ready -> base.copy(media = MediaState.Ready(probe.info))
                     is Probe.Refused -> base.copy(media = MediaState.Refused(copy.line(probe.code)))
                 }
             }
@@ -232,12 +234,17 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
             val answer = withContext(env.io) {
                 calls.withLock { env.core.call(scanRequest("estimate", review, info, null)) }
             }
-            val result = if (answer.optBoolean("ok")) {
-                EstimateState.Ready(Estimate.from(answer))
+            if (answer.optBoolean("ok")) {
+                // The file's warnings and the disclosure come from the core, as the estimate does.
+                val value = Estimate.from(answer)
+                if (value.disclosure.isNotEmpty()) disclosure = value.disclosure
+                updateReview(review.file) {
+                    it.copy(estimate = EstimateState.Ready(value), warnings = value.warnings, disclosure = value.disclosure)
+                }
             } else {
-                EstimateState.Refused(answer.line("headline") ?: copy.line(Refusal.BAD_CODEC))
+                val refused = EstimateState.Refused(answer.line("headline") ?: copy.line(Refusal.BAD_CODEC))
+                updateReview(review.file) { it.copy(estimate = refused) }
             }
-            updateReview(review.file) { it.copy(estimate = result) }
         }
     }
 
@@ -304,7 +311,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
             val faces = report.tracks.map { track -> faceOf(track, seen[track.trackId]) }
             return ScanState.Done(review.file.name, report, faces, motionPhoto = info.motionPhoto)
         } finally {
-            runCatching { env.marker.end() }
+            // This scan's own mark only; another scan's stays.
+            runCatching { env.marker.end(out) }
             runCatching { env.imports.delete(review.file) }
         }
     }
@@ -325,7 +333,7 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     private fun failedReport(out: File?) =
-        Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line("not_fully_decoded"), disclosure(false), out)
+        Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line("not_fully_decoded"), incompleteDisclosure(), out)
 
     /** Events arrive on the scan thread. */
     private fun onEvent(event: JSONObject, out: File, startedAt: Long) {
@@ -449,24 +457,13 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
 
     private fun preselected(): String = bundles.firstOrNull { it.preselected }?.id ?: bundles.firstOrNull()?.id ?: "fast"
 
-    /** The disclosure, by the core's codes. The clearance line only before or after a complete scan. */
-    private fun disclosure(includeClearance: Boolean): List<Line> =
-        DISCLOSURE.filter { includeClearance || it != "no_clearance" }.map { copy.line(it) }
-
     /**
-     * File cautions before Analyze. The core makes the same checks when the scan opens and puts
-     * them in the report; its estimate does not return them yet.
+     * The disclosure for a report the core never wrote: the core's last one, without the clearance
+     * line, which only a complete scan may show.
      */
-    private fun cautions(file: Imported, info: MediaInfo): List<Line> {
-        val mtime = file.mtimeUnix ?: return emptyList()
-        val out = mutableListOf<Line>()
-        if (env.now() / 1000 - mtime > OLD_FILE_SECONDS) out += copy.line("old_file")
-        val recorded = info.recordedUnix
-        if (info.video && recorded != null && abs(mtime - recorded) > DAY_SECONDS) out += copy.line("timestamps_disagree")
-        return out
-    }
+    private fun incompleteDisclosure(): List<Line> = disclosure.filter { it.code != NO_CLEARANCE }
 
-    private fun killedReport() = Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line(Shell.SCAN_KILLED), disclosure(false), null)
+    private fun killedReport() = Report.incomplete(copy.line("incomplete", "Incomplete."), copy.line(Shell.SCAN_KILLED), incompleteDisclosure(), null)
 
     private fun scanRequest(op: String?, review: ScanState.Review, info: MediaInfo, out: File?): JSONObject = request(op) {
         put("input", review.file.file.path)
@@ -524,13 +521,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     companion object {
-        /** The core's disclosure codes, in its order. */
-        val DISCLOSURE = listOf(
-            "on_device", "nothing_uploaded", "nobody_enrolled", "no_training", "no_agency",
-            "not_identification", "no_clearance", "unauthenticated", "not_real_proof",
-        )
-        private const val OLD_FILE_SECONDS = 30L * 86_400
-        private const val DAY_SECONDS = 86_400L
+        /** The disclosure line only a complete scan may show. */
+        private const val NO_CLEARANCE = "no_clearance"
 
         fun factory(env: AppEnv): ViewModelProvider.Factory = viewModelFactory {
             initializer { ScanViewModel(env) }

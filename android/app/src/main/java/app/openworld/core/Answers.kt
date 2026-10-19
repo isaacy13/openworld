@@ -67,6 +67,10 @@ data class Estimate(
     val caveat: Line?,
     val classes: Line?,
     val canStart: Boolean,
+    /** About the file itself: old, timestamps disagree. */
+    val warnings: List<Line>,
+    /** What the scan promises, shown before Analyze. */
+    val disclosure: List<Line>,
 ) {
     companion object {
         fun from(answer: JSONObject) = Estimate(
@@ -80,6 +84,8 @@ data class Estimate(
             caveat = answer.line("caveat"),
             classes = answer.line("classes"),
             canStart = answer.optBoolean("can_start"),
+            warnings = answer.lines("warnings"),
+            disclosure = answer.lines("disclosure"),
         )
     }
 }

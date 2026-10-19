@@ -166,7 +166,7 @@ fun ReviewScreen(
                 }
                 MediaState.Probing -> Unit
             }
-            item { DisclosureCard(review.disclosure, onReadAll = { readAll = true }) }
+            if (review.disclosure.isNotEmpty()) item { DisclosureCard(review.disclosure, onReadAll = { readAll = true }) }
         }
     }
     if (readAll) DisclosureSheet(review.disclosure, onDismiss = { readAll = false })
@@ -224,7 +224,10 @@ private fun FileCard(review: ScanState.Review) {
         }
         val caution = OpenWorldColors.status.candidate.content
         review.warnings.forEach { IconLine(Icons.Outlined.WarningAmber, text(it), tint = caution) }
-        if (info?.motionPhoto == true) IconLine(Icons.Outlined.WarningAmber, stringResource(R.string.motion_photo_note), tint = caution)
+        // Only the still is scanned, so the core ends the scan Incomplete: the incomplete tone, not a candidate's.
+        if (info?.motionPhoto == true) {
+            IconLine(Icons.Outlined.WarningAmber, stringResource(R.string.motion_photo_note), tint = OpenWorldColors.status.incomplete.content)
+        }
     }
 }
 
