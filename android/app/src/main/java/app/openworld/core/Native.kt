@@ -25,7 +25,8 @@ internal object Native {
         t
     }
 
-    @JvmStatic external fun call(request: ByteArray): ByteArray?
+    /** `sink` receives the call's events on this thread, or null. */
+    @JvmStatic external fun call(request: ByteArray, sink: EventSink?): ByteArray?
 
     /** 0 on refusal; then `refusal[0]` holds the refusal JSON. */
     @JvmStatic external fun jobStart(request: ByteArray, sink: EventSink?, refusal: Array<ByteArray?>): Long
@@ -76,23 +77,29 @@ internal object Native {
 
 /** The linked library. A library that did not load answers every call with a refusal. */
 class NativeCore(private val missing: () -> Line) : Core {
-    override fun call(request: JSONObject): JSONObject {
+    override fun call(request: JSONObject): JSONObject = send(request, null)
+
+    override fun call(request: JSONObject, onEvent: (JSONObject) -> Unit): JSONObject = send(request, sink(onEvent))
+
+    private fun send(request: JSONObject, sink: EventSink?): JSONObject {
         if (Native.loadError != null) return refusal(missing())
         return try {
-            val bytes = Native.call(request.toString().toByteArray(Charsets.UTF_8)) ?: return refusal(missing())
+            val bytes = Native.call(request.toString().toByteArray(Charsets.UTF_8), sink) ?: return refusal(missing())
             JSONObject(String(bytes, Charsets.UTF_8))
         } catch (t: Throwable) {
             refusal(missing())
         }
     }
 
+    /** A bad line is dropped; the answer or report still carries everything. */
+    private fun sink(onEvent: (JSONObject) -> Unit) = EventSink { bytes ->
+        val event = runCatching { JSONObject(String(bytes, Charsets.UTF_8)) }.getOrNull()
+        if (event != null) onEvent(event)
+    }
+
     override fun start(request: JSONObject, onEvent: (JSONObject) -> Unit): JobStart {
         if (Native.loadError != null) return JobStart.Refused(refusal(missing()))
-        val sink = EventSink { bytes ->
-            // A bad line is dropped; the report still carries every face.
-            val event = runCatching { JSONObject(String(bytes, Charsets.UTF_8)) }.getOrNull()
-            if (event != null) onEvent(event)
-        }
+        val sink = sink(onEvent)
         val refused = arrayOfNulls<ByteArray>(1)
         val handle = try {
             Native.jobStart(request.toString().toByteArray(Charsets.UTF_8), sink, refused)

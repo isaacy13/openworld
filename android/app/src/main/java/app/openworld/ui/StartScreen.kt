@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -68,6 +69,7 @@ fun StartScreen(
     onFiles: () -> Unit,
     onCancelImport: () -> Unit,
     onInstallDemo: () -> Unit,
+    onUpdatePosters: () -> Unit,
 ) {
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
@@ -89,6 +91,13 @@ fun StartScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                state.notAffiliated?.let { line ->
+                    Text(
+                        text = text(line),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 ChooseCard(start.importing, state.ready, onPhotos, onFiles, onCancelImport)
                 start.notice?.let { notice ->
                     ToneCard(tone = OpenWorldColors.status.error, icon = Icons.Outlined.ErrorOutline) {
@@ -101,7 +110,7 @@ fun StartScreen(
                     TrustChip(Icons.Outlined.NoPhotography, stringResource(R.string.trust_no_camera))
                 }
                 Spacer(Modifier.height(8.dp))
-                PosterFooter(state, onInstallDemo)
+                PosterFooter(state, onInstallDemo, onUpdatePosters)
                 Text(
                     text = stringResource(R.string.results_kept),
                     style = MaterialTheme.typography.bodySmall,
@@ -188,7 +197,7 @@ private fun TrustChip(icon: ImageVector, label: String) {
 }
 
 @Composable
-private fun PosterFooter(state: UiState, onInstallDemo: () -> Unit) {
+private fun PosterFooter(state: UiState, onInstallDemo: () -> Unit, onUpdatePosters: () -> Unit) {
     val pack = state.posters
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -217,13 +226,60 @@ private fun PosterFooter(state: UiState, onInstallDemo: () -> Unit) {
         if (pack == null && why != null && why.code != "missing_pack") {
             Text(text(why), style = MaterialTheme.typography.bodySmall, color = OpenWorldColors.status.error.content)
         }
-        if (pack == null && state.demoBuild && state.ready) {
-            OutlinedButton(onClick = onInstallDemo) {
-                Icon(Icons.Outlined.Science, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.posters_install_demo))
+        val update = state.update
+        val updating = update is PosterUpdate.Running
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (pack == null && state.demoBuild && state.ready) {
+                OutlinedButton(onClick = onInstallDemo, enabled = !updating) {
+                    Icon(Icons.Outlined.Science, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.posters_install_demo))
+                }
+            }
+            if (state.ready) {
+                OutlinedButton(onClick = onUpdatePosters, enabled = !updating) {
+                    Icon(Icons.Outlined.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.posters_update))
+                }
             }
         }
+        UpdateStatus(update)
+    }
+}
+
+/** Update posters' progress, then what it kept and left out, or its refusal, in quiet type. */
+@Composable
+private fun UpdateStatus(update: PosterUpdate) {
+    val style = MaterialTheme.typography.bodySmall
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    when (update) {
+        PosterUpdate.Idle -> Unit
+        is PosterUpdate.Running -> {
+            val pages = update.pages
+            Text(
+                text = when {
+                    update.posters > 0 -> stringResource(R.string.posters_update_checking, update.checked, update.posters)
+                    update.page == 0 -> stringResource(R.string.posters_update_reading)
+                    pages != null -> stringResource(R.string.posters_update_page_of, update.page, pages)
+                    else -> stringResource(R.string.posters_update_page, update.page)
+                },
+                style = style,
+                color = color,
+            )
+            if (update.posters > 0) {
+                LinearProgressIndicator(progress = { update.checked.toFloat() / update.posters }, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        is PosterUpdate.Done -> {
+            Text(pluralStringResource(R.plurals.posters_update_kept, update.kept.toInt(), update.kept), style = style, color = color)
+            update.skipped.forEach { row ->
+                Text(stringResource(R.string.posters_update_skipped, row.count, text(row.reason)), style = style, color = color)
+            }
+        }
+        is PosterUpdate.Refused -> Text(text(update.line), style = style, color = color)
     }
 }
 

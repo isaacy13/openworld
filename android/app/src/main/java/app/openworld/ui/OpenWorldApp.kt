@@ -45,6 +45,7 @@ fun OpenWorldApp(model: ScanViewModel, onPhotos: () -> Unit, onFiles: () -> Unit
                 onFiles = onFiles,
                 onCancelImport = model::cancelImport,
                 onInstallDemo = model::installDemoPosters,
+                onUpdatePosters = model::updatePosters,
             )
             is ScanState.Review -> ReviewScreen(
                 review = shown,

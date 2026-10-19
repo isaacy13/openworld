@@ -6,7 +6,7 @@
 //! on a worker thread, and feeds each [`Msg`] back through [`Model::apply`].
 //! What a result means is read from statuses and codes, never from English.
 
-use crate::calls::{BundleRow, FileFacts, Job, Msg};
+use crate::calls::{BundleRow, FileFacts, Job, Msg, Updated};
 use crate::places::Places;
 use crate::strings::{self, S};
 use openworld_core::copy::{self, Copy};
@@ -21,6 +21,26 @@ pub enum PackState {
     Checking,
     Installing,
     Ready(PackInfo),
+    Refused(Line),
+}
+
+/// How far Update posters has got, from its events.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UpdateProgress {
+    pub page: u32,
+    /// Unknown until the list says.
+    pub pages: Option<u32>,
+    pub checked: u64,
+    pub posters: u64,
+}
+
+/// Update posters: not run, running, or how the last one ended.
+#[derive(Clone, Debug, Default)]
+pub enum UpdateState {
+    #[default]
+    Idle,
+    Running(UpdateProgress),
+    Done(Updated),
     Refused(Line),
 }
 
@@ -160,6 +180,7 @@ pub struct Model {
     pub places: Places,
     pub bundles: Option<Result<Vec<BundleRow>, Line>>,
     pub pack: PackState,
+    pub update: UpdateState,
     pub file: Option<Chosen>,
     pub choice: Choice,
     pub estimate: EstimateState,
@@ -179,6 +200,7 @@ impl Model {
             places,
             bundles: None,
             pack: PackState::Checking,
+            update: UpdateState::Idle,
             file: None,
             choice: Choice { bundle: openworld_core::bundle::FAST_ID.into(), coverage: Coverage::Complete, missing: true, wanted: true },
             estimate: EstimateState::Pending,
@@ -205,11 +227,37 @@ impl Model {
     }
 
     pub fn install_demo(&mut self) -> Option<Job> {
-        if matches!(self.pack, PackState::Installing | PackState::Ready(_)) || self.scanning() {
+        if matches!(self.pack, PackState::Installing | PackState::Ready(_)) || self.updating() || self.scanning() {
             return None;
         }
         self.pack = PackState::Installing;
+        self.update = UpdateState::Idle;
         Some(Job::InstallDemo)
+    }
+
+    pub fn updating(&self) -> bool {
+        matches!(self.update, UpdateState::Running(_))
+    }
+
+    /// Fetch real posters into the posters folder with the selected bundle. A new pack replaces the demo pack.
+    pub fn update_posters(&mut self) -> Option<Job> {
+        if self.updating() || matches!(self.pack, PackState::Installing) || self.scanning() || self.closing {
+            return None;
+        }
+        self.update = UpdateState::Running(UpdateProgress::default());
+        Some(Job::UpdatePosters { bundle: self.choice.bundle.clone() })
+    }
+
+    /// What the footer says about Update posters: its progress, or how it ended.
+    pub fn update_lines(&self) -> Vec<Text> {
+        match &self.update {
+            UpdateState::Idle => Vec::new(),
+            UpdateState::Running(p) => vec![Text::Shell(strings::update_progress(p.page, p.pages, p.checked, p.posters))],
+            UpdateState::Done(updated) => std::iter::once(Text::Shell(strings::kept(updated.kept)))
+                .chain(updated.skipped.iter().map(|s| Text::Shell(strings::skipped(s.count, strings::say(&s.reason)))))
+                .collect(),
+            UpdateState::Refused(line) => vec![Text::Core(line.clone())],
+        }
     }
 
     /// Poster counts for the class chips. Zero until a pack is ready.
@@ -352,6 +400,12 @@ impl Model {
                     return self.estimate_job().into_iter().collect();
                 }
             }
+            Msg::Updated(result) => {
+                self.update = match result {
+                    Ok(updated) => UpdateState::Done(updated),
+                    Err(line) => UpdateState::Refused(line),
+                };
+            }
             Msg::Facts { ticket, result } => {
                 if let Some(file) = self.file.as_mut().filter(|_| ticket == self.file_ticket) {
                     file.facts = Some(result);
@@ -392,6 +446,22 @@ impl Model {
     }
 
     fn on_event(&mut self, event: Event) {
+        match event {
+            Event::PostersPage { page, pages } => {
+                if let UpdateState::Running(p) = &mut self.update {
+                    (p.page, p.pages) = (page, pages);
+                }
+            }
+            Event::PostersChecked { checked, posters } => {
+                if let UpdateState::Running(p) = &mut self.update {
+                    (p.checked, p.posters) = (checked, posters);
+                }
+            }
+            event => self.on_scan_event(event),
+        }
+    }
+
+    fn on_scan_event(&mut self, event: Event) {
         let Phase::Scanning(scan) = &mut self.phase else {
             return;
         };
@@ -748,6 +818,60 @@ mod tests {
         assert_eq!(refusal_hint("bad_codec"), S::HintChooseFile);
         assert_eq!(refusal_hint("future_pack"), S::HintCheckClock);
         assert_eq!(refusal_hint("old_pack"), S::HintInstallDemo);
+    }
+
+    #[test]
+    fn update_posters_refuses_calmly_and_keeps_the_pack() {
+        // No pack yet: the refusal leaves nothing behind.
+        let root = tempfile::tempdir().unwrap();
+        let mut model = Model::new(Places::new(root.path(), bundles()));
+        let jobs = model.startup();
+        drive(&mut model, jobs);
+        let job = model.update_posters().unwrap();
+        assert!(model.updating());
+        assert!(model.update_posters().is_none());
+        assert!(model.install_demo().is_none());
+        drive(&mut model, vec![job]);
+        assert!(matches!(&model.update, UpdateState::Refused(line) if line.is(copy::R_REAL_POSTERS_OFF)));
+        assert_eq!(model.update_lines(), vec![Text::Core(Line::of(copy::R_REAL_POSTERS_OFF))]);
+        assert!(matches!(model.pack, PackState::Refused(ref l) if l.is(copy::R_PACK_MISSING)));
+        assert!(!model.places.posters.exists());
+        // Installing the demo pack clears the old answer.
+        assert!(model.install_demo().is_some());
+        assert!(model.update_lines().is_empty());
+
+        // Over the demo pack: refused the same way, and the demo pack stays.
+        let mut rig = rig();
+        let job = rig.model.update_posters().unwrap();
+        drive(&mut rig.model, vec![job]);
+        assert!(matches!(&rig.model.update, UpdateState::Refused(line) if line.is(copy::R_REAL_POSTERS_OFF)));
+        assert!(matches!(rig.model.pack, PackState::Ready(ref p) if p.demo));
+    }
+
+    #[test]
+    fn update_progress_and_answer_come_from_the_core() {
+        let root = tempfile::tempdir().unwrap();
+        let mut model = Model::new(Places::new(root.path(), bundles()));
+        assert!(model.update_lines().is_empty());
+        model.update_posters().unwrap();
+        let shown = |model: &Model| model.update_lines().iter().map(Text::show).collect::<Vec<_>>();
+        assert_eq!(shown(&model), ["Reading the FBI list…"]);
+        model.apply(Msg::Event(Event::PostersPage { page: 3, pages: Some(26) }));
+        assert_eq!(shown(&model), ["Reading the FBI list · page 3 of 26"]);
+        model.apply(Msg::Event(Event::PostersChecked { checked: 120, posters: 900 }));
+        assert_eq!(shown(&model), ["Checking poster photos · 120 of 900"]);
+        // The answer: what was kept, and what was left out by reason.
+        let updated: Updated = serde_json::from_value(serde_json::json!({
+            "posters": {"id": "fbi-0123456789abcdef", "source": "fbi", "sha256": "ab", "created_at": "2026-10-19T10:00:00Z",
+                        "expires_at": "2026-10-26T10:00:00Z", "missing": 300, "wanted": 580, "demo": false},
+            "kept": 880,
+            "skipped": [{"reason": Line::of(copy::SKIP_NO_FACE), "count": 20}],
+            "list_sha256": "cd",
+        }))
+        .unwrap();
+        model.apply(Msg::Updated(Ok(updated)));
+        assert!(!model.updating());
+        assert_eq!(shown(&model), ["Kept 880 posters.", "20 left out: No face was found on the poster photo."]);
     }
 
     #[test]

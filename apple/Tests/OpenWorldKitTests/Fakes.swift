@@ -22,7 +22,10 @@ final class FakeCore: Core, @unchecked Sendable {
         "leave": Samples.leaveOK,
         "delete": Samples.delete,
         "sweep": Samples.sweep,
+        "posters_update": Samples.postersUpdateOff,
     ]
+    /// Sent during `posters_update`, before it answers.
+    var updateEvents: [String] = []
     /// Set to refuse `ow_job_start`.
     var jobRefusal: String?
     /// Events sent on the first push.
@@ -42,6 +45,13 @@ final class FakeCore: Core, @unchecked Sendable {
         lock.withLock { _requests.append(request) }
         let op = (try? JSONSerialization.jsonObject(with: Data(request.utf8)) as? [String: Any])?["op"] as? String ?? ""
         return answers[op] ?? #"{"ok":false,"refusal":"internal","headline":{"code":"internal","text":"The scan library failed. Refusing."}}"#
+    }
+
+    func call(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> String {
+        if request.contains(#""op":"posters_update""#) {
+            updateEvents.forEach(onEvent)
+        }
+        return call(request)
     }
 
     func startJob(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> JobStart {

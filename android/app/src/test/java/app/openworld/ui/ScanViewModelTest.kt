@@ -24,6 +24,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Test
 import java.io.File
 
@@ -75,6 +77,54 @@ class ScanViewModelTest {
         assertEquals(1, state.posters?.missing)
         assertTrue(state.screen is ScanState.Start)
         assertEquals(listOf("copy", "version", "sweep", "bundles", "posters_check"), core.calls.map { it.getString("op") })
+        // The start screen's non-affiliation line comes from the core, by code.
+        assertEquals("not_affiliated", state.notAffiliated?.code)
+    }
+
+    @Test
+    fun updatePostersShowsTheCoresRefusalAndKeepsThePack() = runTest(dispatcher) {
+        val vm = model()
+        core.calls.clear()
+        vm.updatePosters()
+        advanceUntilIdle()
+        val ask = core.calls.single()
+        assertEquals("posters_update", ask.getString("op"))
+        assertEquals("/data/openworld/bundles", ask.getString("bundles"))
+        assertEquals("fast", ask.getString("bundle"))
+        assertEquals("/data/openworld/posters", ask.getString("posters"))
+        val update = vm.state.value.update
+        assertTrue(update is PosterUpdate.Refused)
+        assertEquals("real_posters_off", (update as PosterUpdate.Refused).line.code)
+        // The demo pack stays, and the refusal is not a snackbar.
+        assertEquals(true, vm.state.value.posters?.demo)
+        assertNull(vm.state.value.message)
+        // Installing the demo pack clears the old answer.
+        vm.installDemoPosters()
+        assertEquals(PosterUpdate.Idle, vm.state.value.update)
+    }
+
+    @Test
+    fun updatePostersShowsProgressThenWhatItKeptAndLeftOut() = runTest(dispatcher) {
+        val vm = model()
+        core.updateEvents = listOf(
+            JSONObject().put("event", "posters_page").put("page", 2).put("pages", 2),
+            JSONObject().put("event", "posters_checked").put("checked", 10).put("posters", 20),
+        )
+        var seen: PosterUpdate? = null
+        core.duringUpdate = { seen = vm.state.value.update }
+        core.update = JSONObject().put("ok", true).put("kept", 18).put("list_sha256", "cd")
+            .put("posters", JSONObject().put("id", "fbi-0123456789abcdef").put("demo", false).put("missing", 6).put("wanted", 12))
+            .put("skipped", JSONArray().put(JSONObject().put("reason", line("skip_no_face")).put("count", 2)))
+        core.posters = JSONObject().put("id", "fbi-0123456789abcdef").put("source", "fbi").put("sha256", "ef")
+            .put("created_at", "2026-10-19T10:00:00Z").put("expires_at", "2026-10-26T10:00:00Z").put("missing", 6).put("wanted", 12).put("demo", false)
+        vm.updatePosters()
+        advanceUntilIdle()
+        assertEquals(PosterUpdate.Running(page = 2, pages = 2, checked = 10, posters = 20), seen)
+        assertEquals(PosterUpdate.Done(18, listOf(Skipped(app.openworld.core.Line("skip_no_face", "skip_no_face"), 2))), vm.state.value.update)
+        // The new pack is read back the way a scan will read it.
+        assertEquals("posters_check", core.calls.last().getString("op"))
+        assertEquals(false, vm.state.value.posters?.demo)
+        assertEquals(12, vm.state.value.posters?.wanted)
     }
 
     @Test

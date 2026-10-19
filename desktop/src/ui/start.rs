@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Start: the title, the drop card, the trust chips, and the poster pack.
+//! Start: the title, the drop card, the trust chips, and the poster pack with Update posters.
 
 use super::widgets::{self, dim, hbox, text, vbox};
 use super::{dialogs, Ui};
@@ -22,7 +22,9 @@ pub struct Start {
     pack_line: gtk::Label,
     demo_note: gtk::Label,
     install: gtk::Button,
+    update: gtk::Button,
     installing: gtk::Spinner,
+    update_line: gtk::Label,
 }
 
 impl Start {
@@ -38,8 +40,16 @@ impl Start {
         tagline.add_css_class("ow-tagline");
         tagline.set_max_width_chars(48);
         tagline.set_halign(gtk::Align::Center);
+        // The core's sentence, by code: OpenWorld is not the FBI.
+        let affiliation = dim(strings::say(&Line::of(copy::NOT_AFFILIATED)));
+        affiliation.set_xalign(0.5);
+        affiliation.set_justify(gtk::Justification::Center);
+        affiliation.add_css_class("caption");
+        affiliation.set_max_width_chars(56);
+        affiliation.set_halign(gtk::Align::Center);
         title_box.append(&title);
         title_box.append(&tagline);
+        title_box.append(&affiliation);
         title_box.set_margin_top(12);
 
         let drop_card = vbox(14);
@@ -97,15 +107,23 @@ impl Start {
         install_row.set_halign(gtk::Align::Center);
         let install = gtk::Button::with_label(strings::text(S::InstallDemo));
         install.add_css_class("pill");
+        let update = gtk::Button::with_label(strings::text(S::UpdatePosters));
+        update.add_css_class("pill");
         let installing = gtk::Spinner::new();
         install_row.append(&install);
+        install_row.append(&update);
         install_row.append(&installing);
+        let update_line = dim("");
+        update_line.set_xalign(0.5);
+        update_line.set_justify(gtk::Justification::Center);
+        update_line.add_css_class("caption");
         let kept = dim(strings::text(S::ResultsKept));
         kept.set_xalign(0.5);
         kept.add_css_class("caption");
         footer.append(&pack_row);
         footer.append(&demo_note);
         footer.append(&install_row);
+        footer.append(&update_line);
         footer.append(&kept);
 
         content.append(&title_box);
@@ -123,7 +141,7 @@ impl Start {
         content.set_valign(gtk::Align::Center);
         let scroller = widgets::scroller(&content, 640, narrow);
         let (page, _) = widgets::page(strings::text(S::AppName), "start", &header, &scroller);
-        Self { page, content, drop_card, choose, badge, pack_line, demo_note, install, installing }
+        Self { page, content, drop_card, choose, badge, pack_line, demo_note, install, update, installing, update_line }
     }
 
     pub fn wire(&self, ui: &Rc<Ui>) {
@@ -137,6 +155,12 @@ impl Start {
         self.install.connect_clicked(move |_| {
             if let Some(ui) = weak.upgrade() {
                 ui.install_demo();
+            }
+        });
+        let weak = Rc::downgrade(ui);
+        self.update.connect_clicked(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                ui.update_posters();
             }
         });
         let about = gio::SimpleAction::new("about", None);
@@ -171,8 +195,10 @@ impl Start {
     pub fn update(&self, ui: &Rc<Ui>) {
         let model = ui.model.borrow();
         let (missing, wanted) = model.class_counts();
-        self.installing.set_spinning(matches!(model.pack, PackState::Installing));
-        self.installing.set_visible(matches!(model.pack, PackState::Installing));
+        let installing = matches!(model.pack, PackState::Installing);
+        let busy = installing || model.updating();
+        self.installing.set_spinning(busy);
+        self.installing.set_visible(busy);
         match &model.pack {
             PackState::Ready(info) => {
                 self.badge.set_visible(info.demo);
@@ -196,8 +222,13 @@ impl Start {
                 self.demo_note.set_visible(false);
             }
         }
-        self.install.set_visible(model.offers_demo() || matches!(model.pack, PackState::Installing));
-        self.install.set_sensitive(!matches!(model.pack, PackState::Installing));
+        self.install.set_visible(model.offers_demo() || installing);
+        self.install.set_sensitive(!busy);
+        self.update.set_sensitive(!busy);
+        // Progress, then what was kept and left out, or the refusal, in the footer's quiet type.
+        let lines = model.update_lines().iter().map(|t| t.show()).collect::<Vec<_>>().join("\n");
+        self.update_line.set_visible(!lines.is_empty());
+        self.update_line.set_text(&lines);
     }
 
     pub fn focus(&self) {

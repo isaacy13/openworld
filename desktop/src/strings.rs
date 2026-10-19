@@ -21,6 +21,7 @@ pub enum S {
     TrustNoCamera,
     NoPosters,
     InstallDemo,
+    UpdatePosters,
     DemoBadge,
     ResultsKept,
     Review,
@@ -109,6 +110,7 @@ pub fn text(id: S) -> &'static str {
         S::TrustNoCamera => "No camera",
         S::NoPosters => "No posters installed. Real FBI photos stay off.",
         S::InstallDemo => "Install demo posters",
+        S::UpdatePosters => "Update posters",
         S::DemoBadge => "Demo",
         S::ResultsKept => "Results are deleted after 7 days.",
         S::Review => "Review",
@@ -234,6 +236,28 @@ pub fn pack_footer(demo: bool, posters: usize, days_old: Option<u64>) -> String 
     format!("{kind} · {} · {fetched}", plural(posters as u64, "poster", "posters"))
 }
 
+/// "Reading the FBI list · page 3 of 26", then "Checking poster photos · 120 of 900".
+pub fn update_progress(page: u32, pages: Option<u32>, checked: u64, posters: u64) -> String {
+    if posters > 0 {
+        return format!("Checking poster photos · {} of {}", grouped(checked), grouped(posters));
+    }
+    match (page, pages) {
+        (0, _) => "Reading the FBI list…".to_string(),
+        (page, Some(pages)) => format!("Reading the FBI list · page {} of {}", grouped(page.into()), grouped(pages.into())),
+        (page, None) => format!("Reading the FBI list · page {}", grouped(page.into())),
+    }
+}
+
+/// "Kept 812 posters."
+pub fn kept(n: u64) -> String {
+    format!("Kept {}.", plural(n, "poster", "posters"))
+}
+
+/// "12 left out: No face was found on the poster photo."
+pub fn skipped(count: u64, reason: &str) -> String {
+    format!("{} left out: {reason}", grouped(count))
+}
+
 /// A class chip: "Missing · 1".
 pub fn class_chip(class: S, count: usize) -> String {
     format!("{} · {}", text(class), grouped(count as u64))
@@ -304,6 +328,12 @@ mod tests {
         assert_eq!(estimate_summary(1, 640, true), "1 frame · faces looked for at full resolution");
         assert_eq!(estimate_summary(1800, 960, false), "1,800 frames · faces looked for at 960 px");
         assert_eq!(pack_footer(true, 2, Some(0)), "Demo posters · 2 posters · fetched today");
+        assert_eq!(update_progress(0, None, 0, 0), "Reading the FBI list…");
+        assert_eq!(update_progress(3, Some(26), 0, 0), "Reading the FBI list · page 3 of 26");
+        assert_eq!(update_progress(3, None, 0, 0), "Reading the FBI list · page 3");
+        assert_eq!(update_progress(26, Some(26), 120, 1200), "Checking poster photos · 120 of 1,200");
+        assert_eq!(kept(1), "Kept 1 poster.");
+        assert_eq!(skipped(12, "No face was found on the poster photo."), "12 left out: No face was found on the poster photo.");
         assert_eq!(face_label(11, S::ChipCandidate), "Face from frame 12. Possible candidate.");
         assert_eq!(clock(42.4), "0:42");
         assert_eq!(clock(3723.0), "1:02:03");

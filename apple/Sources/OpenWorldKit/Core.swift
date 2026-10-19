@@ -9,6 +9,8 @@ import Glibc
 public protocol Core: Sendable {
     /// `ow_call`: one JSON request, one JSON answer.
     func call(_ request: String) -> String
+    /// `ow_call` with events (`posters_update`). `onEvent` runs on the calling thread before it returns.
+    func call(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> String
     /// `ow_job_start`. `onEvent` runs on the thread that pushes frames.
     func startJob(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> JobStart
 }

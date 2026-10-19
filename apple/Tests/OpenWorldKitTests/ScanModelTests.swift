@@ -21,6 +21,7 @@ final class ScanModelTests: XCTestCase {
 
     func testBootstrapReadsCopyBundlesAndPosters() async {
         let model = model()
+        XCTAssertNil(model.notAffiliated)
         await model.bootstrap(interruptedScans: 1)
         XCTAssertEqual(model.state, .start)
         XCTAssertEqual(model.bundles.map(\.id), ["fast", "accurate"])
@@ -31,8 +32,59 @@ final class ScanModelTests: XCTestCase {
         XCTAssertTrue(pack.demo)
         XCTAssertEqual(model.copy.line("incomplete").text, "Incomplete.")
         // The interrupted-scan card shows the core's disclosure, without the clearance line.
-        XCTAssertEqual(model.copy.disclosure.count, 8)
+        XCTAssertEqual(model.copy.disclosure.count, 13)
         XCTAssertFalse(model.copy.disclosure.contains { $0.code == "no_clearance" })
+        // The start screen's non-affiliation line, from the core by code.
+        XCTAssertEqual(model.notAffiliated, Line(code: "not_affiliated", text: "OpenWorld is not part of, or endorsed by, the FBI or any government agency."))
+    }
+
+    func testUpdatePostersIsTheCoresRefusalAndKeepsThePack() async {
+        let model = model()
+        await model.bootstrap()
+        await model.updatePosters()
+        XCTAssertEqual(model.update, .refused(Line(code: "real_posters_off", text: "Real FBI photos stay off. No bundle has a curve that allows them.")))
+        XCTAssertEqual(
+            core.requests.last { $0.contains("posters_update") },
+            Request.postersUpdate(bundles: places.bundles.path, bundle: "fast", posters: places.posters.path).json
+        )
+        // The demo pack stays, and the refusal is not an alert.
+        guard case .ready(let pack) = model.posters else { return XCTFail("posters") }
+        XCTAssertTrue(pack.demo)
+        XCTAssertNil(model.alert)
+        // Installing the demo pack clears the old answer.
+        await model.installDemoPosters()
+        XCTAssertEqual(model.update, .idle)
+    }
+
+    func testAnUpdateSaysWhatItKeptAndLeftOutThenReadsThePack() async {
+        core.answers["posters_update"] = Samples.postersUpdated
+        core.updateEvents = [Samples.postersPageEvent, Samples.postersCheckedEvent]
+        let model = model()
+        await model.bootstrap()
+        let checks = core.requests.filter { $0.contains("posters_check") }.count
+        await model.updatePosters()
+        guard case .done(let kept, let skipped) = model.update else { return XCTFail("done") }
+        XCTAssertEqual(kept, 880)
+        XCTAssertEqual(skipped.map(\.reason.code), ["skip_no_face", "skip_several_faces"])
+        XCTAssertEqual(skipped.map(\.count), [20, 4])
+        XCTAssertEqual(core.requests.filter { $0.contains("posters_check") }.count, checks + 1)
+        // Progress that arrives after the answer is dropped.
+        for _ in 0..<10 { await Task.yield() }
+        guard case .done = model.update else { return XCTFail("still done") }
+    }
+
+    func testPostersEventsMoveTheProgress() throws {
+        var progress = UpdateProgress()
+        progress.apply(try XCTUnwrap(PostersEvent.parse(Samples.postersPageEvent)))
+        XCTAssertEqual(progress.page, 3)
+        XCTAssertEqual(progress.pages, 26)
+        progress.apply(try XCTUnwrap(PostersEvent.parse(Samples.postersPageOpenEvent)))
+        XCTAssertEqual(progress.page, 1)
+        XCTAssertNil(progress.pages)
+        progress.apply(try XCTUnwrap(PostersEvent.parse(Samples.postersCheckedEvent)))
+        XCTAssertEqual(progress.checked, 120)
+        XCTAssertEqual(progress.posters, 900)
+        XCTAssertEqual(PostersEvent.parse(Samples.progressEvent), .other)
     }
 
     func testMissingPostersAreTheCoresRefusalAndBlockAnalyze() async throws {

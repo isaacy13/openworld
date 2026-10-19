@@ -17,6 +17,12 @@ struct StartView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let notAffiliated = model.notAffiliated {
+                Text(notAffiliated.localized())
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if model.interruptedScans > 0 {
                 interrupted
             }
@@ -139,18 +145,75 @@ struct StartView: View {
                         .font(.subheadline)
                 }
             }
-            if model.demoBuild, !postersReady {
-                Button("Install demo posters") {
-                    Task { await model.installDemoPosters() }
+            FlowLayout().callAsFunction {
+                if model.demoBuild, !postersReady {
+                    Button("Install demo posters") {
+                        Task { await model.installDemoPosters() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(updating)
+                    .accessibilityIdentifier("install-demo-posters")
+                }
+                Button {
+                    Task { await model.updatePosters() }
+                } label: {
+                    Label("Update posters", systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.bordered)
-                .accessibilityIdentifier("install-demo-posters")
+                .disabled(updating || model.isScanning)
+                .accessibilityIdentifier("update-posters")
             }
+            updateStatus
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             Text("Results are deleted after 7 days, or when the posters expire.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
         .padding(.top, 8)
+    }
+
+    /// Update posters' progress, then what it kept and left out, or the core's refusal, in quiet type.
+    @ViewBuilder
+    private var updateStatus: some View {
+        switch model.update {
+        case .idle:
+            EmptyView()
+        case .running(let progress):
+            if progress.posters > 0 {
+                ProgressView(value: Double(progress.checked), total: Double(progress.posters)) {
+                    Text("Checking poster photos · \(progress.checked) of \(progress.posters)")
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    if progress.page == 0 {
+                        Text("Reading the FBI list…")
+                    } else if let pages = progress.pages {
+                        Text("Reading the FBI list · page \(progress.page) of \(pages)")
+                    } else {
+                        Text("Reading the FBI list · page \(progress.page)")
+                    }
+                }
+            }
+        case .done(let kept, let skipped):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Kept \(kept) posters.")
+                ForEach(skipped, id: \.reason.code) { row in
+                    Text("\(row.count) left out: \(row.reason.localized())")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        case .refused(let line):
+            Text(line.localized())
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var updating: Bool {
+        if case .running = model.update { return true }
+        return false
     }
 
     private var postersReady: Bool {

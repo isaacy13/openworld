@@ -18,7 +18,7 @@ flatpak run app.openworld.OpenWorld
 
 `flatpak-cargo-generator.py` is in `flatpak/flatpak-builder-tools`. The generated file is not committed. The `dir` source is for local builds; a Flathub build names a tagged commit of this repository instead. The `rust-stable` extension for the GNOME 46 runtime (freedesktop 23.08) may be older than the Rust that `gtk4` 0.11 needs (1.92); a newer GNOME runtime fixes that.
 
-Results and the demo posters live in the sandbox's data folder (`~/.var/app/app.openworld.OpenWorld/data/openworld`).
+Results and the poster pack live in the sandbox's data folder (`~/.var/app/app.openworld.OpenWorld/data/openworld`). `--share=network` is for Update posters only: the scan library fetches the FBI list and poster photos itself, and a scan makes no request.
 
 ## Windows
 
