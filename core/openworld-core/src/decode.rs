@@ -124,7 +124,7 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
     }
     if let Some(clip) = motion_clip(path)? {
         let info = probe_video(&clip.path)?;
-        let mut stats = decode_video(&clip.path, &info, &mut on_frame)?;
+        let mut stats = decode_video(&clip.path, &info, true, &mut on_frame)?;
         // The cover is a picture in the file. A clip that does not show the face
         // must not clear it. An aborted clip is not followed by another frame.
         if stats.clean {
@@ -161,7 +161,7 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
     // tag on that file is the same turn a still PNG gets.
     if let Some(orientation) = png_exif_orientation(path) {
         if orientation != Orientation::NoTransforms {
-            return decode_video(path, &info, &mut |index, frame| {
+            return decode_video(path, &info, false, &mut |index, frame| {
                 let mut image = DynamicImage::ImageRgb8(frame.clone());
                 image.apply_orientation(orientation);
                 let shown = image.to_rgb8();
@@ -169,7 +169,7 @@ pub fn for_each_frame(path: &Path, mut on_frame: impl FnMut(u64, &RgbImage) -> b
             });
         }
     }
-    decode_video(path, &info, &mut on_frame)
+    decode_video(path, &info, true, &mut on_frame)
 }
 
 fn is_tiff(path: &Path) -> bool {
@@ -316,7 +316,7 @@ fn open_container_cover(path: &Path) -> Result<RgbImage, MediaError> {
     info.frames = 1;
     info.frames_exact = true;
     let mut cover = None;
-    decode_video(path, &info, &mut |_index, frame| {
+    decode_video(path, &info, true, &mut |_index, frame| {
         cover = Some(frame.clone());
         false
     })?;
@@ -722,9 +722,6 @@ fn decode_tiff(path: &Path, info: Probe, on_frame: &mut impl FnMut(u64, &RgbImag
 
 fn tiff_samples(color: tiff::ColorType) -> Result<(usize, u8), MediaError> {
     match color {
-        // Expanded here, not by FFmpeg, so every FFmpeg version shows the same colors.
-        // Packed (under 8-bit) samples are not read by the tiff crate; FFmpeg shows those.
-        tiff::ColorType::Palette(8) => Ok((1, 8)),
         tiff::ColorType::Gray(bits) if (8..=16).contains(&bits) => Ok((1, bits)),
         tiff::ColorType::RGB(bits) if (8..=16).contains(&bits) => Ok((3, bits)),
         tiff::ColorType::RGBA(bits) if (8..=16).contains(&bits) => Ok((4, bits)),
@@ -753,26 +750,6 @@ fn read_tiff_page<R: Read + Seek>(decoder: &mut tiff::decoder::Decoder<R>) -> Re
     let tag = tiff_tag(decoder);
     let decoded = decoder.read_image().map_err(|_| MediaError::BadCodec)?;
     let rgb = match (color, decoded) {
-        (tiff::ColorType::Palette(bits), tiff::decoder::DecodingResult::U8(bytes)) => {
-            let map = decoder
-                .find_tag(tiff::tags::Tag::ColorMap)
-                .ok()
-                .flatten()
-                .and_then(|value| value.into_u16_vec().ok())
-                .ok_or(MediaError::BadCodec)?;
-            let entries = 1usize << bits;
-            if map.len() < 3 * entries {
-                return Err(MediaError::BadCodec);
-            }
-            let pixels = (width as usize).checked_mul(height as usize).ok_or(MediaError::BadCodec)?;
-            let indices = bytes.get(..pixels).ok_or(MediaError::BadCodec)?;
-            let mut rgb = Vec::with_capacity(pixels * 3);
-            for &index in indices {
-                let i = usize::from(index);
-                rgb.extend_from_slice(&[(map[i] >> 8) as u8, (map[entries + i] >> 8) as u8, (map[2 * entries + i] >> 8) as u8]);
-            }
-            RgbImage::from_raw(width, height, rgb).ok_or(MediaError::BadCodec)?
-        }
         (tiff::ColorType::CMYK(8), tiff::decoder::DecodingResult::U8(bytes)) => cmyk_to_rgb(&bytes, width, height)?,
         (tiff::ColorType::YCbCr(8), tiff::decoder::DecodingResult::U8(bytes)) => ycbcr_to_rgb(&bytes, width, height)?,
         (_, tiff::decoder::DecodingResult::U8(bytes)) => samples_to_rgb(&bytes, width, height, samples)?,
@@ -912,7 +889,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         pages: false,
     };
     let mut frame = None;
-    let stats = decode_video(path, &stored, &mut |_, image| {
+    let stats = decode_video(path, &stored, false, &mut |_, image| {
         frame = Some(image.clone());
         true
     })?;
@@ -1711,13 +1688,20 @@ fn rgb_frame_len(width: u32, height: u32) -> Option<usize> {
     if bytes == 0 { None } else { Some(bytes) }
 }
 
-fn decode_video(path: &Path, info: &Probe, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
+/// `turn` lets FFmpeg turn the picture by the stream's display rotation. A
+/// picture whose orientation tag the scan applies itself is read as stored:
+/// newer FFmpeg also reads image tags, and the picture would turn twice.
+fn decode_video(path: &Path, info: &Probe, turn: bool, on_frame: &mut impl FnMut(u64, &RgbImage) -> bool) -> Result<DecodeStats, MediaError> {
     // Checked before FFmpeg starts. The unchecked product panics in debug when
     // both sides are near u32::MAX, and a wrapped length would allocate the wrong buffer.
     let frame_bytes = rgb_frame_len(info.width, info.height).ok_or(MediaError::BadCodec)?;
     let mut command = Command::new("ffmpeg");
     let mapped = format!("0:v:{}", info.shown_stream);
-    command.args(["-v", "error", "-xerror", "-protocol_whitelist", "file", "-i"]).arg(ffmpeg_input(path));
+    command.args(["-v", "error", "-xerror", "-protocol_whitelist", "file"]);
+    if !turn {
+        command.arg("-noautorotate");
+    }
+    command.arg("-i").arg(ffmpeg_input(path));
     // The same track the probe measured. The default map can be a different one.
     command.args(["-map", &mapped]);
     if info.square_pixels {
@@ -2313,7 +2297,7 @@ mod tests {
             motion_cover: false,
             pages: false,
         };
-        let result = super::decode_video(std::path::Path::new("missing-frame"), &info, &mut |_, _| true);
+        let result = super::decode_video(std::path::Path::new("missing-frame"), &info, true, &mut |_, _| true);
         assert!(matches!(result, Err(super::MediaError::BadCodec)));
     }
 
