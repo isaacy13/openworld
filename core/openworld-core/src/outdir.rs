@@ -11,7 +11,7 @@ use crate::copy::{self, Copy, Line};
 use crate::timeutil::parse_rfc3339;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 pub const MARKER: &str = ".openworld-result";
 pub const RESULT_FILE: &str = "result.json";
@@ -104,7 +104,9 @@ pub fn delete(dir: &Path) -> Result<Line, Line> {
 }
 
 /// Remove every expired result folder directly under `root`. Returns how many.
-/// A result whose file cannot be read is kept: it may be a scan still running.
+/// A folder without a readable result may be a scan still running, so it is
+/// kept until `RESULT_DAYS` after its marker was written: a crashed scan's
+/// leftovers do not stay forever.
 pub fn sweep(root: &Path, now: SystemTime) -> usize {
     let Ok(entries) = fs::read_dir(root) else {
         return 0;
@@ -119,12 +121,18 @@ pub fn sweep(root: &Path, now: SystemTime) -> usize {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
             .and_then(|value| value.get("expires_at").and_then(|v| v.as_str()).and_then(parse_rfc3339))
+            .or_else(|| marker_expiry(&dir))
             .is_some_and(|expires| expires <= now);
         if expired && fs::remove_dir_all(&dir).is_ok() {
             removed += 1;
         }
     }
     removed
+}
+
+fn marker_expiry(dir: &Path) -> Option<SystemTime> {
+    let written = fs::metadata(dir.join(MARKER)).and_then(|meta| meta.modified()).ok()?;
+    written.checked_add(Duration::from_secs(RESULT_DAYS * 86_400))
 }
 
 pub fn refusal_copy(line: &Line) -> Option<Copy> {
@@ -134,7 +142,6 @@ pub fn refusal_copy(line: &Line) -> Option<Copy> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[test]
     fn a_folder_that_is_not_a_result_is_never_emptied() {
@@ -210,5 +217,14 @@ mod tests {
         assert!(root.path().join("new").exists());
         assert!(foreign.exists());
         assert_eq!(sweep(root.path(), now + Duration::from_secs(30 * 86400)), 1);
+    }
+
+    #[test]
+    fn sweep_keeps_a_running_scan_but_not_a_crashed_one_forever() {
+        let root = tempfile::tempdir().unwrap();
+        prepare(&root.path().join("crashed"), &[]).unwrap();
+        let now = SystemTime::now();
+        assert_eq!(sweep(root.path(), now), 0);
+        assert_eq!(sweep(root.path(), now + Duration::from_secs((RESULT_DAYS + 1) * 86400)), 1);
     }
 }

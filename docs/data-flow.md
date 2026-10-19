@@ -10,7 +10,7 @@ Every piece of data OpenWorld touches, where it lives, and when it goes away. No
 | Face crops (the faces in the file) | The core | The result folder, `crops/`, at most one per face | With the result. |
 | Evidence frame (a candidate's frame, at most 1,600 px) | The core | The result folder, `frames/`, candidates only | With the result. |
 | Face templates (embeddings) | The core | Memory only, while the face is on screen | When the face's row is decided. Never written in a shipped build. |
-| `result.json` | The core | The result folder | After 7 days, or when the poster pack expires, whichever is first (`sweep` runs at launch), or when the user deletes it. |
+| `result.json` | The core | The result folder | After 7 days, or when the poster pack expires, whichever is first (`sweep` runs at launch), or when the user deletes it. A folder a crashed scan left without `result.json` goes 7 days after it was made. |
 | Poster pack (snapshot, vectors, poster photos) | Update posters (off), or the demo pack | App data, `posters/` | Refused after 7 days; replaced on update. |
 | Bundle weights | The app bundle / `fetch_weights.py` | App data, `bundles/` | With the app. |
 | Settings (last bundle and coverage) | The shell | Platform preferences | With the app. |
