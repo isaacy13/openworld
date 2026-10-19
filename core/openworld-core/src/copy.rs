@@ -73,8 +73,11 @@ pub const BAND_WELL: Copy = ("band_well", "Far past the locked cutoff.");
 // Leaving.
 pub const LEAVING: Copy = ("leaving", "You are leaving OpenWorld.");
 pub const NOT_SENDING: Copy = ("not_sending", "OpenWorld is not sending a report.");
-pub const LEAVE_WANTED: Copy = ("leave_wanted", "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.");
-pub const LEAVE_MISSING: Copy = ("leave_missing", "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678).");
+pub const LEAVE_WANTED: Copy = ("leave_wanted", "This opens an FBI wanted poster. Do not approach, follow, or confront anyone. If someone is in immediate danger, call 911. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov.");
+pub const LEAVE_MISSING: Copy = ("leave_missing", "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach, follow, or try to hold anyone, especially a child. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678).");
+pub const LOOKALIKE: Copy = ("lookalike", "Look-alikes, relatives, and old photos can pass the cutoff.");
+pub const DO_NOT_SHARE: Copy = ("do_not_share", "Do not post or share this result. A possible candidate can be a stranger who looks alike.");
+pub const NETWORK_NOTE: Copy = ("network_note", "Opening a poster visits fbi.gov, and updating posters downloads them from api.fbi.gov. Those sites see your device's internet address, as any website does.");
 pub const ONLY_FBI: Copy = ("only_fbi", "OpenWorld only opens an FBI page.");
 pub const UNAUTHENTICATED: Copy = ("unauthenticated", "This file is not authenticated.");
 
@@ -83,11 +86,28 @@ pub const ON_DEVICE: Copy = ("on_device", "This file stays on this device.");
 pub const NOTHING_UPLOADED: Copy = ("nothing_uploaded", "Nothing is uploaded.");
 pub const NOBODY_ENROLLED: Copy = ("nobody_enrolled", "Nobody is enrolled.");
 pub const NO_TRAINING: Copy = ("no_training", "OpenWorld does not train on this file.");
-pub const NO_AGENCY: Copy = ("no_agency", "OpenWorld does not contact an agency.");
+pub const NO_AGENCY: Copy = ("no_agency", "OpenWorld does not report anything to an agency.");
+pub const NOT_AFFILIATED: Copy = ("not_affiliated", "OpenWorld is not part of, or endorsed by, the FBI or any government agency.");
+pub const LAWFUL_USE: Copy = ("lawful_use", "Only scan files you have the right to use. Some places limit scanning other people's faces.");
+pub const GROUPS_UNMEASURED: Copy = ("groups_unmeasured", "How often this misidentifies people of different ages, sexes, and skin tones is not measured yet.");
 pub const NOT_IDENTIFICATION: Copy = ("not_identification", "A candidate is not an identification.");
 pub const NOT_REAL_PROOF: Copy = ("not_real_proof", "On-device does not mean the file is real.");
-pub const DISCLOSURE: &[Copy] =
-    &[ON_DEVICE, NOTHING_UPLOADED, NOBODY_ENROLLED, NO_TRAINING, NO_AGENCY, NOT_IDENTIFICATION, NO_CLEARANCE, UNAUTHENTICATED, NOT_REAL_PROOF];
+pub const DISCLOSURE: &[Copy] = &[
+    ON_DEVICE,
+    NOTHING_UPLOADED,
+    NOBODY_ENROLLED,
+    NOT_AFFILIATED,
+    NO_TRAINING,
+    NO_AGENCY,
+    NOT_IDENTIFICATION,
+    NO_CLEARANCE,
+    DO_NOT_SHARE,
+    GROUPS_UNMEASURED,
+    LAWFUL_USE,
+    UNAUTHENTICATED,
+    NOT_REAL_PROOF,
+    NETWORK_NOTE,
+];
 
 // File warnings.
 pub const OLD_FILE: Copy = ("old_file", "This file is older than about 30 days.");
@@ -181,9 +201,9 @@ pub fn estimate_class_line(missing: bool, wanted: bool) -> Copy {
 
 /// Lines on the way out to a poster. Only recency and timestamp warnings travel with them.
 pub fn leave_notes(wanted: bool, warnings: &[Line]) -> Vec<Line> {
-    let mut notes = vec![Line::of(NOT_SENDING), Line::of(if wanted { LEAVE_WANTED } else { LEAVE_MISSING })];
+    let mut notes = vec![Line::of(NOT_SENDING), Line::of(NOT_AFFILIATED), Line::of(if wanted { LEAVE_WANTED } else { LEAVE_MISSING })];
     notes.extend(warnings.iter().filter(|w| w.is(OLD_FILE) || w.is(TIMESTAMP_DISAGREE)).cloned());
-    notes.push(Line::of(UNAUTHENTICATED));
+    notes.extend([UNAUTHENTICATED, LOOKALIKE, DO_NOT_SHARE, NETWORK_NOTE].map(Line::of));
     notes
 }
 
@@ -255,7 +275,7 @@ pub fn chance_line(expected: f64, faces: u64, posters: usize, source: &str) -> L
     Line::with(
         "chance",
         format!(
-            "With {faces} {} compared to {posters} {}, chance alone gives {rounded} false {} (measured on {source}).",
+            "With {faces} {} compared to {posters} {}, chance alone gives {rounded} false {} (measured on {source}). The rate on your file can be higher, and can differ between groups of people.",
             plural(faces, "face", "faces"),
             plural(posters as u64, "poster", "posters"),
             if expected > 0.0 && expected < 1.5 { "candidate" } else { "candidates" }
@@ -275,7 +295,8 @@ pub fn product_copy() -> Value {
         NO_CLASS, CHOOSE_CLASS, CANCELLED, STOPPED_HEAT, STOPPED_BATTERY, STOPPED_BACKGROUND, NOT_FULLY_DECODED,
         MOTION_CLIP_UNREAD, SCAN_KILLED, RESULT_UNWRITTEN, WHY_SMALL, WHY_UNALIGNED, WHY_CONFIDENCE, WHY_POSE, WHY_BLUR, WHY_EXPOSURE, BAND_NEAR, BAND_ABOVE,
         BAND_WELL, LEAVING, NOT_SENDING, LEAVE_WANTED, LEAVE_MISSING, ONLY_FBI, UNAUTHENTICATED, ON_DEVICE, NOTHING_UPLOADED,
-        NOBODY_ENROLLED, NO_TRAINING, NO_AGENCY, NOT_IDENTIFICATION, NOT_REAL_PROOF, OLD_FILE, TIMESTAMP_DISAGREE,
+        NOBODY_ENROLLED, NO_TRAINING, NO_AGENCY, NOT_AFFILIATED, LAWFUL_USE, GROUPS_UNMEASURED, LOOKALIKE, DO_NOT_SHARE,
+        NETWORK_NOTE, NOT_IDENTIFICATION, NOT_REAL_PROOF, OLD_FILE, TIMESTAMP_DISAGREE,
         POSTERS_STALE, CPU_NOTE, GPU_NOTE, HEAT_NOTE, ALREADY_WARM, BATTERY_NOTE, SUGGEST_COMPUTER, ESTIMATE_CAVEAT,
         ESTIMATE_ROUGH, BRIEF_FACE, COVERAGE_COMPLETE, COVERAGE_MEASURED, NOT_MEASURED, CHANCE_UNKNOWN, BUNDLE_NOTE, NO_CAMERA,
         R_UNREADABLE, R_BAD_CODEC, R_NO_FPS, R_TOO_LARGE, R_NO_PROGRAM, R_CATALOG, R_NO_BUNDLE, R_NO_WEIGHTS, R_RUNTIME,

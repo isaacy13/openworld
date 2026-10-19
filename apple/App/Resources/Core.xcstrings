@@ -313,6 +313,18 @@
         }
       }
     },
+    "do_not_share": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do not post or share this result. A possible candidate can be a stranger who looks alike."
+          }
+        }
+      }
+    },
     "embedder_mismatch": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -421,6 +433,18 @@
         }
       }
     },
+    "groups_unmeasured": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How often this misidentifies people of different ages, sexes, and skin tones is not measured yet."
+          }
+        }
+      }
+    },
     "heat_note": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -457,6 +481,18 @@
         }
       }
     },
+    "lawful_use": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only scan files you have the right to use. Some places limit scanning other people's faces."
+          }
+        }
+      }
+    },
     "leave_missing": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -464,7 +500,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678)."
+            "value": "This opens an FBI missing-person poster. It is not a criminal accusation. Do not approach, follow, or try to hold anyone, especially a child. Missing-child posters typically list NCMEC at 1-800-THE-LOST (1-800-843-5678)."
           }
         }
       }
@@ -476,7 +512,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This opens an FBI wanted poster. Do not approach. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov."
+            "value": "This opens an FBI wanted poster. Do not approach, follow, or confront anyone. If someone is in immediate danger, call 911. Wanted posters typically list 1-800-CALL-FBI (1-800-225-5324) or tips.fbi.gov."
           }
         }
       }
@@ -489,6 +525,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "You are leaving OpenWorld."
+          }
+        }
+      }
+    },
+    "lookalike": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look-alikes, relatives, and old photos can pass the cutoff."
           }
         }
       }
@@ -541,6 +589,18 @@
         }
       }
     },
+    "network_note": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening a poster visits fbi.gov, and updating posters downloads them from api.fbi.gov. Those sites see your device's internet address, as any website does."
+          }
+        }
+      }
+    },
     "network_off": {
       "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
       "extractionState": "manual",
@@ -560,7 +620,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "OpenWorld does not contact an agency."
+            "value": "OpenWorld does not report anything to an agency."
           }
         }
       }
@@ -645,6 +705,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nobody is enrolled."
+          }
+        }
+      }
+    },
+    "not_affiliated": {
+      "comment": "A core sentence, looked up by its code (docs/api.md). Keep the meaning exact.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenWorld is not part of, or endorsed by, the FBI or any government agency."
           }
         }
       }

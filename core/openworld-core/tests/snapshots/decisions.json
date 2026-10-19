@@ -49,8 +49,12 @@
         "frame": 0,
         "leave_notes": [
           "not_sending",
+          "not_affiliated",
           "leave_missing",
-          "unauthenticated"
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
         ],
         "leaving": "leaving",
         "poster": "fixture-missing-a"
@@ -61,8 +65,12 @@
         "frame": 0,
         "leave_notes": [
           "not_sending",
+          "not_affiliated",
           "leave_wanted",
-          "unauthenticated"
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
         ],
         "leaving": "leaving",
         "poster": "fixture-wanted-b"
@@ -112,8 +120,12 @@
         "frame": 0,
         "leave_notes": [
           "not_sending",
+          "not_affiliated",
           "leave_missing",
-          "unauthenticated"
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
         ],
         "leaving": "leaving",
         "poster": "fixture-missing-a"

@@ -293,9 +293,9 @@ fn a_class_that_is_off_is_not_compared_and_the_cutoff_is_the_same() {
 fn the_way_out_names_the_poster_class_and_carries_only_the_file_warnings() {
     let leave = |report: &ScanReport, poster: &str| codes(&assert_candidate(report, poster).leave_notes).iter().map(|s| s.to_string()).collect::<Vec<_>>();
     let expect = |class: &str, warnings: &[&str]| {
-        let mut notes = vec!["not_sending".to_string(), class.to_string()];
+        let mut notes = vec!["not_sending".to_string(), "not_affiliated".to_string(), class.to_string()];
         notes.extend(warnings.iter().map(|w| w.to_string()));
-        notes.push("unauthenticated".into());
+        notes.extend(["unauthenticated", "lookalike", "do_not_share", "network_note"].map(String::from));
         notes
     };
 
@@ -328,8 +328,10 @@ fn the_way_out_names_the_poster_class_and_carries_only_the_file_warnings() {
     let pushed = job.finish(openworld_core::DecodeEnd { clean: true, declared_frames: declared, reason: None }, &mut |_| {});
     assert_eq!(leave(&pushed, WANTED_POSTER), expect("leave_wanted", &["old_file", "timestamps_disagree"]));
 
-    assert!(copy::LEAVE_WANTED.1.contains("Do not approach.") && copy::LEAVE_WANTED.1.contains("1-800-CALL-FBI (1-800-225-5324)"));
-    assert!(copy::LEAVE_MISSING.1.contains("Do not approach.") && copy::LEAVE_MISSING.1.contains("1-800-THE-LOST (1-800-843-5678)"));
+    assert!(copy::LEAVE_WANTED.1.contains("Do not approach") && copy::LEAVE_WANTED.1.contains("1-800-CALL-FBI (1-800-225-5324)"));
+    assert!(copy::LEAVE_WANTED.1.contains("call 911"));
+    assert!(copy::LEAVE_MISSING.1.contains("Do not approach, follow, or try to hold anyone, especially a child."));
+    assert!(copy::LEAVE_MISSING.1.contains("1-800-THE-LOST (1-800-843-5678)"));
     assert!(copy::LEAVE_MISSING.1.contains("not a criminal accusation"));
     assert!(!copy::LEAVE_MISSING.1.contains("CALL-FBI") && !copy::LEAVE_MISSING.1.contains("tips.fbi.gov"));
     // A tap opens that poster's FBI page, and only an FBI page.
