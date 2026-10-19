@@ -132,6 +132,10 @@ pub struct Probe {
     pub frames: u64,
     /// True when the container reported a frame count. An estimate from duration is not exact.
     pub frames_exact: bool,
+    /// The header's frame count, when it is fewer than the pictures the file
+    /// stores. `frames` is the stored count; a scan declares this one, so the
+    /// header that disagrees leaves it Incomplete.
+    pub header_short: Option<u64>,
     pub container_created: Option<SystemTime>,
     pub video: bool,
     /// The stored pixels are not square. Width and height are the displayed size.
@@ -763,6 +767,7 @@ fn probe_tiff(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: if moving { count as f64 } else { 0.0 },
         frames: count,
         frames_exact: true,
+        header_short: None,
         container_created: None,
         video: moving,
         square_pixels: false,
@@ -932,6 +937,7 @@ fn probe_tiff_player(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_short: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -955,6 +961,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_short: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -990,6 +997,7 @@ fn decode_tiff_player(path: &Path, on_frame: &mut impl FnMut(u64, &RgbImage) -> 
             duration_sec: 0.0,
             frames: 1,
             frames_exact: true,
+            header_short: None,
             container_created: None,
             video: false,
             square_pixels: false,
@@ -1112,6 +1120,7 @@ fn probe_image(path: &Path) -> Option<Probe> {
         duration_sec: 0.0,
         frames: 1,
         frames_exact: true,
+        header_short: None,
         container_created: None,
         video: false,
         square_pixels: false,
@@ -1360,6 +1369,7 @@ fn probe_animated_webp(path: &Path) -> Result<Probe, MediaError> {
         duration_sec: if moving { duration } else { 0.0 },
         frames: count,
         frames_exact: true,
+        header_short: None,
         container_created: None,
         video: moving,
         square_pixels: false,
@@ -1596,12 +1606,17 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (None, _) => false,
     };
     let shown_packets = read.as_ref().map(|read| read.shown);
+    // A header that counts fewer pictures than the file stores is not the
+    // file. The pictures a player lists are. Trusting the header would stop
+    // the decode early and call the rest of the file scanned. Its duration
+    // comes from the same short count, so it cannot shorten the plan either.
+    let header_short = match (nb, packets) {
+        (Some(listed), Some(counted)) if counted > listed && shown_packets.is_some_and(|shown| shown > listed) => Some(listed),
+        _ => None,
+    };
     let stored = match (nb, packets) {
         (Some(listed), Some(counted)) if counted > 0 && counted < listed => Some(counted),
-        // A header that counts fewer pictures than the file stores is not the
-        // file. The pictures a player lists are. Trusting the header would stop
-        // the decode early and call the rest of the file scanned.
-        (Some(listed), Some(counted)) if counted > listed && shown_packets.is_some_and(|shown| shown > listed) => shown_packets,
+        _ if header_short.is_some() => shown_packets,
         (Some(listed), _) => Some(listed),
         (None, packets) => packets,
     };
@@ -1619,7 +1634,7 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         (stored, _, _) => stored,
     };
     let frames = match (stored, presented) {
-        (Some(exact), Some(presented)) if header_matches_packets && presented > 0 && presented < exact => presented,
+        (Some(exact), Some(presented)) if header_matches_packets && header_short.is_none() && presented > 0 && presented < exact => presented,
         (Some(exact), _) => exact,
         (None, Some(presented)) => presented,
         (None, None) => return Err(MediaError::BadCodec),
@@ -1633,9 +1648,16 @@ fn probe_video(path: &Path) -> Result<Probe, MediaError> {
         width,
         height,
         fps,
-        duration_sec: if picture > 0.0 { picture } else { duration },
+        duration_sec: if header_short.is_some() {
+            frames as f64 / fps
+        } else if picture > 0.0 {
+            picture
+        } else {
+            duration
+        },
         frames,
         frames_exact: stored.is_some(),
+        header_short,
         container_created: created,
         video: true,
         square_pixels,
@@ -2497,6 +2519,7 @@ mod tests {
             duration_sec: 1.0,
             frames: 1,
             frames_exact: true,
+            header_short: None,
             container_created: None,
             video: true,
             square_pixels: false,

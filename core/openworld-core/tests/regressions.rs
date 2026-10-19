@@ -155,6 +155,12 @@ fn an_avi_whose_headers_claim_five_frames_of_a_hundred_is_read_to_the_end() {
     assert_eq!(String::from_utf8_lossy(&listed.stdout).trim(), "5");
 
     let probed = decode::probe(&lying).unwrap();
+    // The plan counts the pictures the file stores, not the header's five, and
+    // its length follows them.
+    assert_eq!(probed.frames, 100, "{probed:?}");
+    assert_eq!(probed.header_short, Some(5), "{probed:?}");
+    assert!((probed.duration_sec - 4.0).abs() < 0.01, "{probed:?}");
+    assert_eq!(estimate_for(&lab.request(&lying)).unwrap().frames_analyzed, 100);
     let report = lab.scan(&lying);
     eprintln!("lying AVI: {}", describe(&report));
     assert_not_a_silent_clearance(&report);
