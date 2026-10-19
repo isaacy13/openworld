@@ -2,7 +2,8 @@
 /* JNI over include/openworld.h for app.openworld.core.Native.
  *
  * Strings cross as UTF-8 byte arrays, never through NewStringUTF (modified UTF-8).
- * Events call EventSink.onEvent(byte[]) on the thread that pushes frames. An exception
+ * Events call EventSink.onEvent(byte[]) on the thread that pushes frames, or that makes
+ * the call (posters_update). An exception
  * thrown by the listener is cleared here so it never unwinds through the library.
  */
 #include <jni.h>
@@ -143,15 +144,17 @@ static jlong capacity(JNIEnv *env, jobject buffer, uint8_t **address) {
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_app_openworld_core_Native_call(JNIEnv *env, jclass clazz, jbyteArray request) {
+Java_app_openworld_core_Native_call(JNIEnv *env, jclass clazz, jbyteArray request, jobject sink) {
     char *text;
     char *answer;
+    /* Events arrive on this thread before ow_call returns, so the local reference stays valid. */
+    JobBox box = {NULL, sink};
     (void)clazz;
     text = to_cstr(env, request);
     if (text == NULL) {
         return NULL;
     }
-    answer = ow_call(text, NULL, NULL);
+    answer = ow_call(text, sink != NULL ? on_event : NULL, &box);
     free(text);
     return take_answer(env, answer);
 }

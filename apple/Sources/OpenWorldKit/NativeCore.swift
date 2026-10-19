@@ -13,6 +13,19 @@ public final class NativeCore: Core {
         return NativeCore.take(answer) ?? NativeCore.internalRefusal
     }
 
+    public func call(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> String {
+        // The call is synchronous, so the box lives exactly as long as its events can arrive.
+        let events = Unmanaged.passRetained(EventBox(onEvent))
+        defer { events.release() }
+        let answer = request.withCString { text in
+            ow_call(text, { json, user in
+                guard let json, let user else { return }
+                Unmanaged<EventBox>.fromOpaque(user).takeUnretainedValue().send(String(cString: json))
+            }, events.toOpaque())
+        }
+        return NativeCore.take(answer) ?? NativeCore.internalRefusal
+    }
+
     public func startJob(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> JobStart {
         // Retained until the job is finished or freed: events arrive during pushes and finish.
         let events = Unmanaged.passRetained(EventBox(onEvent))

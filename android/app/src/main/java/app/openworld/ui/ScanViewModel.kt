@@ -22,6 +22,7 @@ import app.openworld.core.Status
 import app.openworld.core.Stop
 import app.openworld.core.Track
 import app.openworld.core.line
+import app.openworld.core.objects
 import app.openworld.core.request
 import app.openworld.core.text
 import app.openworld.media.MediaInfo
@@ -92,7 +93,14 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
                 env.core.call(request("delete") { put("out", out.path) })
                 env.marker.end(out)
             }
-            _state.update { it.copy(demoBuild = version.optBoolean("demo_posters"), posters = pack, postersRefusal = why) }
+            _state.update {
+                it.copy(
+                    demoBuild = version.optBoolean("demo_posters"),
+                    posters = pack,
+                    postersRefusal = why,
+                    notAffiliated = copy.line(NOT_AFFILIATED).takeIf { line -> line.text.isNotEmpty() },
+                )
+            }
             leftover
         }
         ready.complete(Unit)
@@ -165,12 +173,56 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     fun installDemoPosters() {
+        if (_state.value.update is PosterUpdate.Running) return
+        _state.update { it.copy(update = PosterUpdate.Idle) }
         viewModelScope.launch {
             val answer = withContext(env.io) {
                 calls.withLock { env.core.call(request("posters_demo") { put("out", env.paths.posters.path) }) }
             }
             if (!answer.optBoolean("ok")) message(answer.line("headline"))
             refreshPosters()
+        }
+    }
+
+    /**
+     * Fetch real posters into the posters folder, replacing the demo pack. The core refuses until an
+     * official curve allows real posters. It is not under [calls]: it takes minutes, and estimates go on.
+     */
+    fun updatePosters() {
+        val s = _state.value
+        if (!s.ready || s.update is PosterUpdate.Running || s.screen is ScanState.Scanning) return
+        _state.update { it.copy(update = PosterUpdate.Running()) }
+        viewModelScope.launch {
+            val ask = request("posters_update") {
+                put("bundles", env.paths.bundles.path)
+                put("bundle", preselected())
+                put("posters", env.paths.posters.path)
+            }
+            val answer = withContext(env.io) { env.core.call(ask) { event -> onUpdateEvent(event) } }
+            val ok = answer.optBoolean("ok")
+            val done = if (ok) {
+                val skipped = objects(answer.optJSONArray("skipped")).mapNotNull { row ->
+                    row.line("reason")?.let { Skipped(it, row.optLong("count")) }
+                }
+                PosterUpdate.Done(answer.optLong("kept"), skipped)
+            } else {
+                PosterUpdate.Refused(answer.line("headline") ?: copy.line(answer.optString("refusal", "internal")))
+            }
+            _state.update { it.copy(update = done) }
+            if (ok) refreshPosters()
+        }
+    }
+
+    /** `posters_page` and `posters_checked`, on the update's thread. */
+    private fun onUpdateEvent(event: JSONObject) {
+        _state.update { s ->
+            val running = s.update as? PosterUpdate.Running ?: return@update s
+            val next = when (event.optString("event")) {
+                "posters_page" -> running.copy(page = event.optInt("page"), pages = if (event.isNull("pages")) null else event.optInt("pages"))
+                "posters_checked" -> running.copy(checked = event.optLong("checked"), posters = event.optLong("posters"))
+                else -> running
+            }
+            s.copy(update = next)
         }
     }
 
@@ -519,6 +571,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     }
 
     companion object {
+        private const val NOT_AFFILIATED = "not_affiliated"
+
         fun factory(env: AppEnv): ViewModelProvider.Factory = viewModelFactory {
             initializer { ScanViewModel(env) }
         }

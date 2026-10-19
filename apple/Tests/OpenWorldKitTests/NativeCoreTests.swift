@@ -28,6 +28,15 @@ final class NativeCoreTests: XCTestCase {
         Answers.decode(core?.call(request.json) ?? "", as: type)
     }
 
+    func testUpdatePostersRefusesUntilACurveAllowsRealPosters() throws {
+        let core = try linked()
+        let request = Request.postersUpdate(bundles: places.bundles.path, bundle: "fast", posters: places.posters.path).json
+        guard case .refused(let code, _) = Answers.decode(core.call(request) { _ in }, as: PostersUpdateAnswer.self) else {
+            return XCTFail("Update posters ran without a curve")
+        }
+        XCTAssertEqual(code, "real_posters_off")
+    }
+
     func testCallsAnswerWithTheContract() throws {
         _ = try linked()
         let version = try XCTUnwrap(ask(.version, VersionAnswer.self).value)

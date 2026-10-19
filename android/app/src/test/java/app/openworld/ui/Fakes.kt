@@ -30,13 +30,28 @@ class FakeCore : Core {
     var leave: (String) -> JSONObject = { url -> JSONObject().put("ok", true).put("message", line("leaving")).put("url", url) }
     var onStart: (JSONObject, (JSONObject) -> Unit) -> JobStart = { _, onEvent -> JobStart.Started(FakeJob(onEvent)) }
     var lastJob: FakeJob? = null
+    /** Sent during `posters_update`, before [update] answers. */
+    var updateEvents: List<JSONObject> = emptyList()
+    /** Runs after the update's events, before it answers, so a test can see its progress. */
+    var duringUpdate: () -> Unit = {}
+    /** The core's answer today: no curve allows real posters. */
+    var update: JSONObject = refusal("real_posters_off")
+
+    override fun call(request: JSONObject, onEvent: (JSONObject) -> Unit): JSONObject {
+        if (request.getString("op") == "posters_update") {
+            updateEvents.forEach(onEvent)
+            duringUpdate()
+        }
+        return call(request)
+    }
 
     override fun call(request: JSONObject): JSONObject {
         calls += request
         return when (request.getString("op")) {
             "copy" -> JSONObject().put("ok", true).put(
                 "copy",
-                JSONObject().put("incomplete", "Incomplete.").put("not_fully_decoded", "The file was not fully decoded."),
+                JSONObject().put("incomplete", "Incomplete.").put("not_fully_decoded", "The file was not fully decoded.")
+                    .put("not_affiliated", "OpenWorld is not part of, or endorsed by, the FBI or any government agency."),
             ).put("disclosure", JSONArray().apply { DISCLOSURE.filter { it != "no_clearance" }.forEach { put(line(it)) } })
             "version" -> JSONObject().put("ok", true).put("demo_posters", true)
             "sweep" -> JSONObject().put("ok", true).put("removed", 0)
@@ -61,6 +76,7 @@ class FakeCore : Core {
             "leave" -> leave(request.getString("url"))
             "delete" -> JSONObject().put("ok", true).put("deleted", true).put("headline", line("deleted"))
             "posters_demo" -> JSONObject().put("ok", true)
+            "posters_update" -> update
             else -> refusal("bad_request")
         }
     }

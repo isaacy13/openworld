@@ -102,6 +102,8 @@ public enum Request: Sendable {
     case estimate(ScanRequest)
     case postersCheck(posters: String)
     case postersDemo(out: String)
+    /// Fetch real posters into `posters` with `bundle`'s models.
+    case postersUpdate(bundles: String, bundle: String, posters: String)
     case leave(url: String)
     case delete(out: String)
     case sweep(root: String)
@@ -116,6 +118,8 @@ public enum Request: Sendable {
         case .estimate(let scan): return Self.encode(op: "estimate", scan)
         case .postersCheck(let posters): return Self.encode(op: "posters_check", ["posters": posters])
         case .postersDemo(let out): return Self.encode(op: "posters_demo", ["out": out])
+        case .postersUpdate(let bundles, let bundle, let posters):
+            return Self.encode(op: "posters_update", ["bundles": bundles, "bundle": bundle, "posters": posters])
         case .leave(let url): return Self.encode(op: "leave", ["url": url])
         case .delete(let out): return Self.encode(op: "delete", ["out": out])
         case .sweep(let root): return Self.encode(op: "sweep", ["root": root])

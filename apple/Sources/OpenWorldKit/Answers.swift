@@ -145,6 +145,54 @@ public struct PostersAnswer: Decodable, Equatable, Sendable {
     public var posters: PackInfo
 }
 
+/// `posters_update`: the new pack, how many posters were kept, and how many were left out, by reason.
+public struct PostersUpdateAnswer: Decodable, Equatable, Sendable {
+    public var posters: PackInfo
+    public var kept: Int
+    public var skipped: [SkippedPosters]
+    public var listSha256: String
+
+    enum CodingKeys: String, CodingKey {
+        case posters, kept, skipped
+        case listSha256 = "list_sha256"
+    }
+}
+
+/// Posters left out for one reason.
+public struct SkippedPosters: Decodable, Equatable, Sendable {
+    public var reason: Line
+    public var count: Int
+}
+
+/// What Update posters sends while it runs.
+public enum PostersEvent: Decodable, Equatable, Sendable {
+    /// A page of the FBI list was read. `pages` is nil until the list gives a total.
+    case page(page: Int, pages: Int?)
+    /// This many of the poster photos were checked.
+    case checked(checked: Int, posters: Int)
+    case other
+
+    enum CodingKeys: String, CodingKey {
+        case event, page, pages, checked, posters
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decode(String.self, forKey: .event) {
+        case "posters_page":
+            self = .page(page: try c.decode(Int.self, forKey: .page), pages: try c.decodeIfPresent(Int.self, forKey: .pages))
+        case "posters_checked":
+            self = .checked(checked: try c.decode(Int.self, forKey: .checked), posters: try c.decode(Int.self, forKey: .posters))
+        default:
+            self = .other
+        }
+    }
+
+    public static func parse(_ json: String) -> PostersEvent? {
+        try? JSONDecoder().decode(PostersEvent.self, from: Data(json.utf8))
+    }
+}
+
 public struct LeaveAnswer: Decodable, Equatable, Sendable {
     public var message: Line
     public var url: String

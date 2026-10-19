@@ -19,6 +19,16 @@
     <string name="posters_demo_badge">Demo posters</string>
     <string name="posters_none">No posters installed. Real FBI photos stay off.</string>
     <string name="posters_install_demo">Install demo posters</string>
+    <string name="posters_update">Update posters</string>
+    <string name="posters_update_reading">Reading the FBI list…</string>
+    <string name="posters_update_page">Reading the FBI list · page %1$d</string>
+    <string name="posters_update_page_of">Reading the FBI list · page %1$d of %2$d</string>
+    <string name="posters_update_checking">Checking poster photos · %1$d of %2$d</string>
+    <plurals name="posters_update_kept">
+        <item quantity="one">Kept %d poster.</item>
+        <item quantity="other">Kept %d posters.</item>
+    </plurals>
+    <string name="posters_update_skipped">%1$d left out: %2$s</string>
     <string name="posters_fetched_today">fetched today</string>
     <string name="posters_fetched_yesterday">fetched yesterday</string>
     <plurals name="posters_fetched_days">

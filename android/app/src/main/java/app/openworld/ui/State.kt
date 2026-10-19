@@ -19,6 +19,10 @@ data class UiState(
     val posters: PosterPack? = null,
     /** Why there is no usable pack, when there is none. */
     val postersRefusal: Line? = null,
+    /** Update posters: its progress, or how it ended. */
+    val update: PosterUpdate = PosterUpdate.Idle,
+    /** The core's `not_affiliated` line, for the start screen. */
+    val notAffiliated: Line? = null,
     val screen: ScanState = ScanState.Start(),
     /** A one-off notice for the snackbar. */
     val message: Line? = null,
@@ -79,6 +83,21 @@ sealed interface ScanState {
 }
 
 data class Importing(val name: String?, val progress: Float?)
+
+/** Update posters. The core fetches and checks every poster; this only carries its progress and answer. */
+sealed interface PosterUpdate {
+    data object Idle : PosterUpdate
+
+    /** `pages` is null until the list gives a total; `posters` is 0 until photos are checked. */
+    data class Running(val page: Int = 0, val pages: Int? = null, val checked: Long = 0, val posters: Long = 0) : PosterUpdate
+
+    data class Done(val kept: Long, val skipped: List<Skipped>) : PosterUpdate
+
+    data class Refused(val line: Line) : PosterUpdate
+}
+
+/** Posters left out for one reason. */
+data class Skipped(val reason: Line, val count: Long)
 
 sealed interface MediaState {
     data object Probing : MediaState

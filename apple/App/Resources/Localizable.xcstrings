@@ -25,6 +25,7 @@
       }
     },
     "%@: %@": {},
+    "%lld left out: %@": {},
     "%lld possible candidates. Review each one below.": {
       "localizations": {
         "en": {
@@ -80,6 +81,7 @@
     "Cancel": {},
     "Chance": {},
     "Check a photo or video you already have against public FBI missing and wanted posters, on this device.": {},
+    "Checking poster photos · %lld of %lld": {},
     "Choose a Photo or Video…": {},
     "Choose a photo or video": {},
     "Choose a photo or video (⌘O)": {},
@@ -110,6 +112,28 @@
     "GPU": {},
     "Install demo posters": {},
     "Keep scanning": {},
+    "Kept %lld posters.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Kept %lld poster."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Kept %lld posters."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Looking": {},
     "Missing": {},
     "Model bundle": {},
@@ -135,6 +159,9 @@
     "Preparing the file…": {},
     "Ran on": {},
     "Read all": {},
+    "Reading the FBI list · page %lld": {},
+    "Reading the FBI list · page %lld of %lld": {},
+    "Reading the FBI list…": {},
     "Reading the file…": {},
     "Recorded %@": {},
     "Result": {},
@@ -158,6 +185,7 @@
     "The frame count was estimated from the length. If it is off, the result is Incomplete.": {},
     "The system stopped the last scan before it finished. It is not a clearance.": {},
     "This file could not be saved. Open OpenWorld and choose it there.": {},
+    "Update posters": {},
     "Video · %@ · %@": {},
     "Wanted": {},
     "What happened to this file": {},

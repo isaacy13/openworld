@@ -12,6 +12,9 @@ interface Core {
     /** One typed call, `{"v": 1, "op": ...}`. Blocks; call it off the main thread. */
     fun call(request: JSONObject): JSONObject
 
+    /** A call that sends events while it runs (`posters_update`), on the calling thread. Blocks. */
+    fun call(request: JSONObject, onEvent: (JSONObject) -> Unit): JSONObject
+
     /** Start a pushed scan. Events arrive on the thread that pushes frames. */
     fun start(request: JSONObject, onEvent: (JSONObject) -> Unit): JobStart
 }

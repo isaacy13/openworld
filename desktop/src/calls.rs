@@ -61,12 +61,32 @@ pub struct Thumb {
     pub rgb: Vec<u8>,
 }
 
+/// What Update posters wrote, and what it left out and why.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Updated {
+    pub posters: PackInfo,
+    pub kept: u64,
+    pub skipped: Vec<Skipped>,
+    pub list_sha256: String,
+}
+
+/// Posters left out for one reason.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Skipped {
+    pub reason: Line,
+    pub count: u64,
+}
+
 /// Work for the worker thread.
 pub enum Job {
     /// Sweep expired results and old temporary copies, then read bundles and posters.
     Startup,
     Posters,
     InstallDemo,
+    /// Fetch real posters with this bundle's models. Its progress comes as events.
+    UpdatePosters {
+        bundle: String,
+    },
     Facts {
         ticket: u64,
         path: PathBuf,
@@ -89,6 +109,7 @@ pub enum Job {
 pub enum Msg {
     Bundles(Result<Vec<BundleRow>, Line>),
     Posters(Result<PackInfo, Line>),
+    Updated(Result<Updated, Line>),
     Facts { ticket: u64, result: Result<FileFacts, Line> },
     Estimate { ticket: u64, result: Result<Estimate, Line> },
     Event(Event),
@@ -114,6 +135,7 @@ fn failure(job: &Job) -> Box<dyn FnOnce() -> Msg> {
     match job {
         Job::Startup => Box::new(move || Msg::Bundles(internal())),
         Job::Posters | Job::InstallDemo => Box::new(move || Msg::Posters(internal())),
+        Job::UpdatePosters { .. } => Box::new(move || Msg::Updated(internal())),
         Job::Facts { ticket, .. } => {
             let ticket = *ticket;
             Box::new(move || Msg::Facts { ticket, result: internal() })
@@ -143,6 +165,15 @@ fn run_job(job: Job, places: &Places, emit: &mut dyn FnMut(Msg)) {
         }
         Job::Posters => emit(Msg::Posters(posters_check(&places.posters))),
         Job::InstallDemo => emit(Msg::Posters(posters_demo(&places.posters))),
+        Job::UpdatePosters { bundle } => {
+            let result = posters_update(&places.bundles, &bundle, &places.posters, &mut |event| emit(Msg::Event(event)));
+            let wrote = result.is_ok();
+            emit(Msg::Updated(result));
+            // Read the new pack back the way a scan will.
+            if wrote {
+                emit(Msg::Posters(posters_check(&places.posters)));
+            }
+        }
         Job::Facts { ticket, path, mtime_unix } => emit(Msg::Facts { ticket, result: file_facts(&path, mtime_unix) }),
         Job::Estimate { ticket, req } => emit(Msg::Estimate { ticket, result: estimate(&req) }),
         Job::Scan { req, stop } => {
@@ -206,6 +237,11 @@ pub fn posters_demo(dir: &Path) -> Result<PackInfo, Line> {
         return Err(refusal_line(&written));
     }
     posters_check(dir)
+}
+
+/// Fetch real posters into `dir` with `bundle`'s models. Refuses until an official curve allows real posters.
+pub fn posters_update(bundles: &Path, bundle: &str, dir: &Path, events: &mut dyn FnMut(Event)) -> Result<Updated, Line> {
+    answer(invoke::run(Call::PostersUpdate { bundles: bundles.into(), bundle: bundle.into(), posters: dir.into() }, None, events))
 }
 
 /// The approved address and the sheet's title. Only an fbi.gov page passes.

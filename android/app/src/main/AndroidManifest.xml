@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No INTERNET permission: nothing can be uploaded. No camera. The FBI page opens in the browser. -->
+<!-- INTERNET is for Update posters only: the scan library itself fetches the public FBI list and
+     poster photos from api.fbi.gov and fbi.gov. A scan makes no request and nothing is uploaded.
+     No camera. The FBI page opens in the browser. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".OpenWorldApplication"

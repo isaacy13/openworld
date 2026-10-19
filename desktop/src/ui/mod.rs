@@ -333,6 +333,14 @@ impl Ui {
         self.render();
     }
 
+    pub fn update_posters(self: &Rc<Self>) {
+        let job = self.model.borrow_mut().update_posters();
+        if let Some(job) = job {
+            self.spawn(job);
+        }
+        self.render();
+    }
+
     pub fn delete_result(self: &Rc<Self>) {
         let job = self.model.borrow_mut().delete_result();
         if let Some(job) = job {

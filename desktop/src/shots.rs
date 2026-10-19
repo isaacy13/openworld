@@ -162,6 +162,10 @@ async fn script(ui: &Rc<Ui>, dir: &Path) -> Result<usize, String> {
     until(ui, "the poster check", |m| !matches!(m.pack, PackState::Checking)).await?;
     ui.window.present();
     shots.take("start-no-posters").await?;
+    // Update posters refuses until an official curve allows real posters.
+    ui.update_posters();
+    until(ui, "the Update posters answer", |m| !m.updating()).await?;
+    shots.take("start-update-refused").await?;
     ui.install_demo();
     until(ui, "the demo pack", |m| matches!(m.pack, PackState::Ready(_))).await?;
     shots.take("start").await?;

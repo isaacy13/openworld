@@ -20,6 +20,39 @@ public enum PosterState: Equatable, Sendable {
     case refused(Line)
 }
 
+/// How far Update posters has got, from its events.
+public struct UpdateProgress: Equatable, Sendable {
+    public var page = 0
+    /// Nil until the list gives a total.
+    public var pages: Int?
+    public var checked = 0
+    /// Zero until poster photos are being checked.
+    public var posters = 0
+
+    public init() {}
+
+    mutating func apply(_ event: PostersEvent) {
+        switch event {
+        case .page(let page, let pages):
+            self.page = page
+            self.pages = pages
+        case .checked(let checked, let posters):
+            self.checked = checked
+            self.posters = posters
+        case .other:
+            break
+        }
+    }
+}
+
+/// Update posters: not run, running, or how it ended. The core fetches and checks every poster.
+public enum PosterUpdate: Equatable, Sendable {
+    case idle
+    case running(UpdateProgress)
+    case done(kept: Int, skipped: [SkippedPosters])
+    case refused(Line)
+}
+
 /// The choices before Analyze. Fast and every frame start selected.
 public struct ScanOptions: Equatable, Sendable {
     public var bundle = "fast"
@@ -143,6 +176,7 @@ public struct LeavePrompt: Identifiable, Equatable, Sendable {
 public final class ScanModel {
     public private(set) var state: ScanState = .start
     public private(set) var posters: PosterState = .loading
+    public private(set) var update: PosterUpdate = .idle
     public private(set) var bundles: [BundleRow] = []
     public private(set) var bundleNote: Line?
     public private(set) var demoBuild = false
@@ -201,8 +235,15 @@ public final class ScanModel {
         }
     }
 
+    /// The core's non-affiliation line for the start screen, once the sentence table is read.
+    public var notAffiliated: Line? {
+        copy.texts["not_affiliated"].map { Line(code: "not_affiliated", text: $0) }
+    }
+
     /// Write the demo pack (demo builds only). Real FBI photos stay off.
     public func installDemoPosters() async {
+        if case .running = update { return }
+        update = .idle
         switch await ask(.postersDemo(out: places.posters.path), PostersAnswer.self) {
         case .ok(let answer):
             posters = .ready(answer.posters)
@@ -210,6 +251,37 @@ public final class ScanModel {
         case .refused(_, let line):
             alert = line
         }
+    }
+
+    /// Fetch real posters into the posters folder with the selected bundle; a new pack replaces
+    /// the demo pack. The core refuses until an official curve allows real posters.
+    public func updatePosters() async {
+        if case .running = update { return }
+        guard !isScanning else { return }
+        update = .running(UpdateProgress())
+        let core = self.core
+        let request = Request.postersUpdate(bundles: places.bundles.path, bundle: options.bundle, posters: places.posters.path).json
+        let json = await Task.detached(priority: .userInitiated) {
+            core.call(request) { line in
+                guard let event = PostersEvent.parse(line) else { return }
+                Task { @MainActor in self.progress(event) }
+            }
+        }.value
+        switch Answers.decode(json, as: PostersUpdateAnswer.self) {
+        case .ok(let answer):
+            update = .done(kept: answer.kept, skipped: answer.skipped)
+            await refreshPosters()
+            if case .review = state { refreshEstimate() }
+        case .refused(_, let line):
+            update = .refused(line)
+        }
+    }
+
+    /// An event that arrives after the answer is dropped.
+    private func progress(_ event: PostersEvent) {
+        guard case .running(var progress) = update else { return }
+        progress.apply(event)
+        update = .running(progress)
     }
 
     // MARK: Review
