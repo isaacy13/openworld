@@ -129,18 +129,40 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
 
-  # The kit's tests, on the Mac, against the linked core.
+  # The kit's tests against the linked core: OpenWorldKitTests_macOS and, on the
+  # simulator, OpenWorldKitTests_iOS.
   OpenWorldKitTests:
     type: bundle.unit-test
-    platform: macOS
+    platform: [iOS, macOS]
     sources:
       - path: Tests/OpenWorldKitTests
     dependencies:
-      - target: OpenWorldKit_macOS
+      - target: OpenWorldKit_${platform}
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorldKitTests
+
+  # The app's AVFoundation and ImageIO decoders, compiled into the bundle, on media the
+  # tests make (AVAssetWriter, a passthrough trim, a GIF), scanned by the linked core.
+  OpenWorldDecoderTests:
+    type: bundle.unit-test
+    platform: [iOS, macOS]
+    sources:
+      - path: Tests/OpenWorldDecoderTests
+      - path: App/Platform/VideoDecoder.swift
+      - path: App/Platform/StillDecoder.swift
+      - path: App/Platform/MediaProbe.swift
+    dependencies:
+      - target: OpenWorldKit_${platform}
+      - sdk: AVFoundation.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreVideo.framework
+      - sdk: ImageIO.framework
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.openworld.OpenWorldDecoderTests
 
   # One launch-and-look smoke test of the Mac app.
   OpenWorldUITests:
@@ -174,7 +196,19 @@ schemes:
     test:
       config: Debug
       targets:
-        - OpenWorldKitTests
+        - OpenWorldKitTests_macOS
+        - OpenWorldDecoderTests_macOS
         - OpenWorldUITests
     archive:
       config: Release
+  # The kit and decoder tests on an iOS simulator.
+  OpenWorldTests:
+    build:
+      targets:
+        OpenWorldKitTests_iOS: [test]
+        OpenWorldDecoderTests_iOS: [test]
+    test:
+      config: Debug
+      targets:
+        - OpenWorldKitTests_iOS
+        - OpenWorldDecoderTests_iOS

@@ -103,6 +103,51 @@ jobs:
           name: desktop-shots
           path: ${{ runner.temp }}/desktop-shots
 
+  # The GTK 4 / libadwaita app on Windows: MSYS2 UCRT64 GTK, the pinned Rust for the GNU
+  # target, the pinned ONNX Runtime DLL. Runs the view-model tests (real scans of the demo
+  # still through the core) and the window smoke test on the runner's desktop.
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      # Overrides rust-toolchain.toml, which would pick the MSVC host; GTK here is MinGW.
+      RUSTUP_TOOLCHAIN: 1.97.0-x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0-x86_64-pc-windows-gnu
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # Keep the Windows PATH, so cargo from rustup and Chocolatey's ffmpeg are found.
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - run: choco install ffmpeg --no-progress -y
+      - name: pinned ONNX Runtime
+        run: python scripts/fetch_ort.py windows-x86_64
+      - name: the toolchain the build uses
+        shell: msys2 {0}
+        run: |
+          rustc -vV
+          cargo -V
+          which gcc pkg-config ffmpeg || true
+          pkg-config --modversion gtk4 libadwaita-1
+      - name: view-model tests and window smoke test
+        shell: msys2 {0}
+        env:
+          # The UCRT64 compiler driver links against the UCRT64 GTK; first on the MSYS2 PATH.
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+        run: cargo test --manifest-path desktop/Cargo.toml
+
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -140,6 +185,86 @@ jobs:
         with:
           name: openworld-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+      # The core this job built, so android-emulator links the same library without Rust.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openworld-core-jnilibs
+          path: android/app/src/main/jniLibs
+          if-no-files-found: error
+
+  # The instrumented tests on an x86_64 emulator: the platform's MediaCodec encoder and
+  # decoder, MediaMuxer and MediaExtractor, and the core over JNI. No photos of people:
+  # the tests make demo-marker stills and videos on the device.
+  android-emulator:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NDK_VERSION: 27.2.12479018
+      API_LEVEL: 34
+    steps:
+      - uses: actions/checkout@v4
+      - name: let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: openworld-core-jnilibs
+          path: android/app/src/main/jniLibs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      # The JNI shim is still compiled here (CMake and the NDK); the core is the android job's.
+      - run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;${NDK_VERSION}" "cmake;3.22.1"
+      - name: Fast weights, kept only when the pinned SHA-256 matches
+        run: python3 scripts/fetch_weights.py fast
+      - uses: gradle/actions/setup-gradle@v4
+      - name: app and test APKs, before the emulator starts
+        working-directory: android
+        run: ./gradlew assembleDebug assembleDebugAndroidTest -PskipRustCore --stacktrace
+      - uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-google_apis-x86_64-v1
+      - name: an emulator snapshot for the cache
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "snapshot saved"
+      - name: instrumented tests (demo still, encoded video, rotation, stop, truncated file)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          working-directory: android
+          script: ./gradlew connectedDebugAndroidTest -PskipRustCore --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-emulator-test-reports
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/outputs/androidTest-results
+          if-no-files-found: ignore
 
   apple-kit:
     runs-on: ubuntu-24.04
@@ -164,7 +289,7 @@ jobs:
 
   apple:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -183,9 +308,16 @@ jobs:
       - name: iPhone app for the simulator
         working-directory: apple
         run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorld -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-      - name: Mac app, kit tests on the linked core, launch smoke test
+      - name: Mac app, kit and decoder tests on the linked core, launch smoke test
         working-directory: apple
         run: xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorldMac -destination 'platform=macOS,arch=arm64' test
+      - name: the iOS simulators on this runner
+        run: xcrun simctl list devices available
+      - name: kit and decoder tests on an iOS simulator
+        working-directory: apple
+        run: |
+          udid="$(python3 scripts/pick-simulator.py)"
+          xcodebuild -project OpenWorld.xcodeproj -scheme OpenWorldTests -destination "id=$udid" CODE_SIGNING_ALLOWED=NO test
 
   real-faces:
     runs-on: ubuntu-24.04

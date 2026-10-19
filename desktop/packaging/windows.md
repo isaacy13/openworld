@@ -1,6 +1,6 @@
 # Windows build
 
-Not tested on Windows yet. These are the steps the app is written for; nothing here has been run on a Windows machine.
+CI's `desktop-windows` job builds the app on `windows-latest` with MSYS2 UCRT64 GTK and rustup's pinned `1.97.0-x86_64-pc-windows-gnu`, and runs `cargo test` (the view-model tests and the window smoke test). The bundle script below is not run in CI yet.
 
 The app is the same Rust crate. GTK 4 and libadwaita come from MSYS2, FFmpeg runs as `ffmpeg.exe` / `ffprobe.exe` beside the program, and ONNX Runtime is `onnxruntime.dll` beside the program (the core looks there first, see `core/openworld-core/src/runtime.rs`).
 

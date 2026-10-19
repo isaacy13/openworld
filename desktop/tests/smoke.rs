@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Open the window on a display and quit: `xvfb-run -a cargo test`.
-//! Without a display it skips, unless `OPENWORLD_REQUIRE_DISPLAY` is set (CI).
+//! Open the window on a display and quit: `xvfb-run -a cargo test` on Linux, plain
+//! `cargo test` on Windows, whose desktop is always there. Without a display it skips,
+//! unless `OPENWORLD_REQUIRE_DISPLAY` is set (CI).
 
 use std::process::Command;
 
+fn has_display() -> bool {
+    cfg!(windows) || std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
 #[test]
 fn the_window_opens_reads_startup_and_quits() {
-    if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
+    if !has_display() {
         assert!(std::env::var_os("OPENWORLD_REQUIRE_DISPLAY").is_none(), "no display: run under xvfb-run -a");
         eprintln!("skipped: no display");
         return;

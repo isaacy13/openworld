@@ -23,6 +23,9 @@ enum VideoDecoder {
         let rate = try await Double(track.load(.nominalFrameRate))
         let formats = try await track.load(.formatDescriptions)
         let duration = try await asset.load(.duration).seconds
+        // Where the track's pictures are on the timeline. A trimmed clip's edit list starts it
+        // after pictures the file keeps only so the first shown one can be decoded.
+        let shown = try? await track.load(.timeRange)
         let created = try? await asset.load(.creationDate)?.load(.dateValue)
 
         let rotation = Rotation.of(a: transform.a, b: transform.b, c: transform.c, d: transform.d)
@@ -31,7 +34,7 @@ enum VideoDecoder {
         guard upright.width * upright.height <= maxPixels else { throw ProbeFailure.tooLarge }
 
         // Counting reads the sample table and every sample's size, not its pictures.
-        let counted = await Self.offMain { Self.countFrames(asset: asset, track: track) }
+        let counted = await Self.offMain { Self.countFrames(asset: asset, track: track, shown: shown) }
         guard await Self.offMain({ Self.decodesFirstFrame(asset: asset, track: track) }) else {
             throw ProbeFailure.badCodec
         }
@@ -56,9 +59,12 @@ enum VideoDecoder {
     }
 
     /// Pictures the decoder will deliver: every displayed sample, read without decoding.
-    /// Not yet checked on a trimmed clip (an edit list): if passthrough and decoded output
-    /// disagree there, the scan says Incomplete, never Complete.
-    static func countFrames(asset: AVAsset, track: AVAssetTrack) -> UInt64? {
+    /// A trimmed clip (an edit list) can keep samples before its first shown picture, only so
+    /// that picture can be decoded. The decoder never delivers them, so they are not counted:
+    /// a sample marked do-not-display, or one that is presented before `shown` starts.
+    /// If passthrough and decoded output still disagree, the scan says Incomplete, never
+    /// Complete. OpenWorldDecoderTests checks a trimmed clip on the simulator and the Mac.
+    static func countFrames(asset: AVAsset, track: AVAssetTrack, shown: CMTimeRange? = nil) -> UInt64? {
         guard let reader = try? AVAssetReader(asset: asset) else { return nil }
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         output.alwaysCopiesSampleData = false
@@ -66,16 +72,37 @@ enum VideoDecoder {
         reader.add(output)
         guard reader.startReading() else { return nil }
         var count: UInt64 = 0
+        let start = shown.flatMap { $0.start.isNumeric ? $0.start : nil }
         while let sample = output.copyNextSampleBuffer() {
             let samples = CMSampleBufferGetNumSamples(sample)
             guard samples > 0 else { continue }
-            var hidden = 0
-            if let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[String: Any]] {
-                hidden = attachments.filter { ($0[kCMSampleAttachmentKey_DoNotDisplay as String] as? Bool) == true }.count
+            let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[String: Any]]
+            let times = presentationTimes(sample, count: samples)
+            for index in 0..<samples {
+                if let attachments, index < attachments.count,
+                   (attachments[index][kCMSampleAttachmentKey_DoNotDisplay as String] as? Bool) == true {
+                    continue
+                }
+                if let start, let time = times[index], time.isNumeric, CMTimeCompare(time, start) < 0 {
+                    continue
+                }
+                count += 1
             }
-            count += UInt64(max(0, samples - hidden))
         }
         return reader.status == .completed && count > 0 ? count : nil
+    }
+
+    /// Each sample's presentation time, or nil where the buffer does not say.
+    static func presentationTimes(_ sample: CMSampleBuffer, count: Int) -> [CMTime?] {
+        var timings = [CMSampleTimingInfo](repeating: CMSampleTimingInfo(), count: count)
+        var filled: CMItemCount = 0
+        let status = CMSampleBufferGetSampleTimingInfoArray(sample, entryCount: count, arrayToFill: &timings, entriesNeededOut: &filled)
+        if status == noErr, filled == count {
+            return timings.map { $0.presentationTimeStamp.isValid ? $0.presentationTimeStamp : nil }
+        }
+        // One timing entry for the whole buffer: the first sample's time is the buffer's.
+        let first = CMSampleBufferGetPresentationTimeStamp(sample)
+        return (0..<count).map { $0 == 0 && first.isValid ? first : nil }
     }
 
     /// The codec is one this device decodes. Otherwise the file is refused, not half-read.
