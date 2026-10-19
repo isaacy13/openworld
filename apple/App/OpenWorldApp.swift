@@ -89,6 +89,8 @@ private final class UnlinkedCore: Core {
 
     func call(_ request: String) -> String { Self.refusal }
 
+    func call(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> String { Self.refusal }
+
     func startJob(_ request: String, onEvent: @escaping @Sendable (String) -> Void) -> JobStart { .refused(Self.refusal) }
 }
 
