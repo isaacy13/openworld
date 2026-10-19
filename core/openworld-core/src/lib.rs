@@ -7,6 +7,7 @@
 //! compare. The `openworld` CLI is a thin wrapper over the same calls.
 
 pub mod arcface;
+pub mod bench;
 pub mod bundle;
 pub mod copy;
 pub mod decode;

@@ -139,3 +139,42 @@ mod tests {
         assert_eq!(cosine(&[], &[]), None);
     }
 }
+
+/// One face on a still, as a scan sees it: its box, what the gates said, and
+/// its vector when it passed them. For measuring a bundle (`eval/`); a scan
+/// itself goes through the engine.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct FaceVector {
+    pub rect: Rect,
+    pub det_short: u32,
+    pub score: f32,
+    /// Why the gates refused it, when they did.
+    pub reject: Option<String>,
+    pub embedding: Option<Vec<f32>>,
+}
+
+/// The faces on one still, through the same detection size, gates, alignment,
+/// and embedder a scan uses.
+pub fn face_vectors(perception: &mut dyn Perception, frame: &RgbImage) -> Result<Vec<FaceVector>, String> {
+    let det_long = auto_long_side(frame.width().max(frame.height()), perception.min_face_px());
+    let mut out = Vec::new();
+    for det in perception.detect(frame, det_long)? {
+        let mut face = FaceVector { rect: det.rect, det_short: det.det_short, score: det.score, reject: None, embedding: None };
+        match perception.assess(frame, &det) {
+            Err(reject) => face.reject = Some(reject.copy().0.into()),
+            Ok(_) => match perception.align(frame, &det, 0)? {
+                None => face.reject = Some(Reject::Unaligned.copy().0.into()),
+                Some(aligned) => {
+                    let v = perception.embed(&aligned)?;
+                    if valid_vector(&v, perception.dim()) {
+                        face.embedding = Some(v);
+                    } else {
+                        face.reject = Some("face_unscored".into());
+                    }
+                }
+            },
+        }
+        out.push(face);
+    }
+    Ok(out)
+}
