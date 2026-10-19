@@ -47,6 +47,32 @@ final class FilesTests: XCTestCase {
         XCTAssertTrue(Inbox.pending(in: container).isEmpty)
     }
 
+    func testLaunchSweepsStaleInboxSlots() throws {
+        let container = root.appendingPathComponent("group")
+        let fm = FileManager.default
+        let now = Date()
+        func slot(_ name: String, files: [String], age: TimeInterval) throws -> URL {
+            let slot = Inbox.folder(in: container).appendingPathComponent(name)
+            try fm.createDirectory(at: slot, withIntermediateDirectories: true)
+            for file in files {
+                try Data("bytes".utf8).write(to: slot.appendingPathComponent(file))
+            }
+            try fm.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: slot.path)
+            return slot
+        }
+        let busy = try slot("busy", files: [".partial"], age: 60)
+        let abandoned = try slot("abandoned", files: [".partial"], age: 2 * Inbox.partialAge)
+        let waiting = try slot("waiting", files: ["clip.mov"], age: Inbox.partialAge * 2)
+        let stale = try slot("stale", files: ["clip.mov"], age: Inbox.maxAge + 60)
+
+        let places = try temporaryPlaces()
+        _ = Housekeeping.launch(core: FakeCore(), places: places, startedAt: now, shareContainer: container)
+        XCTAssertTrue(fm.fileExists(atPath: busy.path), "a copy still being written stays")
+        XCTAssertFalse(fm.fileExists(atPath: abandoned.path))
+        XCTAssertTrue(fm.fileExists(atPath: waiting.path))
+        XCTAssertFalse(fm.fileExists(atPath: stale.path))
+    }
+
     func testSafeNames() {
         XCTAssertEqual(Inbox.safeName("../../etc/passwd"), "_.._etc_passwd")
         XCTAssertEqual(Inbox.safeName(".hidden"), "hidden")

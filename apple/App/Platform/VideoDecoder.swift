@@ -56,6 +56,8 @@ enum VideoDecoder {
     }
 
     /// Pictures the decoder will deliver: every displayed sample, read without decoding.
+    /// Not yet checked on a trimmed clip (an edit list): if passthrough and decoded output
+    /// disagree there, the scan says Incomplete, never Complete.
     static func countFrames(asset: AVAsset, track: AVAssetTrack) -> UInt64? {
         guard let reader = try? AVAssetReader(asset: asset) else { return nil }
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)

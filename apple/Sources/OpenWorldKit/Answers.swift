@@ -74,6 +74,10 @@ public struct Estimate: Decodable, Equatable, Sendable {
     public var notes: [Line]
     public var suggestComputer: Bool
     public var caveat: Line
+    /// About the file itself: old, or its timestamps disagree.
+    public var warnings: [Line]
+    /// What the scan promises, shown before Analyze.
+    public var disclosure: [Line]
     public var classes: Line
     public var canStart: Bool
 
@@ -87,7 +91,7 @@ public struct Estimate: Decodable, Equatable, Sendable {
         case coverageBanner = "coverage_banner"
         case timed, notes
         case suggestComputer = "suggest_computer"
-        case caveat, classes
+        case caveat, warnings, disclosure, classes
         case canStart = "can_start"
     }
 }

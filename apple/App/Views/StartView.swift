@@ -129,7 +129,7 @@ struct StartView: View {
                     Text("No posters installed. Real FBI photos stay off.")
                         .font(.subheadline)
                 } else {
-                    LineLabel(line: line, systemImage: "exclamationmark.triangle", tone: .incomplete)
+                    LineLabel(line: line, systemImage: "xmark.octagon", tone: .error)
                         .font(.subheadline)
                 }
             }

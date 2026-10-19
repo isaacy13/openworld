@@ -176,6 +176,50 @@ final class ScanModelTests: XCTestCase {
         XCTAssertEqual(result.report.reason?.code, "stopped_heat")
     }
 
+    func testAScanStartedHotOrOnALowBatteryStopsAtOnce() async throws {
+        let cases = [
+            (DeviceFacts(kind: "phone", thermal: "serious", battery: 0.8, charging: false), "stopped_heat"),
+            (DeviceFacts(kind: "phone", thermal: "nominal", battery: 0.05, charging: false), "stopped_battery"),
+        ]
+        for (facts, code) in cases {
+            // No change notice comes: the device was already like this.
+            let core = FakeCore()
+            let gate = DispatchSemaphore(value: 0)
+            let model = ScanModel(core: core, media: FakeMedia(gate: gate), places: places) { facts }
+            await model.bootstrap()
+            await model.choose(try imported())
+            let task = try XCTUnwrap(model.analyze())
+            gate.signal()
+            await task.value
+            guard case .result(let result) = model.state else { return XCTFail("result") }
+            XCTAssertEqual(result.report.status, .incomplete)
+            XCTAssertEqual(result.report.reason?.code, code)
+        }
+    }
+
+    func testClosingTheWindowMidScanDeletesTheResultAndShowsNothing() async throws {
+        let gate = DispatchSemaphore(value: 0)
+        let model = model(media: FakeMedia(gate: gate))
+        await model.bootstrap()
+        let file = try imported()
+        await model.choose(file)
+        let task = try XCTUnwrap(model.analyze())
+        _ = await eventually { self.core.pushed.count == 1 }
+        model.close()
+        XCTAssertTrue(model.isScanning, "the scan ends on its own queue")
+        gate.signal()
+        await task.value
+        XCTAssertEqual(core.stopReason, .cancel)
+        XCTAssertEqual(model.state, .start, "a closed window's scan is never shown")
+        XCTAssertNil(model.review)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.url.path))
+        let job = try XCTUnwrap(core.jobRequests.first)
+        let out = try XCTUnwrap((JSONSerialization.jsonObject(with: Data(job.utf8)) as? [String: Any])?["out"] as? String)
+        XCTAssertTrue(core.requests.contains { $0.contains(#""op":"delete""#) && $0.contains(out) }, "the result folder is deleted")
+        // Deleted before the journal marker ended.
+        XCTAssertTrue(ScanJournal(folder: places.journal).interrupted().isEmpty)
+    }
+
     func testARefusedStartIsTheRefusalScreen() async throws {
         core.jobRefusal = Samples.refusalStart
         let model = model()
@@ -246,6 +290,7 @@ final class ScanModelTests: XCTestCase {
 
     func testAPhotosPickUsesItsRecordingTimeForAge() async throws {
         let recorded = Date(timeIntervalSince1970: 1_600_000_000)
+        core.answers["estimate"] = Samples.estimateOldFile
         let model = model(media: FakeMedia(recorded: recorded))
         await model.bootstrap()
         let source = places.imports.deletingLastPathComponent().appendingPathComponent("IMG_0001.HEIC")
@@ -254,7 +299,9 @@ final class ScanModelTests: XCTestCase {
         XCTAssertNil(file.modified)
         await model.choose(file)
         guard case .review(let review) = model.state else { return XCTFail("review") }
+        // The warnings are the core's, from the estimate.
         XCTAssertEqual(review.warnings.map(\.code), ["old_file"])
+        XCTAssertEqual(review.disclosure.count, 9)
         let sent = try XCTUnwrap(core.requests.last { $0.contains(#""op":"estimate""#) })
         XCTAssertTrue(sent.contains(#""file_mtime_unix":1600000000"#))
     }

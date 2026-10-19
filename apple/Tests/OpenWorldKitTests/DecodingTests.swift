@@ -81,6 +81,11 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(video.human.int("count"), 10)
         XCTAssertEqual(video.notes.map(\.code), ["cpu_note", "heat_note", "battery_note"])
         XCTAssertEqual(video.classes.code, "classes_missing")
+        // The file's warnings and the disclosure come from the core, in its order.
+        XCTAssertEqual(video.warnings, [])
+        XCTAssertEqual(video.disclosure.count, 9)
+        XCTAssertEqual(video.disclosure.first?.code, "on_device")
+        XCTAssertTrue(video.disclosure.contains { $0.code == "no_clearance" })
 
         let none = try XCTUnwrap(Answers.decode(Samples.estimateNoClass, as: Estimate.self).value)
         XCTAssertFalse(none.canStart)
@@ -111,8 +116,6 @@ final class DecodingTests: XCTestCase {
         let copy = try XCTUnwrap(Answers.decode(Samples.copy, as: CopyAnswer.self).value)
         let table = CopyTable(texts: copy.copy)
         XCTAssertEqual(table.line("possible_candidate").text, "Possible candidate. Not an identification.")
-        XCTAssertEqual(table.disclosure.count, 9)
-        XCTAssertTrue(table.disclosure.allSatisfy { $0.text != $0.code })
     }
 
     func testEvents() throws {
