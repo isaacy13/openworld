@@ -70,6 +70,7 @@ SOURCES = {
         "https://ndownloader.figshare.com/files/5976006",
         "https://figshare.com/ndownloader/files/5976006",
         "https://api.figshare.com/v2/file/download/5976006",
+        "https://raw.githubusercontent.com/davidsandberg/facenet/096ed770f163957c1e56efa7feeb194773920f6e/data/pairs.txt",
     ),
     "WIDER_val.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip",),
     "wider_face_split.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip",),
