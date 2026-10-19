@@ -85,7 +85,7 @@ SOURCES = {
     "WIDER_val.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip",),
     "wider_face_split.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip",),
 }
-USER_AGENT = "openworld-eval (+https://github.com/isaacy13/openworld)"
+USER_AGENT = "openworld-eval/1"
 # A published curve is only comparable to a run on the same bytes.
 PINS = {
     "lfw.tgz": "055f7d9c632d7370e6fb4afc7468d40f970c34a80d4c6f50ffec63f5a8d536c0",

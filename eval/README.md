@@ -24,6 +24,10 @@ Real FBI posters stay off unless the poster-photo check below passes on a full r
   - expected false candidates per scan for the measured poster count and 10, 100, and 1,000 faces.
   Posters with the same name or the same photo file are one person. A poster that names two people (`AND`, `&`) gives no same-person pairs.
 
+### Where the poster run can run
+
+Probed on 2026-10-19: `api.fbi.gov` answers GitHub's runners and a home network, but `www.fbi.gov`, which serves every poster photo, answers 403 to GitHub's runners for every User-Agent, a browser's included. It refuses data-center addresses. The full run therefore runs from a home network (the owner's Mac), not in the measure workflow. The script's User-Agent is `openworld-eval/1`; the earlier `openworld-eval (+https://github.com/isaacy13/openworld)` was refused by `api.fbi.gov` itself.
+
 ### The poster-photo gate
 
 `real_posters_allowed` is true only on a full run (no `--people`, no `--posters`, the list read to its total) where the upper 95% bound of the false match rate (the wider of Wilson and the identity bootstrap) is at or under `GATE_FMR` (2e-6) for poster x LFW, and for poster x poster when it has enough comparisons, and at or under `GATE_GROUP_FMR` (1e-5) for every sex and race group with enough comparisons. Enough is the count at which zero false matches could pass, about 3.84 / rate: 1.92 million comparisons overall, 384,000 for a group. Smaller sets and groups are listed under `poster_domain.gate.not_enough_data`; only poster x LFW must have enough. The two rates sit at the top of `real_faces.py`; the owner accepted them on 2026-10-19. The cutoff rule (the manifest threshold may not be under the LFW cutoff) is a separate failure. `poster_domain.gate.failures` says what blocked.

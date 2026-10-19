@@ -78,4 +78,4 @@ The owner accepted these two rates on 2026-10-19 (`GATE_FMR`, `GATE_GROUP_FMR`).
 
 ## Still open
 
-Legal review, measured phone heat and battery on named devices, signed release binaries, an independent audit, a demographic evaluation beyond the sex and race the posters state, and the first full run of the poster-photo curve (§10).
+Legal review, measured phone heat and battery on named devices, signed release binaries, an independent audit, a demographic evaluation beyond the sex and race the posters state, and the first full run of the poster-photo curve (§10), which has to run from a home network because www.fbi.gov refuses data-center addresses ([eval/README.md](../eval/README.md#where-the-poster-run-can-run)).
