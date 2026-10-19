@@ -269,7 +269,9 @@ pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanRe
         .and_then(crate::timeutil::system_time_from_unix)
         .or_else(|| decode::container_created(&req.input));
     let warnings = media_warnings(mtime_of(req), container, now);
-    let mut job = open_job(req, media.fps, media.video || media.frames > 1, warnings, now)?;
+    // Pictures that are not a video, like the pages of a TIFF or a multi-image
+    // HEIC, each decide alone, as a still does.
+    let mut job = open_job(req, media.fps, media.video, warnings, now)?;
     job.declared_frames = Some(media.frames);
     // Phone decoders paint a cut JPEG's missing rows gray too, and a shell that
     // pushes only a motion photo's still has not scanned its clip.

@@ -51,6 +51,24 @@ fn a_phone_scan_of_pushed_frames_finds_the_marker_without_ffmpeg() {
 }
 
 #[test]
+fn pushed_pages_that_are_not_a_video_each_decide_alone() {
+    let lab = Lab::new();
+    let at = spot(MISSING_ID, &[0]);
+    // The person on the poster, then a stranger in the same place on the next page.
+    let pages = [scene_at(MISSING_ID, at), scene_at(STRANGER_ID, at)];
+    let req = pushed_request(&lab, MediaFacts { video: false, ..facts(W, H, 2, 1.0) });
+    let mut job = open_pushed_job(&req, SystemTime::now()).unwrap();
+    for (index, page) in pages.iter().enumerate() {
+        assert!(job.engine().push(index as u64, page, &mut |_| {}));
+    }
+    let report = finish(job, true);
+    // One page is enough to decide, and the stranger is not the same face.
+    assert_candidate(&report, MISSING_POSTER);
+    assert_eq!(report.counts.faces_seen, 2, "{}", describe(&report));
+    assert!(report.tracks.iter().all(|t| t.first_frame == t.last_frame), "{}", describe(&report));
+}
+
+#[test]
 fn a_phone_scan_of_a_jpeg_cut_short_is_incomplete_though_its_decoder_filled_the_gap() {
     let lab = Lab::new();
     let scene = openworld_core::fixture::demo_scene().image;

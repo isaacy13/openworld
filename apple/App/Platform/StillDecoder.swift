@@ -7,7 +7,9 @@ import OpenWorldKit
 /// Photos and animated images through ImageIO. A photo is turned upright by ImageIO and
 /// pushed as RGBA. HEIC and Live Photos are their still image. A GIF, APNG, WebP, or
 /// HEIC sequence pushes every frame, timed by its delays. Any other file with more than
-/// one picture and no frame delays is refused: it is never scanned for its first picture alone.
+/// one picture and no frame delays (a multi-page TIFF, a multi-image HEIC) pushes every
+/// picture as a page that decides alone. It is never scanned for its first picture alone,
+/// and a page that cannot be read refuses the file.
 enum StillDecoder {
     static let animatedTypes: Set<String> = ["com.compuserve.gif", "public.png", "org.webmproject.webp", "public.heics"]
 
@@ -18,7 +20,9 @@ enum StillDecoder {
         let count = CGImageSourceGetCount(source)
         guard count > 0 else { return nil }
         if count > 1 {
-            guard animatedTypes.contains(type) || hasDelays(source, count: count) else { throw ProbeFailure.badCodec }
+            guard animatedTypes.contains(type) || hasDelays(source, count: count) else {
+                return try pages(url, source: source, count: count)
+            }
             return try animation(url, source: source, count: count)
         }
         let index = CGImageSourceGetPrimaryImageIndex(source)
@@ -54,6 +58,38 @@ enum StillDecoder {
         let timing = AnimationTiming.rate(delays: delays)
         let facts = MediaFacts(width: size.width, height: size.height, fps: timing.fps, frames: UInt64(count), durationSec: timing.duration, video: true)
         return ProbedMedia(facts: facts, kind: .animation, recorded: nil, plan: AnimationPlan(url: url, count: count))
+    }
+
+    /// Every picture is a page: not a video, one a second, so the core closes each face
+    /// after its page. Every page must be readable and fit. The facts name the largest page.
+    private static func pages(_ url: URL, source: CGImageSource, count: Int) throws -> ProbedMedia {
+        var sides: [Int] = []
+        var size = (width: 0, height: 0)
+        var recorded: Date?
+        for index in 0..<count {
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Int,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                  width > 0, height > 0 else { throw ProbeFailure.unreadable }
+            guard width * height <= maxPixels else { throw ProbeFailure.tooLarge }
+            let turned = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
+            let shown = turned ? (width: height, height: width) : (width: width, height: height)
+            if max(shown.width, shown.height) > max(size.width, size.height) {
+                size = shown
+            }
+            sides.append(max(width, height))
+            recorded = recorded ?? recordedDate(properties)
+        }
+        let facts = MediaFacts(
+            width: size.width,
+            height: size.height,
+            fps: 1.0,
+            frames: UInt64(count),
+            durationSec: Double(count),
+            video: false,
+            containerUnix: recorded.map { Int64($0.timeIntervalSince1970.rounded(.down)) }
+        )
+        return ProbedMedia(facts: facts, kind: .photo, recorded: recorded, plan: PagesPlan(url: url, longSides: sides))
     }
 
     /// Some frame carries a GIF, APNG, WebP, or HEICS delay: the pictures are a sequence.
@@ -106,6 +142,34 @@ struct StillPlan: DecodePlan {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) else { return false }
         return RGBA.push(image, index: 0, into: sink)
+    }
+}
+
+/// Every page of a file with several pictures, each upright, in order.
+struct PagesPlan: DecodePlan {
+    let url: URL
+    /// Each page's stored long side, so a page is decoded at full size.
+    let longSides: [Int]
+
+    func decode(into sink: FrameSink) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(source) == longSides.count else { return false }
+        for (page, longSide) in longSides.enumerated() {
+            let kept: Bool = autoreleasepool {
+                let index = UInt64(page)
+                guard sink.wants(index) else { return sink.skip(index) }
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: longSide,
+                    kCGImageSourceShouldCacheImmediately: true,
+                ]
+                guard let image = CGImageSourceCreateThumbnailAtIndex(source, page, options as CFDictionary) else { return false }
+                return RGBA.push(image, index: index, into: sink)
+            }
+            if !kept { return false }
+        }
+        return true
     }
 }
 
