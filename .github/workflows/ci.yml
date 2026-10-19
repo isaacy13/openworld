@@ -65,7 +65,14 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: core
-      - run: choco install ffmpeg --no-progress -y
+      - name: ffmpeg (pinned and retried, so a feed outage fails here and not in a decoder test)
+        run: |
+          foreach ($try in 1..4) {
+            choco install ffmpeg --version 9.0.2 --no-progress -y
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
+            Start-Sleep -Seconds (15 * $try)
+          }
+          ffmpeg -version
       - name: pinned ONNX Runtime
         run: python scripts/fetch_ort.py windows-x86_64
       - name: library tests
@@ -140,7 +147,14 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop
-      - run: choco install ffmpeg --no-progress -y
+      - name: ffmpeg (pinned and retried, so a feed outage fails here and not in a decoder test)
+        run: |
+          foreach ($try in 1..4) {
+            choco install ffmpeg --version 9.0.2 --no-progress -y
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
+            Start-Sleep -Seconds (15 * $try)
+          }
+          ffmpeg -version
       - name: pinned ONNX Runtime
         run: python scripts/fetch_ort.py windows-x86_64
       - name: the toolchain the build uses
