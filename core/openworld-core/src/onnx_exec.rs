@@ -64,6 +64,8 @@ pub struct FaceModels {
 pub fn load(bundle: &Bundle, accelerate: bool) -> Result<FaceModels, String> {
     let detector_bytes = bundle.verified_bytes("detector").map_err(|err| err.text)?;
     let embedder_bytes = bundle.verified_bytes("embedder").map_err(|err| err.text)?;
+    inline_only(&detector_bytes, "detector")?;
+    inline_only(&embedder_bytes, "embedder")?;
     let (mut detector, provider) = crate::runtime::session(&detector_bytes, accelerate)
         .map_err(|err| format!("The detector did not load. Refusing. {err}"))?;
     // The cutoff was measured on CPU embeddings, and a provider that drifts would
@@ -79,6 +81,103 @@ pub fn load(bundle: &Bundle, accelerate: bool) -> Result<FaceModels, String> {
     };
     let dim = check_embedder(&mut embedder)?;
     Ok(FaceModels { detector, detector_kind, side, embedder, embedder_kind, dim, provider })
+}
+
+/// A model whose tensors name external data makes ONNX Runtime read those
+/// files by path. Those bytes were never hashed. A model this cannot read is
+/// refused too.
+fn inline_only(bytes: &[u8], what: &str) -> Result<(), String> {
+    match walk_proto(bytes, Proto::Model, 0) {
+        Some(false) => Ok(()),
+        Some(true) => Err(format!("The {what} keeps weights outside its file. Refusing.")),
+        None => Err(format!("The {what} did not load. Refusing.")),
+    }
+}
+
+/// The ONNX messages on the way to a tensor (onnx.proto field numbers).
+#[derive(Clone, Copy, PartialEq)]
+enum Proto {
+    Model,
+    Graph,
+    Node,
+    Attribute,
+    Function,
+    Training,
+    Sparse,
+    Tensor,
+}
+
+impl Proto {
+    /// The message a length-delimited field holds, when it can lead to a tensor.
+    fn child(self, field: u64) -> Option<Proto> {
+        use Proto::*;
+        match (self, field) {
+            // ModelProto.graph, AttributeProto.g and .graphs, TrainingInfoProto.initialization and .algorithm.
+            (Model, 7) | (Attribute, 6) | (Attribute, 11) | (Training, 1) | (Training, 2) => Some(Graph),
+            (Model, 20) => Some(Training),
+            (Model, 25) => Some(Function),
+            // GraphProto.node, FunctionProto.node.
+            (Graph, 1) | (Function, 7) => Some(Node),
+            // NodeProto.attribute, FunctionProto.attribute_proto.
+            (Node, 5) | (Function, 11) => Some(Attribute),
+            // GraphProto.initializer, AttributeProto.t and .tensors, SparseTensorProto.values and .indices.
+            (Graph, 5) | (Attribute, 5) | (Attribute, 10) | (Sparse, 1) | (Sparse, 2) => Some(Tensor),
+            // GraphProto.sparse_initializer, AttributeProto.sparse_tensor and .sparse_tensors.
+            (Graph, 15) | (Attribute, 22) | (Attribute, 23) => Some(Sparse),
+            _ => None,
+        }
+    }
+}
+
+/// Whether any tensor under `proto` names external data. `None` when the bytes
+/// are not a protobuf this can read.
+fn walk_proto(mut bytes: &[u8], proto: Proto, depth: u32) -> Option<bool> {
+    if depth > 64 {
+        return None;
+    }
+    while !bytes.is_empty() {
+        let key = varint(&mut bytes)?;
+        let (field, wire) = (key >> 3, key & 7);
+        match wire {
+            0 => {
+                // TensorProto.data_location: anything but DEFAULT.
+                if varint(&mut bytes)? != 0 && proto == Proto::Tensor && field == 14 {
+                    return Some(true);
+                }
+            }
+            1 => bytes = bytes.get(8..)?,
+            5 => bytes = bytes.get(4..)?,
+            2 => {
+                let len = usize::try_from(varint(&mut bytes)?).ok()?;
+                let body = bytes.get(..len)?;
+                bytes = &bytes[len..];
+                // TensorProto.external_data.
+                if proto == Proto::Tensor && field == 13 {
+                    return Some(true);
+                }
+                if let Some(child) = proto.child(field) {
+                    if walk_proto(body, child, depth + 1)? {
+                        return Some(true);
+                    }
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(false)
+}
+
+fn varint(bytes: &mut &[u8]) -> Option<u64> {
+    let mut value = 0u64;
+    for shift in (0..64).step_by(7) {
+        let (&byte, rest) = bytes.split_first()?;
+        *bytes = rest;
+        value |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Some(value);
+        }
+    }
+    None
 }
 
 /// The square input a model was exported with, when its shape says so.
@@ -547,5 +646,83 @@ mod session_tests {
             }
             Err(message) => panic!("{message}"),
         }
+    }
+
+    fn put_varint(out: &mut Vec<u8>, mut value: u64) {
+        while value >= 0x80 {
+            out.push(value as u8 | 0x80);
+            value >>= 7;
+        }
+        out.push(value as u8);
+    }
+
+    /// A length-delimited field.
+    fn field(number: u64, body: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        put_varint(&mut out, number << 3 | 2);
+        put_varint(&mut out, body.len() as u64);
+        out.extend_from_slice(body);
+        out
+    }
+
+    /// A varint field.
+    fn number(number: u64, value: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        put_varint(&mut out, number << 3);
+        put_varint(&mut out, value);
+        out
+    }
+
+    /// A tensor whose data is in `w.bin`, the way `onnx.save_model` writes it.
+    fn external_tensor() -> Vec<u8> {
+        let entry = [field(1, b"location"), field(2, b"w.bin")].concat();
+        [field(8, b"w"), field(13, &entry), number(14, 1)].concat()
+    }
+
+    fn external(model: &[u8]) -> Option<bool> {
+        walk_proto(model, Proto::Model, 0)
+    }
+
+    #[test]
+    fn external_data_is_found_wherever_a_tensor_can_be() {
+        let models = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/models");
+        for file in ["detector.onnx", "embedder.onnx", "plate.onnx"] {
+            assert_eq!(external(&std::fs::read(models.join(file)).unwrap()), Some(false), "{file}");
+        }
+        let tensor = external_tensor();
+        let inline = [field(8, b"w"), number(2, 1), field(9, &[0u8; 8])].concat();
+        // A graph initializer, and one that names only its location.
+        let graph = |tensor: &[u8]| field(7, &field(5, tensor));
+        assert_eq!(external(&[number(1, 8), graph(&tensor)].concat()), Some(true));
+        assert_eq!(external(&graph(&[field(8, b"w"), number(14, 1)].concat())), Some(true));
+        assert_eq!(external(&[number(1, 8), graph(&inline)].concat()), Some(false));
+        // A sparse initializer's values.
+        assert_eq!(external(&field(7, &field(15, &field(1, &tensor)))), Some(true));
+        // An If node's branch is a graph inside a node attribute.
+        let branch = field(6, &field(5, &tensor));
+        assert_eq!(external(&field(7, &field(1, &field(5, &branch)))), Some(true));
+        // A node attribute's tensor inside a model-local function.
+        assert_eq!(external(&field(25, &field(7, &field(5, &field(5, &tensor))))), Some(true));
+        // A function's own attribute default.
+        assert_eq!(external(&field(25, &field(11, &field(5, &tensor)))), Some(true));
+        // A training algorithm's graph.
+        assert_eq!(external(&field(20, &field(2, &field(5, &tensor)))), Some(true));
+        // External-looking bytes in a field that holds no tensor are not read as one.
+        assert_eq!(external(&field(14, &field(13, b"x"))), Some(false));
+        assert_eq!(external(b"this is not an onnx model"), None);
+        assert_eq!(external(&[0x3a, 0x10, 0x00]), None, "a length past the end");
+    }
+
+    #[test]
+    fn a_weight_with_external_data_is_refused_before_it_loads() {
+        let models = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/models");
+        let root = tempfile::tempdir().unwrap();
+        let det = std::fs::read(models.join("detector.onnx")).unwrap();
+        let emb = [number(1, 8), field(7, &field(5, &external_tensor()))].concat();
+        let dir = dev_bundle(root.path(), "dev", 0.5, &[("detector", "det.onnx", &det), ("embedder", "emb.onnx", &emb)]);
+        std::fs::write(dir.join("weights/w.bin"), [0u8; 16]).unwrap();
+        let bundle = load_bundle(&dir).unwrap();
+        assert!(bundle.weights_ready);
+        assert_eq!(load(&bundle, false).err().unwrap(), "The embedder keeps weights outside its file. Refusing.");
     }
 }
