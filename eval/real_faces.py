@@ -59,11 +59,20 @@ import stats  # noqa: E402
 from stats import rate  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+# Mirrors are tried in order. Each download must still match its pin below.
 SOURCES = {
-    "lfw.tgz": "https://ndownloader.figshare.com/files/5976018",
-    "pairs.txt": "https://ndownloader.figshare.com/files/5976006",
-    "WIDER_val.zip": "https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip",
-    "wider_face_split.zip": "https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip",
+    "lfw.tgz": (
+        "https://ndownloader.figshare.com/files/5976018",
+        "https://figshare.com/ndownloader/files/5976018",
+        "http://vis-www.cs.umass.edu/lfw/lfw.tgz",
+    ),
+    "pairs.txt": (
+        "https://ndownloader.figshare.com/files/5976006",
+        "https://figshare.com/ndownloader/files/5976006",
+        "http://vis-www.cs.umass.edu/lfw/pairs.txt",
+    ),
+    "WIDER_val.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip",),
+    "wider_face_split.zip": ("https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip",),
 }
 # A published curve is only comparable to a run on the same bytes.
 PINS = {
@@ -142,12 +151,20 @@ def fetch(data: Path, need):
     data.mkdir(parents=True, exist_ok=True)
     for name in need:
         target = data / name
-        if not target.exists():
-            print(f"downloading {name}", file=sys.stderr)
-            download(SOURCES[name], target)
-        if sha256_file(target) != PINS[name]:
+        for url in SOURCES[name]:
+            if not target.exists():
+                print(f"downloading {name} from {url}", file=sys.stderr)
+                try:
+                    download(url, target)
+                except OSError as error:
+                    print(f"{url}: {error}", file=sys.stderr)
+                    continue
+            if sha256_file(target) == PINS[name]:
+                break
             target.unlink()
-            raise SystemExit(f"{name} is not the pinned file. Deleted it. Refusing.")
+            print(f"{url}: not the pinned file. Deleted it.", file=sys.stderr)
+        else:
+            raise SystemExit(f"No mirror gave the pinned {name}. Refusing.")
     if "lfw.tgz" in need and not (data / "lfw").is_dir():
         with tarfile.open(data / "lfw.tgz") as archive:
             archive.extractall(data, filter="data")
