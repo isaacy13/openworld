@@ -2,13 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Build the OpenWorld website into a folder: the home page and the policies the apps carry.
 
-    python3 scripts/site.py _site              # the site GitHub Pages serves
+    python3 scripts/site.py _site              # the site Cloudflare Pages serves
     python3 scripts/site.py _site --fragment   # index.html without its document wrapper, for a preview
 
 The policy pages are rendered from docs/legal/*.md and the licenses from
 docs/legal/third-party.txt, the same texts the library builds in, so the site and the
-apps never disagree. The stylesheet is inlined into every page.
+apps never disagree. The stylesheet is inlined into every page, and `_headers` gets a
+Content-Security-Policy that allows only the page's own inline scripts, by hash.
 """
+import base64
+import hashlib
 import html
 import re
 import sys
@@ -82,7 +85,9 @@ def build(out: Path, fragment: bool) -> None:
         (out / name).write_text(page(template, style, title, markdown((LEGAL / source).read_text())))
     licenses = html.escape((LEGAL / "third-party.txt").read_text(), quote=False)
     (out / "licenses.html").write_text(page(template, style, "Licenses", f"<h1>Licenses</h1>\n<pre>{licenses}</pre>", "licenses"))
-    (out / ".nojekyll").write_text("")
+    scripts = re.findall(r"<script>(.*?)</script>", index, re.S)
+    hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode()).digest()).decode()}'" for s in scripts)
+    (out / "_headers").write_text((SITE / "_headers").read_text().replace("{{script_hashes}}", hashes or "'none'"))
 
 
 if __name__ == "__main__":

@@ -34,5 +34,5 @@ Changing the address does not by itself need a new `VERSION`, but an old address
 
 - A licensed attorney reviews all four policies, mainly the arbitration section and the Texas conspicuousness of the disclaimers ([legal-review.md](../legal-review.md) §12).
 - Apple asks for a postal address and phone number in the EULA contact; add them when the business address is set.
-- Turn on GitHub Pages (Settings → Pages → Source: GitHub Actions). After this branch merges, `.github/workflows/site.yml` publishes the site from `site/` and these files: `https://isaacy13.github.io/openworld/` with `terms.html`, `privacy.html`, `biometric.html`, `health-data.html`, and `licenses.html`. When the new domain exists, point it at Pages and add it as the custom domain; the store listings then use those URLs.
+- Connect the repository to Cloudflare Pages ([site/README.md](../../site/README.md)). Its production address then serves `/terms`, `/privacy`, `/biometric`, `/health-data`, and `/licenses`; those are the URLs the store listings use. When the new domain exists, add it to the Pages project as a custom domain.
 - Texas residents: Texas CUBI is enforced by the Texas Attorney General, and Texas's App Store Accountability Act (SB 2420) puts age duties on stores and developers. Re-check both on release day (legal-review §13).
