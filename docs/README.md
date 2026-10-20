@@ -21,6 +21,7 @@ Start at [handoff.md](handoff.md), the agent entry brief, then [decisions.md](de
 | [validation.md](validation.md) | What Fast must measure: FMR/FNMR, 64 px recall, and the ~1 s miss rate. |
 | [platforms.md](platforms.md) | One Rust core, native shells, Fast pre-selected, Accurate selectable and not measured yet. |
 | [../site/](../site/README.md) | The website and its policy pages, built by `scripts/site.py` and served by Cloudflare Pages. |
+| [fbi-access-request.md](fbi-access-request.md) | The letter asking the FBI for automated access to poster photos, and why. |
 | [store-listing.md](store-listing.md) | Store name, description, keywords, data-safety answers, and Apple review notes. |
 | [legal/](legal/README.md) | Draft Terms of Use, privacy, biometric, and Washington health-data policies, from [legal-review.md](legal-review.md). |
 
