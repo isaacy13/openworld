@@ -26,7 +26,7 @@ Real FBI posters stay off unless the poster-photo check below passes on a full r
 
 ### Where the poster run can run
 
-Probed on 2026-10-19 and 2026-10-20: `api.fbi.gov` answers GitHub's runners and a home network. `www.fbi.gov`, which serves every poster photo, answers 403 to every request that is not a real browser, from GitHub's runners and from the owner's home network alike, whatever the User-Agent or headers; a browser on the same network loads the photo. OpenWorld will not pose as a browser to pass that control, so the poster-photo run, and real posters in the apps, wait on the FBI's answer to [docs/fbi-access-request.md](../docs/fbi-access-request.md). The script's User-Agent is `openworld-eval/1`; the earlier `openworld-eval (+https://github.com/isaacy13/openworld)` was refused by `api.fbi.gov` itself.
+Probed on 2026-10-19 and 2026-10-20: `api.fbi.gov` answers GitHub's runners and a home network. `www.fbi.gov`, which serves every poster photo, answers every request that is not a real browser with Cloudflare's managed challenge ("Just a moment...", HTTP 403, an HTML page instead of the photo), from GitHub's runners and from the owner's home network alike, whatever the User-Agent or headers; a browser on the same network loads the photo. OpenWorld will not pose as a browser to pass that control, so the poster-photo run, and real posters in the apps, wait on the FBI's answer to [docs/fbi-access-request.md](../docs/fbi-access-request.md). The script's User-Agent is `openworld-eval/1`; the earlier `openworld-eval (+https://github.com/isaacy13/openworld)` was refused by `api.fbi.gov` itself.
 
 ### The poster-photo gate
 
