@@ -61,4 +61,6 @@ If OpenWorld's data handling changes, this policy changes first, in the same rel
 
 ## 9. Contact
 
-OneX Engineering, Texas, United States. Email: support@onexengineering.com
+OneX Engineering
+15503 Vance Jackson Rd #4116, San Antonio, TX 78249, United States
+Phone: 210-948-3009 · Email: support@onexengineering.com

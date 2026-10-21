@@ -17,7 +17,7 @@ A policy that says something the app does not do is itself a deception risk (FTC
 ## Owner decisions in these texts (2026-10-19)
 
 - Effective date: October 19, 2026.
-- Publisher: OneX Engineering, Texas, United States. Governing law: Texas. Courts: state and federal courts in Texas.
+- Publisher: OneX Engineering, 15503 Vance Jackson Rd #4116, San Antonio, TX 78249, United States; phone 210-948-3009. Governing law: Texas. Courts: state and federal courts in Texas.
 - Disputes: binding individual arbitration (AAA Consumer Rules, Federal Arbitration Act), class-action and jury waiver, 60-day informal resolution first, small-claims carve-out, 30-day opt-out by email, one-year claim limit. The disclaimers, the liability cap, the release, and the indemnity are in capitals because Texas requires conspicuous wording for some of them (the fair-notice rules).
 
 ## Contact address: change it when the domain changes
@@ -33,6 +33,5 @@ Changing the address does not by itself need a new `VERSION`, but an old address
 ## Still open
 
 - A licensed attorney reviews all four policies, mainly the arbitration section and the Texas conspicuousness of the disclaimers ([legal-review.md](../legal-review.md) §12).
-- Apple asks for a postal address and phone number in the EULA contact; add them when the business address is set.
 - Connect the repository to Cloudflare Pages ([site/README.md](../../site/README.md)). Its production address then serves `/terms`, `/privacy`, `/biometric`, `/health-data`, and `/licenses`; those are the URLs the store listings use. When the new domain exists, add it to the Pages project as a custom domain.
 - Texas residents: Texas CUBI is enforced by the Texas Attorney General, and Texas's App Store Accountability Act (SB 2420) puts age duties on stores and developers. Re-check both on release day (legal-review §13).

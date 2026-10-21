@@ -38,4 +38,6 @@ Face data is protected by your device's own security: file protection on iPhone 
 
 ## 7. Contact
 
-OneX Engineering, Texas, United States. Email: support@onexengineering.com
+OneX Engineering
+15503 Vance Jackson Rd #4116, San Antonio, TX 78249, United States
+Phone: 210-948-3009 · Email: support@onexengineering.com

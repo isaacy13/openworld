@@ -4,15 +4,10 @@
 
 ## Cloudflare Pages
 
-Connect the repository once, in the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect to Git**, pick `isaacy13/openworld`, and set:
+`.github/workflows/site.yml` builds the site and deploys it with Wrangler: `main` is the production site, every branch and pull request gets its own preview URL. Set it up once:
 
-| Setting | Value |
-| --- | --- |
-| Production branch | `main` |
-| Framework preset | None |
-| Build command | `python3 scripts/site.py _site` |
-| Build output directory | `_site` |
+1. In the Cloudflare dashboard, **Workers & Pages → Create → Pages → Create using direct upload**, and name the project **`openworld`** (the workflow passes `--project-name=openworld`). One manual upload or the first CI run creates it.
+2. **My Profile → API Tokens → Create Token → "Edit Cloudflare Pages"**, restricted to this account. Copy the token.
+3. In GitHub, **Settings → Secrets and variables → Actions**, add `CLOUDFLARE_API_TOKEN` (the token) and `CLOUDFLARE_ACCOUNT_ID` (the ID on the dashboard's right sidebar).
 
-Cloudflare then builds `main` as the production site and every other branch as a preview at its own address, so a pull request can be checked live before it merges. No token or secret goes in this repository. The build needs only Python 3 from the build image.
-
-Pages serves each page without `.html` (`/privacy.html` redirects to `/privacy`), so links work either way; the store listings use the short form. When the new domain exists, add it under the project's **Custom domains**.
+The workflow needs nothing else, and no credential lives in this repository. Until the two secrets exist, the job still builds and checks the site, then stops without deploying. Pages serves each page without `.html` (`/privacy.html` → `/privacy`). When the new domain exists, add it under the project's **Custom domains**.

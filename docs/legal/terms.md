@@ -134,6 +134,8 @@ If you got the App from the Apple App Store:
 
 ## 17. Contact
 
-OneX Engineering, Texas, United States. Email: support@onexengineering.com
+OneX Engineering
+15503 Vance Jackson Rd #4116, San Antonio, TX 78249, United States
+Phone: 210-948-3009 · Email: support@onexengineering.com
 
 Use this address for questions, for the notice in section 14, to opt out of arbitration, to report a mislabeling, or to send a rights notice about a poster image. OneX holds no copy of your files or results, so it cannot look one up or delete one for you; results are deleted on your device (Privacy Policy).
