@@ -7903,7 +7903,7 @@ rustix 0.38.44: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (https://git
 rustix 1.1.5: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (https://github.com/bytecodealliance/rustix)
 rustls 0.23.46: Apache-2.0 OR ISC OR MIT (https://github.com/rustls/rustls)
 rustls-pki-types 1.15.1: MIT OR Apache-2.0 (https://github.com/rustls/pki-types)
-rustls-webpki 0.103.15: ISC (https://github.com/rustls/webpki)
+rustls-webpki 0.103.16: ISC (https://github.com/rustls/webpki)
 ryu 1.0.23: Apache-2.0 OR BSL-1.0 (https://github.com/dtolnay/ryu)
 serde 1.0.217: MIT OR Apache-2.0 (https://github.com/serde-rs/serde)
 serde 1.0.229: MIT OR Apache-2.0 (https://github.com/serde-rs/serde)
@@ -7947,7 +7947,7 @@ ureq-proto 0.6.5: MIT OR Apache-2.0 (https://github.com/algesten/ureq-proto)
 utf8-zero 0.8.1: MIT OR Apache-2.0 (https://github.com/algesten/utf8-zero)
 utf8parse 0.2.2: Apache-2.0 OR MIT (https://github.com/alacritty/vte)
 wasi 0.11.1+wasi-snapshot-preview1: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (https://github.com/bytecodealliance/wasi)
-webpki-roots 1.0.9: CDLA-Permissive-2.0 (https://github.com/rustls/webpki-roots)
+webpki-roots 1.0.10: CDLA-Permissive-2.0 (https://github.com/rustls/webpki-roots)
 weezl 0.1.12: MIT OR Apache-2.0 (https://github.com/image-rs/weezl)
 windows-link 0.2.1: MIT OR Apache-2.0 (https://github.com/microsoft/windows-rs)
 windows-sys 0.52.0: MIT OR Apache-2.0 (https://github.com/microsoft/windows-rs)
@@ -12425,7 +12425,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------
-Used by: rustls-webpki 0.103.15 (LICENSE)
+Used by: rustls-webpki 0.103.16 (LICENSE)
 
 Except as otherwise noted, this project is licensed under the following
 (ISC-style) terms:
@@ -13297,7 +13297,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------
-Used by: webpki-roots 1.0.9 (LICENSE)
+Used by: webpki-roots 1.0.10 (LICENSE)
 
 # Community Data License Agreement - Permissive - Version 2.0
 
