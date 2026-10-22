@@ -42,6 +42,8 @@ pub struct Ui {
     tx: async_channel::Sender<Msg>,
     hold: RefCell<Option<gio::ApplicationHoldGuard>>,
     syncing: Cell<bool>,
+    /// A file picked, dropped, or passed before the terms are accepted. Opened after Continue.
+    pending: RefCell<Option<gio::File>>,
 }
 
 impl Ui {
@@ -87,6 +89,7 @@ impl Ui {
             tx,
             hold: RefCell::new(None),
             syncing: Cell::new(false),
+            pending: RefCell::new(None),
         });
         ui.start.wire(&ui);
         ui.review.wire(&ui);
@@ -199,6 +202,9 @@ impl Ui {
         }
         self.window.set_content(Some(&self.toasts));
         self.start.focus();
+        if let Some(file) = self.pending.borrow_mut().take() {
+            self.open_file(file);
+        }
     }
 
     /// The first-run screen is up.
@@ -302,6 +308,11 @@ impl Ui {
     /// Open a picked, dropped, or passed file. One with no local path is copied first.
     pub fn open_file(self: &Rc<Self>, file: gio::File) {
         if self.model.borrow().scanning() || self.model.borrow().closing {
+            return;
+        }
+        // Behind the first-run screen the file is not read; it waits for Continue.
+        if self.welcoming() {
+            *self.pending.borrow_mut() = Some(file);
             return;
         }
         if let Some(path) = file.path() {
