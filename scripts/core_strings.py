@@ -18,14 +18,25 @@ COMMENT = "A core sentence, looked up by its code (docs/api.md). Keep the meanin
 def catalog(binary: str) -> str:
     answer = subprocess.run([binary, "--bundles", str(ROOT / "bundles"), "--json", "copy"], check=True, capture_output=True, text=True)
     copy = json.loads(answer.stdout)["copy"]
-    strings = {
-        code: {
+    # English is the source of truth and is (re)written from the core every time. Any
+    # other localization already in the catalog (e.g. the es draft) is preserved as-is;
+    # the core owns the codes, not the translations. A code the core no longer emits is
+    # dropped with its translations.
+    prior = {}
+    if CATALOG.exists():
+        prior = json.loads(CATALOG.read_text()).get("strings", {})
+    strings = {}
+    for code, text in sorted(copy.items()):
+        kept = prior.get(code, {}).get("localizations", {})
+        localizations = {"en": {"stringUnit": {"state": "translated", "value": text}}}
+        for lang in kept:
+            if lang != "en":
+                localizations[lang] = kept[lang]
+        strings[code] = {
             "comment": COMMENT,
             "extractionState": "manual",
-            "localizations": {"en": {"stringUnit": {"state": "translated", "value": text}}},
+            "localizations": {lang: localizations[lang] for lang in sorted(localizations)},
         }
-        for code, text in sorted(copy.items())
-    }
     return json.dumps({"sourceLanguage": "en", "strings": strings, "version": "1.0"}, indent=2, ensure_ascii=False) + "\n"
 
 

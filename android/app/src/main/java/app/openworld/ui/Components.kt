@@ -69,9 +69,14 @@ object Words {
     private val ids = ConcurrentHashMap<String, Int>()
 
     fun of(context: Context, line: Line): String {
-        val translated = id(context, "core_${line.code}")
+        // A core_<code> translation, when the current locale defines one. The es draft
+        // ships these; the default (English) does not, so on an English device getString
+        // throws for a translation-only resource and we fall back to the core's own
+        // English text (line.text). English therefore always comes from the core.
+        val translated = id(context, "core_${line.code}").takeIf { it != 0 }
+            ?.let { runCatching { context.getString(it) }.getOrNull() }
         val template = when {
-            translated != 0 -> context.getString(translated)
+            translated != null -> translated
             line.text.isNotEmpty() -> return line.text
             // A shell code: its words are a string by the same name.
             else -> id(context, line.code).takeIf { it != 0 }?.let { context.getString(it) } ?: return line.code

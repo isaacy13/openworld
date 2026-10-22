@@ -1,7 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "%@ frames · faces looked for at %lld px": {},
+    "%@ frames · faces looked for at %lld px": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fotogramas · rostros buscados a %lld px"
+          }
+        }
+      }
+    },
     "%@, %lld posters": {
       "localizations": {
         "en": {
@@ -21,11 +30,38 @@
               }
             }
           }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, %2$lld cartel"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, %2$lld carteles"
+                }
+              }
+            }
+          }
         }
       }
     },
     "%@: %@": {},
-    "%lld left out: %@": {},
+    "%lld left out: %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld descartados: %@"
+          }
+        }
+      }
+    },
     "%lld possible candidates. Review each one below.": {
       "localizations": {
         "en": {
@@ -41,6 +77,24 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld possible candidates. Review each one below."
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld posible candidato. Revísalo abajo."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld posibles candidatos. Revisa cada uno abajo."
                 }
               }
             }
@@ -67,54 +121,450 @@
               }
             }
           }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld cartel"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld carteles"
+                }
+              }
+            }
+          }
         }
       }
     },
-    "5 frames a second": {},
-    "A stop is Incomplete, never a clearance.": {},
-    "A stopped scan is Incomplete. It is never a clearance.": {},
-    "About OpenWorld": {},
-    "Analyze on this device": {},
-    "Animation · %@ frames · %@": {},
-    "Back": {},
-    "Bundle": {},
+    "5 frames a second": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 fotogramas por segundo"
+          }
+        }
+      }
+    },
+    "A stop is Incomplete, never a clearance.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una interrupción queda Incompleta, nunca es una exoneración."
+          }
+        }
+      }
+    },
+    "A stopped scan is Incomplete. It is never a clearance.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un análisis detenido queda Incompleto. Nunca es una exoneración."
+          }
+        }
+      }
+    },
+    "About OpenWorld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acerca de OpenWorld"
+          }
+        }
+      }
+    },
+    "Analyze on this device": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analizar en este dispositivo"
+          }
+        }
+      }
+    },
+    "Animation · %@ frames · %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animación · %@ fotogramas · %@"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atrás"
+          }
+        }
+      }
+    },
+    "Bundle": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paquete de modelos"
+          }
+        }
+      }
+    },
     "CPU": {},
-    "Cancel": {},
-    "Chance": {},
-    "Check a photo or video you already have against public FBI missing and wanted posters, on this device.": {},
-    "Checking poster photos · %lld of %lld": {},
-    "Choose a Photo or Video…": {},
-    "Choose a photo or video": {},
-    "Choose a photo or video (⌘O)": {},
-    "Choose another file": {},
-    "Classes": {},
-    "Compare with": {},
-    "Contact": {},
-    "Continue": {},
-    "Coverage": {},
-    "Delete result": {},
-    "Delete this result?": {},
+    "Cancel": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        }
+      }
+    },
+    "Chance": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probabilidad"
+          }
+        }
+      }
+    },
+    "Check a photo or video you already have against public FBI missing and wanted posters, on this device.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compara una foto o un video que ya tienes con carteles públicos del FBI de personas desaparecidas y buscadas, en este dispositivo."
+          }
+        }
+      }
+    },
+    "Checking poster photos · %lld of %lld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando fotos de carteles · %lld de %lld"
+          }
+        }
+      }
+    },
+    "Choose a Photo or Video…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir una foto o un video…"
+          }
+        }
+      }
+    },
+    "Choose a photo or video": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir una foto o un video"
+          }
+        }
+      }
+    },
+    "Choose a photo or video (⌘O)": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir una foto o un video (⌘O)"
+          }
+        }
+      }
+    },
+    "Choose another file": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir otro archivo"
+          }
+        }
+      }
+    },
+    "Classes": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clases"
+          }
+        }
+      }
+    },
+    "Compare with": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comparar con"
+          }
+        }
+      }
+    },
+    "Contact": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacto"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
+          }
+        }
+      }
+    },
+    "Coverage": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cobertura"
+          }
+        }
+      }
+    },
+    "Delete result": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar resultado"
+          }
+        }
+      }
+    },
+    "Delete this result?": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar este resultado?"
+          }
+        }
+      }
+    },
     "Demo": {},
-    "Demo posters": {},
-    "Details": {},
-    "Detection size": {},
-    "Detector": {},
-    "Device note": {},
-    "Dismiss": {},
-    "Done": {},
-    "Embedder": {},
-    "Estimating…": {},
-    "Every frame": {},
-    "FBI posters": {},
-    "Face from frame %lld. %@": {},
-    "Faces": {},
-    "Files": {},
-    "Frame %@ of %@": {},
-    "Frames": {},
-    "From your file": {},
+    "Demo posters": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carteles de demostración"
+          }
+        }
+      }
+    },
+    "Details": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detalles"
+          }
+        }
+      }
+    },
+    "Detection size": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tamaño de detección"
+          }
+        }
+      }
+    },
+    "Detector": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detector"
+          }
+        }
+      }
+    },
+    "Device note": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nota del dispositivo"
+          }
+        }
+      }
+    },
+    "Dismiss": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descartar"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        }
+      }
+    },
+    "Embedder": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codificador"
+          }
+        }
+      }
+    },
+    "Estimating…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimando…"
+          }
+        }
+      }
+    },
+    "Every frame": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada fotograma"
+          }
+        }
+      }
+    },
+    "FBI posters": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carteles del FBI"
+          }
+        }
+      }
+    },
+    "Face from frame %lld. %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rostro del fotograma %lld. %@"
+          }
+        }
+      }
+    },
+    "Faces": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rostros"
+          }
+        }
+      }
+    },
+    "Files": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivos"
+          }
+        }
+      }
+    },
+    "Frame %@ of %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fotograma %@ de %@"
+          }
+        }
+      }
+    },
+    "Frames": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fotogramas"
+          }
+        }
+      }
+    },
+    "From your file": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De tu archivo"
+          }
+        }
+      }
+    },
     "GPU": {},
-    "Install demo posters": {},
-    "Keep scanning": {},
+    "Install demo posters": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instalar carteles de demostración"
+          }
+        }
+      }
+    },
+    "Keep scanning": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seguir analizando"
+          }
+        }
+      }
+    },
     "Kept %lld posters.": {
       "localizations": {
         "en": {
@@ -134,72 +584,639 @@
               }
             }
           }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Se conservó %lld cartel."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Se conservaron %lld carteles."
+                }
+              }
+            }
+          }
         }
       }
     },
-    "Looking": {},
-    "Missing": {},
-    "Model bundle": {},
+    "Looking": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando"
+          }
+        }
+      }
+    },
+    "Missing": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desaparecidos"
+          }
+        }
+      }
+    },
+    "Model bundle": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paquete de modelos"
+          }
+        }
+      }
+    },
     "Neural Engine": {},
-    "No camera": {},
-    "No posters installed. Real FBI photos stay off.": {},
-    "Not scanned": {},
-    "Nothing is scanned or uploaded from here.": {},
-    "Nothing uploaded": {},
-    "Nothing was scanned. Choose another file, or open this one on a computer.": {},
-    "Nothing was scanned. Choose another file.": {},
-    "Nothing was scanned. Install the posters again, then scan.": {},
-    "Nothing was scanned. Try again, or choose another file.": {},
-    "OK": {},
-    "Open FBI page": {},
+    "No camera": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin cámara"
+          }
+        }
+      }
+    },
+    "No posters installed. Real FBI photos stay off.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay carteles instalados. Las fotos reales del FBI permanecen desactivadas."
+          }
+        }
+      }
+    },
+    "Not scanned": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No analizado"
+          }
+        }
+      }
+    },
+    "Nothing is scanned or uploaded from here.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desde aquí no se analiza ni se sube nada."
+          }
+        }
+      }
+    },
+    "Nothing uploaded": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se sube nada"
+          }
+        }
+      }
+    },
+    "Nothing was scanned. Choose another file, or open this one on a computer.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se analizó nada. Elige otro archivo o abre este en una computadora."
+          }
+        }
+      }
+    },
+    "Nothing was scanned. Choose another file.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se analizó nada. Elige otro archivo."
+          }
+        }
+      }
+    },
+    "Nothing was scanned. Install the posters again, then scan.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se analizó nada. Vuelve a instalar los carteles y luego analiza."
+          }
+        }
+      }
+    },
+    "Nothing was scanned. Try again, or choose another file.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se analizó nada. Inténtalo de nuevo o elige otro archivo."
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aceptar"
+          }
+        }
+      }
+    },
+    "Open FBI page": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir página del FBI"
+          }
+        }
+      }
+    },
     "OpenWorld": {},
-    "Options": {},
-    "Other faces": {},
-    "Photo · %@": {},
-    "Plate": {},
-    "Poster": {},
-    "Posters": {},
-    "Preparing the file…": {},
-    "Ran on": {},
-    "Read all": {},
-    "Reading the FBI list · page %lld": {},
-    "Reading the FBI list · page %lld of %lld": {},
-    "Reading the FBI list…": {},
-    "Reading the file…": {},
-    "Recorded %@": {},
-    "Result": {},
-    "Results are deleted after 7 days, or when the posters expire.": {},
-    "Review": {},
-    "Saved. Open OpenWorld to scan it.": {},
-    "Saving…": {},
-    "Scan another file": {},
-    "Scan progress": {},
-    "Scanning": {},
-    "Scanning on this device": {},
-    "Show frame": {},
-    "Starting…": {},
-    "Stay": {},
-    "Stays on this device": {},
-    "Stop": {},
-    "Stop scan": {},
-    "Stop the scan?": {},
-    "Stopping. The result will say Incomplete.": {},
-    "The crops and frames from this scan are removed from this device.": {},
-    "The frame count was estimated from the length. If it is off, the result is Incomplete.": {},
-    "The system stopped the last scan before it finished. It is not a clearance.": {},
-    "This file could not be saved. Open OpenWorld and choose it there.": {},
-    "Update posters": {},
-    "Version": {},
-    "Video · %@ · %@": {},
-    "Wanted": {},
-    "Welcome to OpenWorld": {},
-    "What happened to this file": {},
-    "What happens to this file": {},
-    "about %@ left": {},
-    "fetch date unknown": {},
-    "fetched %@": {},
-    "fetched today": {},
-    "or drop it here": {}
+    "Options": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opciones"
+          }
+        }
+      }
+    },
+    "Other faces": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otros rostros"
+          }
+        }
+      }
+    },
+    "Photo · %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foto · %@"
+          }
+        }
+      }
+    },
+    "Plate": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matrícula"
+          }
+        }
+      }
+    },
+    "Poster": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cartel"
+          }
+        }
+      }
+    },
+    "Posters": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carteles"
+          }
+        }
+      }
+    },
+    "Preparing the file…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando el archivo…"
+          }
+        }
+      }
+    },
+    "Ran on": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se ejecutó en"
+          }
+        }
+      }
+    },
+    "Read all": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leer todo"
+          }
+        }
+      }
+    },
+    "Reading the FBI list · page %lld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leyendo la lista del FBI · página %lld"
+          }
+        }
+      }
+    },
+    "Reading the FBI list · page %lld of %lld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leyendo la lista del FBI · página %lld de %lld"
+          }
+        }
+      }
+    },
+    "Reading the FBI list…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leyendo la lista del FBI…"
+          }
+        }
+      }
+    },
+    "Reading the file…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leyendo el archivo…"
+          }
+        }
+      }
+    },
+    "Recorded %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabado %@"
+          }
+        }
+      }
+    },
+    "Result": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultado"
+          }
+        }
+      }
+    },
+    "Results are deleted after 7 days, or when the posters expire.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los resultados se eliminan después de 7 días, o cuando los carteles caducan."
+          }
+        }
+      }
+    },
+    "Review": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revisar"
+          }
+        }
+      }
+    },
+    "Saved. Open OpenWorld to scan it.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardado. Abre OpenWorld para analizarlo."
+          }
+        }
+      }
+    },
+    "Saving…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardando…"
+          }
+        }
+      }
+    },
+    "Scan another file": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analizar otro archivo"
+          }
+        }
+      }
+    },
+    "Scan progress": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progreso del análisis"
+          }
+        }
+      }
+    },
+    "Scanning": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analizando"
+          }
+        }
+      }
+    },
+    "Scanning on this device": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analizando en este dispositivo"
+          }
+        }
+      }
+    },
+    "Show frame": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar fotograma"
+          }
+        }
+      }
+    },
+    "Starting…": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empezando…"
+          }
+        }
+      }
+    },
+    "Stay": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quedarse"
+          }
+        }
+      }
+    },
+    "Stays on this device": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permanece en este dispositivo"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detener"
+          }
+        }
+      }
+    },
+    "Stop scan": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detener análisis"
+          }
+        }
+      }
+    },
+    "Stop the scan?": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Detener el análisis?"
+          }
+        }
+      }
+    },
+    "Stopping. The result will say Incomplete.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deteniendo. El resultado dirá Incompleto."
+          }
+        }
+      }
+    },
+    "The crops and frames from this scan are removed from this device.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los recortes y fotogramas de este análisis se eliminan de este dispositivo."
+          }
+        }
+      }
+    },
+    "The frame count was estimated from the length. If it is off, the result is Incomplete.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El número de fotogramas se estimó a partir de la duración. Si no es exacto, el resultado queda Incompleto."
+          }
+        }
+      }
+    },
+    "The system stopped the last scan before it finished. It is not a clearance.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El sistema detuvo el último análisis antes de que terminara. No es una exoneración."
+          }
+        }
+      }
+    },
+    "This file could not be saved. Open OpenWorld and choose it there.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar este archivo. Abre OpenWorld y elígelo ahí."
+          }
+        }
+      }
+    },
+    "Update posters": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar carteles"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión"
+          }
+        }
+      }
+    },
+    "Video · %@ · %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video · %@ · %@"
+          }
+        }
+      }
+    },
+    "Wanted": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscados"
+          }
+        }
+      }
+    },
+    "Welcome to OpenWorld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Te damos la bienvenida a OpenWorld"
+          }
+        }
+      }
+    },
+    "What happened to this file": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qué le pasó a este archivo"
+          }
+        }
+      }
+    },
+    "What happens to this file": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qué le pasa a este archivo"
+          }
+        }
+      }
+    },
+    "about %@ left": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "quedan unos %@"
+          }
+        }
+      }
+    },
+    "fetch date unknown": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fecha de obtención desconocida"
+          }
+        }
+      }
+    },
+    "fetched %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "obtenido %@"
+          }
+        }
+      }
+    },
+    "fetched today": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "obtenido hoy"
+          }
+        }
+      }
+    },
+    "or drop it here": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o suéltalo aquí"
+          }
+        }
+      }
+    }
   },
   "version": "1.0"
 }
