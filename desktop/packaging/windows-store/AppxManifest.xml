@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<!--
+  MSIX manifest for the Microsoft Store build of the OpenWorld GTK desktop app.
+
+  This is a full-trust (Win32 / desktop-bridge) package: the unchanged GTK executable,
+  its DLLs, ffmpeg.exe/ffprobe.exe, the pinned onnxruntime.dll, the bundle catalog, and
+  GTK's run-time data all live under app\, exactly as desktop/packaging/windows-bundle.sh
+  lays them out. The app loads its DLLs and its share\/lib\ data relative to the .exe, so
+  that whole folder is copied verbatim into app\ and nothing is moved into a VFS mapping.
+
+  >>> PLACEHOLDERS the owner fills in from Partner Center. Do NOT guess these. <<<
+    - Identity/@Name              -> "Package/Identity/Name" from Partner Center
+    - Identity/@Publisher         -> "Package/Identity/Publisher" from Partner Center
+                                     (a "CN=..." string with your Store publisher hash;
+                                      the Store re-signs the package to this identity)
+    - Properties/PublisherDisplayName -> "Package/Properties/PublisherDisplayName"
+  The Store signs the uploaded package itself, so no code-signing certificate is needed
+  and this repo adds no signing step. See desktop/packaging/windows-store.md.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <!-- PLACEHOLDER identity. Replace Name and Publisher with the exact strings Partner
+       Center assigns (Product -> Product identity). Version must be N.N.N.0: the Store
+       reserves the fourth part (revision), so it stays 0 and the first three are yours. -->
+  <Identity
+    Name="PLACEHOLDER.OpenWorld"
+    Publisher="CN=PLACEHOLDER-REPLACE-WITH-STORE-PUBLISHER-ID"
+    Version="0.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>OpenWorld</DisplayName>
+    <!-- PLACEHOLDER: the "Package/Properties/PublisherDisplayName" from Partner Center. -->
+    <PublisherDisplayName>PLACEHOLDER Publisher Display Name</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- Full-trust desktop packages need Windows 10 1809 or newer. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="OpenWorld" Executable="app\openworld-desktop.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="OpenWorld"
+        Description="Check a photo or video you already have against public FBI missing and wanted posters, on this device"
+        BackgroundColor="#2F5D8C"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- A Win32/GTK executable runs outside the app container; this is the capability that
+         allows it. Everything the scan does is on-device, so no other capability is declared. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
