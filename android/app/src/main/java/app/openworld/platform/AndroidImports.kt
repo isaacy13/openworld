@@ -25,6 +25,9 @@ class AndroidImports(private val resolver: ContentResolver, private val dir: Fil
         val size = facts.size
         if (size != null && size > dir.usableSpace - SPACE_MARGIN) throw ImportRefused(Shell.IMPORT_SPACE)
         val target = File(dir, "import-${System.currentTimeMillis()}${extension(facts.name, mime)}")
+        // Hold the copy before it exists, so a startup clear() racing this import cannot
+        // delete the file we are still writing. Released on failure here, or by delete().
+        held += target.path
         try {
             val input = resolver.openInputStream(uri) ?: throw ImportRefused(Shell.IMPORT_FAILED)
             input.use { source ->
@@ -47,15 +50,19 @@ class AndroidImports(private val resolver: ContentResolver, private val dir: Fil
                 }
             }
         } catch (e: ImportRefused) {
+            held -= target.path
             target.delete()
             throw e
         } catch (e: IOException) {
+            held -= target.path
             target.delete()
             throw ImportRefused(if (dir.usableSpace < SPACE_MARGIN) Shell.IMPORT_SPACE else Shell.IMPORT_FAILED)
         } catch (e: SecurityException) {
+            held -= target.path
             target.delete()
             throw ImportRefused(Shell.IMPORT_FAILED)
         } catch (t: Throwable) {
+            held -= target.path
             target.delete()
             throw t
         }
