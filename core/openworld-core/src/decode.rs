@@ -46,6 +46,10 @@ pub const MAX_FRAMES: u64 = 10_368_000;
 const MAX_STILL_FRAMES: u64 = 10_000;
 /// A container header read into memory is never larger than this.
 const MAX_HEADER_BYTES: u64 = 4 * 1024 * 1024;
+/// A probe's JSON or text is at most this. Normal probes are kilobytes; the per-frame
+/// timestamp read grows with length, so a crafted multi-hour file could otherwise balloon
+/// memory before the frame cap refuses it. Past this the probe is stopped and fails.
+const MAX_PROBE_BYTES: usize = 64 * 1024 * 1024;
 /// FFmpeg or ffprobe that writes nothing for this long is stopped: a crafted
 /// file must not hang a scan that no Stop can reach while the read blocks.
 const STALL: Duration = Duration::from_secs(120);
@@ -91,9 +95,16 @@ impl WatchedOutput for Command {
         let (beat, dog) = watch(&child, STALL);
         let mut out = Vec::new();
         let mut chunk = [0u8; 64 * 1024];
+        let mut flooded = false;
         while let Ok(n @ 1..) = stdout.read(&mut chunk) {
             out.extend_from_slice(&chunk[..n]);
             let _ = beat.send(());
+            if out.len() > MAX_PROBE_BYTES {
+                // A crafted file is flooding the probe; stop it before it balloons memory.
+                flooded = true;
+                let _ = child.lock().map(|mut c| c.kill());
+                break;
+            }
         }
         drop(beat);
         let stalled = dog.join().unwrap_or(true);
@@ -101,6 +112,9 @@ impl WatchedOutput for Command {
         let stderr = errors.join().unwrap_or_default();
         if stalled {
             return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "stalled"));
+        }
+        if flooded {
+            return Err(std::io::Error::other("probe output too large"));
         }
         Ok(Output { status, stdout: out, stderr })
     }
