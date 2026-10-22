@@ -1,0 +1,3 @@
+# Wide lines, like the core.
+max_width = 140
+use_small_heuristics = "Max"

@@ -1,0 +1,227 @@
+<title>OpenWorld</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="OpenWorld compares the faces in a photo or video you already have with public FBI missing-person and wanted-person posters, on your device. Nothing is uploaded.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<style>/*{{style}}*/</style>
+<!-- body -->
+<header class="bar">
+  <div class="wrap">
+    <a class="mark" href="#top" aria-label="OpenWorld, top of page">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11.5" fill="none" stroke="#8db4e2" stroke-width="1.5"/><circle cx="9" cy="11" r="1.6" fill="#8db4e2"/><circle cx="17" cy="11" r="1.6" fill="#8db4e2"/><circle cx="13" cy="14.5" r="1.6" fill="#8db4e2"/><circle cx="9.8" cy="18" r="1.4" fill="#8db4e2"/><circle cx="16.2" cy="18" r="1.4" fill="#8db4e2"/></svg>
+      OpenWorld
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#never">Privacy</a>
+      <a href="#numbers">Numbers</a>
+      <a href="#policies">Policies</a>
+      <a href="https://github.com/isaacy13/openworld">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">On-device face comparison · Open source</p>
+        <h1>A closer look that <em>never leaves</em> your device.</h1>
+        <p class="lede">OpenWorld checks the faces in a photo or video you already have against public FBI missing-person and wanted-person posters. The comparison runs on your phone or computer. No account, no upload, no server.</p>
+        <div class="actions">
+          <a class="button primary" href="#how">See how it works</a>
+          <a class="button" href="https://github.com/isaacy13/openworld">Read the source</a>
+        </div>
+        <p class="status">In testing. Not yet in app stores.</p>
+        <p class="fine">OpenWorld is not part of, or endorsed by, the FBI or any government agency. A possible candidate is not an identification.</p>
+      </div>
+
+      <figure class="scope" aria-label="An illustration of one face being checked: five landmarks found, quality gates passed, compared with the poster set, below the cutoff.">
+        <canvas id="scope" width="480" height="600" aria-hidden="true"></canvas>
+        <div class="corner"><span class="live">● Scanning on this device</span><span>Frame 412 / 1,800</span></div>
+        <div class="readout">
+          <div class="row"><span>face</span><span>186 px · 5 landmarks</span></div>
+          <div class="row"><span>gates</span><span>pose · blur · exposure passed</span></div>
+          <div class="row"><span>track</span><span>3 gated frames</span></div>
+          <div class="row verdict"><span>compared with 512 posters</span><span>below the locked cutoff</span></div>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band alt" id="how">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">What happens to a file</p>
+        <h2>Six steps, all of them <em>on your device</em>.</h2>
+        <p class="muted">The same library runs on iPhone, Android, Mac, Windows, and Linux. Each step can say no, and the result tells you which one did.</p>
+      </div>
+      <ol class="steps">
+        <li><h3>Decode</h3><p>Every frame of the file is read into memory, one at a time. Frames are never written to disk.</p><span class="tag">photo · video · GIF · HEIC</span></li>
+        <li><h3>Detect</h3><p>The YuNet detector looks for faces. A face is compared only when it is at least 112 pixels across in your file.</p><span class="tag">YuNet 2023mar · MIT</span></li>
+        <li><h3>Gate</h3><p>A face that is turned away, blurred, too dark, or too bright is not compared. The result lists it and says why.</p><span class="tag">pose · blur · exposure · landmarks</span></li>
+        <li><h3>Track</h3><p>A face in a video needs three good frames, or one second on screen, before it can become a candidate.</p><span class="tag">3 frames or 1 s</span></li>
+        <li><h3>Compare</h3><p>The SFace network turns the face into numbers and compares them with every enabled poster, against a locked cutoff.</p><span class="tag">SFace 2021dec · cutoff 0.63</span></li>
+        <li><h3>Result</h3><p>Possible candidate, no candidate, or incomplete. Never a raw score, and never a list of near misses.</p><span class="tag">kept 7 days, then deleted</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band" id="never">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Privacy</p>
+        <h2>Built to know <em>as little</em> as possible.</h2>
+      </div>
+      <ul class="never">
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>Nothing is uploaded</h3><p class="muted">Your file, the faces in it, and the result stay on the device. CI traces every network call a scan makes and fails if one reaches the internet.</p></div></li>
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>No account, no analytics</h3><p class="muted">There is no sign-in, no tracking, no ads, and no crash reporter. OneX receives nothing.</p></div></li>
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>No camera</h3><p class="muted">OpenWorld only reads a file you choose. It never records, and it does not run in the background.</p></div></li>
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>No reports to anyone</h3><p class="muted">OpenWorld never contacts an agency. Opening a poster's page is a choice you make, in your browser.</p></div></li>
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>Templates live in memory</h3><p class="muted">The numbers that describe a face are never saved. Results delete themselves after 7 days.</p></div></li>
+        <li><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h3>Open to inspection</h3><p class="muted">The code, the models, and every measurement are public. Builds are pinned and checked byte for byte.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band alt" id="numbers">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Measured, with the limits</p>
+        <h2>We publish what it <em>gets wrong</em>.</h2>
+        <p class="muted">Measured on LFW, CALFW, and CPLFW: press photos of public figures, not FBI posters. Your results can be worse.</p>
+      </div>
+      <div class="figures">
+        <div class="figure"><span class="value">8 in 10M</span><span class="what">Strangers who pass the cutoff</span><span class="basis">65 of 81,092,114 different-person pairs (LFW)</span></div>
+        <div class="figure"><span class="value">26%</span><span class="what">Same person, missed</span><span class="basis">424 of 1,623 people, one photo pair each (LFW)</span></div>
+        <div class="figure"><span class="value">73%</span><span class="what">Missed when the photos are years apart</span><span class="basis">2,190 of 3,000 same-person pairs (CALFW)</span></div>
+      </div>
+      <p class="note">The cutoff is set where about one comparison in a million is a false match, because a long video compared with many posters makes millions of comparisons. Every result says how many false candidates chance alone would give that scan. Real FBI posters stay off until the same test on poster photos shows at most 2 false matches in a million, overall and for every group the posters describe.</p>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="candidate" role="note">
+        <p class="eyebrow" style="color: inherit">If a result says “possible candidate”</p>
+        <h2>It is not an identification.</h2>
+        <ul>
+          <li>Look-alikes, relatives, and old photos can pass the cutoff.</li>
+          <li>Do not approach, follow, confront, or try to hold anyone.</li>
+          <li>Do not post or share the result.</li>
+          <li>OpenWorld does not report anything. If someone is in immediate danger, call 911.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Platforms</p>
+        <h2>One library, <em>five</em> apps.</h2>
+        <p class="muted">In testing now. Store releases follow legal review, signed builds, and testing on real devices. Offered in the United States only.</p>
+      </div>
+      <ul class="platforms">
+        <li>iPhone</li><li>Android</li><li>Mac</li><li>Windows</li><li>Linux</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" id="policies">
+  <div class="wrap">
+    <div>
+      <h3>OpenWorld</h3>
+      <p class="muted">Published by OneX Engineering, Texas, United States. Source code under the Apache License 2.0.</p>
+    </div>
+    <div>
+      <h3>Policies</h3>
+      <ul>
+        <li><a href="terms.html">Terms of Use</a></li>
+        <li><a href="privacy.html">Privacy Policy</a></li>
+        <li><a href="biometric.html">Biometric Data Policy</a></li>
+        <li><a href="health-data.html">Consumer Health Data Privacy Policy</a></li>
+        <li><a href="licenses.html">Licenses</a></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Contact</h3>
+      <ul>
+        <li><span class="email">support@onexengineering.com</span></li>
+        <li><a href="https://github.com/isaacy13/openworld">github.com/isaacy13/openworld</a></li>
+      </ul>
+    </div>
+    <div class="legal">
+      <p>OpenWorld is not part of, or endorsed by, the FBI or any government agency. Posters belong to their publishers.</p>
+      <p>Intended for adults in the United States. Not offered in the EU, EEA, UK, Switzerland, Canada, or Australia.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // The detector's own output, drawn: a face box and its five landmarks over a sensor field.
+  const canvas = document.getElementById("scope");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const W = canvas.width, H = canvas.height;
+  const accent = "#8db4e2", amber = "#ffc266";
+  const box = { x: 128, y: 120, w: 224, h: 268 };
+  const marks = [[0.32, 0.4], [0.68, 0.4], [0.5, 0.58], [0.36, 0.76], [0.64, 0.76]];
+  // An oval of points for the face outline, and a field of faint dots.
+  const outline = Array.from({ length: 46 }, (_, i) => {
+    const a = (i / 46) * Math.PI * 2;
+    return [0.5 + 0.38 * Math.cos(a), 0.5 + 0.46 * Math.sin(a)];
+  });
+  const field = [];
+  for (let y = 18; y < H; y += 22) for (let x = 18; x < W; x += 22) field.push([x, y, Math.random()]);
+
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    for (const [x, y, p] of field) {
+      const twinkle = still ? 0.18 : 0.12 + 0.12 * Math.sin(t / 900 + p * 12);
+      ctx.fillStyle = `rgba(141,180,226,${twinkle})`;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    const sweep = still ? 0.62 : (t / 3200) % 1;
+    const sy = box.y - 30 + sweep * (box.h + 60);
+    const grad = ctx.createLinearGradient(0, sy - 60, 0, sy);
+    grad.addColorStop(0, "rgba(141,180,226,0)");
+    grad.addColorStop(1, "rgba(141,180,226,0.16)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(box.x - 40, sy - 60, box.w + 80, 60);
+    ctx.fillStyle = "rgba(141,180,226,0.55)";
+    ctx.fillRect(box.x - 40, sy, box.w + 80, 1);
+
+    for (const [u, v] of outline) {
+      const x = box.x + u * box.w, y = box.y + v * box.h;
+      const lit = Math.abs(y - sy) < 40 ? 0.9 : 0.35;
+      ctx.fillStyle = `rgba(195,204,213,${lit})`;
+      ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+    const L = 22;
+    ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    for (const [cx, cy, dx, dy] of [[box.x, box.y, 1, 1], [box.x + box.w, box.y, -1, 1], [box.x, box.y + box.h, 1, -1], [box.x + box.w, box.y + box.h, -1, -1]]) {
+      ctx.beginPath(); ctx.moveTo(cx + dx * L, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + dy * L); ctx.stroke();
+    }
+    ctx.font = "500 12px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = accent;
+    ctx.fillText("face 0.94", box.x, box.y - 10);
+    const pulse = still ? 1 : 0.75 + 0.25 * Math.sin(t / 400);
+    marks.forEach(([u, v], i) => {
+      const x = box.x + u * box.w, y = box.y + v * box.h;
+      ctx.strokeStyle = `rgba(255,194,102,${0.35 * pulse})`;
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = amber;
+      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+      if (i < 2) { ctx.strokeStyle = "rgba(255,194,102,0.25)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(box.x + 0.5 * box.w, box.y + 0.58 * box.h); ctx.stroke(); }
+    });
+    if (!still) requestAnimationFrame(frame);
+  }
+  frame(0);
+  if (!still) requestAnimationFrame(frame);
+})();
+</script>

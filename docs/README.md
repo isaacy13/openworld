@@ -1,10 +1,15 @@
 # OpenWorld design
 
-Start at [handoff.md](handoff.md). That file is the agent entry brief. The specs below are locked decisions.
+Start at [handoff.md](handoff.md), the agent entry brief, then [decisions.md](decisions.md), which corrects it. The specs below are locked decisions.
 
 | Spec | One line |
 | --- | --- |
 | [handoff.md](handoff.md) | v0 goal, what not to build, the local cascade, bundles, screens, and build order. |
+| [decisions.md](decisions.md) | The 2026-10-19 corrections: cutoff from base rates, real Fast weights, automatic detection size, plates out, fail-closed rules in code. Wins over older specs. |
+| [ux.md](ux.md) | The three screens, the visual language, and behavior on every platform. |
+| [api.md](api.md) | The library API the shells call. |
+| [threat-model.md](threat-model.md) | Assets, adversaries, trust boundaries, and mitigations. |
+| [data-flow.md](data-flow.md) | Every piece of data, where it lives, and when it is deleted. |
 | [feasibility.md](feasibility.md) | Why a compact on-device cascade is the scanner, and why Jev, Laya, and Clef are not. |
 | [project-context.md](project-context.md) | Purpose, must / must not, coverage, FBI sources, platforms, and v0 defaults. |
 | [design-gaps.md](design-gaps.md) | Threats, the fail-closed table, the tightened v0, and what stays parked. |
@@ -15,8 +20,12 @@ Start at [handoff.md](handoff.md). That file is the agent entry brief. The specs
 | [release-gates.md](release-gates.md) | The measured curve v0 needs, and what still blocks a public app. |
 | [validation.md](validation.md) | What Fast must measure: FMR/FNMR, 64 px recall, and the ~1 s miss rate. |
 | [platforms.md](platforms.md) | One Rust core, native shells, Fast pre-selected, Accurate selectable and not measured yet. |
+| [../site/](../site/README.md) | The website and its policy pages, built by `scripts/site.py` and served by Cloudflare Pages. |
+| [fbi-access-request.md](fbi-access-request.md) | The letter asking the FBI for automated access to poster photos, and why. |
+| [store-listing.md](store-listing.md) | Store name, description, keywords, data-safety answers, and Apple review notes. |
+| [legal/](legal/README.md) | Draft Terms of Use, privacy, biometric, and Washington health-data policies, from [legal-review.md](legal-review.md). |
 
-If two specs disagree, [handoff.md](handoff.md) and the later corrections win. Phone `complete` scans are allowed after the estimate. Downscale is a prompt. Accurate is selectable and not measured yet.
+If two specs disagree, [decisions.md](decisions.md) wins, then [handoff.md](handoff.md). Phone `complete` scans are allowed after the estimate. The detection size is automatic. Accurate is selectable and not measured yet.
 
 Related:
 

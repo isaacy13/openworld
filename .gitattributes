@@ -1,0 +1,4 @@
+# Shell scripts must stay LF on every platform. Windows runners check out CRLF by
+# default, which makes bash fail on the first line (hit first by the MSIX packaging
+# job running desktop/packaging/windows-bundle.sh). Keep every .sh LF everywhere.
+*.sh text eol=lf

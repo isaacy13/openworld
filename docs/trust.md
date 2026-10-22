@@ -6,7 +6,7 @@ The product question: before **Analyze locally**, can the user see what happens 
 
 Specific to the selected item and enabled package. Link out to full detail. Not a compulsory checkbox on every import; must stay reachable during analysis and on results.
 
-> **This video stays on this device while OpenWorld analyzes it.** It will detect face tracks in this selected file and compare eligible local crops only with the small, named public **missing-person and wanted-person** package shown below. It does not upload this video, its face crops, or face templates; add detected people to a database; train on this media; contact an agency; or make a report. Keeping the file on this device does not make results more accurate or prove the recording is real. You can cancel and delete the file and local results.
+> **This video stays on this device while OpenWorld analyzes it.** It will detect face tracks in this selected file and compare eligible local crops only with the small, named public **missing-person and wanted-person** package shown below. It does not upload this video, its face crops, or face templates; add detected people to a database; train on this media; or report anything to an agency. Keeping the file on this device does not make results more accurate or prove the recording is real. You can cancel and delete the file and local results.
 
 Inspectable on that screen:
 

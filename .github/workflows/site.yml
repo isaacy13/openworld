@@ -1,0 +1,42 @@
+name: site
+# Build the website (scripts/site.py) and deploy it to Cloudflare Pages: production on main,
+# a preview on every other branch. Needs two repository secrets, CLOUDFLARE_API_TOKEN (a token
+# scoped to "Cloudflare Pages: Edit") and CLOUDFLARE_ACCOUNT_ID. The Pages project is named
+# "openworld". Without the secrets the job still builds the site and checks it, then stops.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/legal/**", "scripts/site.py", ".github/workflows/site.yml"]
+  pull_request:
+    paths: ["site/**", "docs/legal/**", "scripts/site.py", ".github/workflows/site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: python3 scripts/site.py _site
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        if: ${{ env.HAS_CF == 'true' }}
+        uses: cloudflare/wrangler-action@9681c2997648301493e78cacbfb790a9f19c833f # v3.9.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy _site --project-name=openworld --branch=${{ github.head_ref || github.ref_name }}
+      - name: where it went
+        if: ${{ steps.deploy.outcome == 'success' }}
+        run: echo "Deployed ${{ github.ref_name }} to ${{ steps.deploy.outputs.deployment-url }}"
+      - name: no secrets yet
+        if: ${{ env.HAS_CF != 'true' }}
+        run: echo "The site built. Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to deploy it (site/README.md)."

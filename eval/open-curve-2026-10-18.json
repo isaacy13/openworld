@@ -1,0 +1,592 @@
+{
+  "schema": "openworld.curve.v1",
+  "bundle": "open",
+  "picker_line": "LFW curve measured. Real FBI photos stay off.",
+  "real_posters_allowed": false,
+  "threshold": 0.51,
+  "cutoff_rule": "Lowest LFW all-pairs score with a false match rate at or under 1e-05.",
+  "measured_cutoff": 0.5062,
+  "lfw": {
+    "images": 13233,
+    "identities": 5749,
+    "enlarged_2x": {
+      "center_face_compared": {
+        "count": 13233,
+        "trials": 13233,
+        "rate": 1.0,
+        "wilson95": [
+          0.9997097797105918,
+          0.9999999999999998
+        ]
+      },
+      "genuine_pairs": 242257,
+      "impostor_pairs": 87307271,
+      "operating_points": [
+        {
+          "target_fmr": 0.001,
+          "threshold": 0.3732,
+          "false_match": {
+            "count": 87197,
+            "trials": 87307271,
+            "rate": 0.0009987369780461927,
+            "wilson95": [
+              0.0009921330811517239,
+              0.001005384787965218
+            ]
+          },
+          "false_non_match": {
+            "count": 334,
+            "trials": 242257,
+            "rate": 0.0013787011314430543,
+            "wilson95": [
+              0.0012386388735622408,
+              0.001534576952663965
+            ]
+          },
+          "false_non_match_one_pair_per_person": {
+            "count": 17,
+            "trials": 1680,
+            "rate": 0.01011904761904762,
+            "wilson95": [
+              0.006327347766479011,
+              0.016146025025831144
+            ]
+          }
+        },
+        {
+          "target_fmr": 0.0001,
+          "threshold": 0.4365,
+          "false_match": {
+            "count": 8720,
+            "trials": 87307271,
+            "rate": 9.987713394454856e-05,
+            "wilson95": [
+              9.780276882601609e-05,
+              0.00010199549118894882
+            ]
+          },
+          "false_non_match": {
+            "count": 915,
+            "trials": 242257,
+            "rate": 0.0037769806445221397,
+            "wilson95": [
+              0.0035404555036006456,
+              0.004029243288364586
+            ]
+          },
+          "false_non_match_one_pair_per_person": {
+            "count": 40,
+            "trials": 1680,
+            "rate": 0.023809523809523808,
+            "wilson95": [
+              0.017533376696541952,
+              0.03225848020971336
+            ]
+          }
+        },
+        {
+          "target_fmr": 1e-05,
+          "threshold": 0.5062,
+          "false_match": {
+            "count": 873,
+            "trials": 87307271,
+            "rate": 9.99916719421914e-06,
+            "wilson95": [
+              9.357501550869943e-06,
+              1.068483287286171e-05
+            ]
+          },
+          "false_non_match": {
+            "count": 3397,
+            "trials": 242257,
+            "rate": 0.014022298633269627,
+            "wilson95": [
+              0.013561713259077422,
+              0.0144982965844614
+            ]
+          },
+          "false_non_match_one_pair_per_person": {
+            "count": 93,
+            "trials": 1680,
+            "rate": 0.055357142857142855,
+            "wilson95": [
+              0.04540196500308407,
+              0.06734118138313183
+            ]
+          }
+        },
+        {
+          "target_fmr": 1e-06,
+          "threshold": 0.629,
+          "false_match": {
+            "count": 87,
+            "trials": 87307271,
+            "rate": 9.96480579492629e-07,
+            "wilson95": [
+              8.079340103156401e-07,
+              1.2290279762158922e-06
+            ]
+          },
+          "false_non_match": {
+            "count": 34549,
+            "trials": 242257,
+            "rate": 0.1426130101503775,
+            "wilson95": [
+              0.14122620660784363,
+              0.14401114806995008
+            ]
+          },
+          "false_non_match_one_pair_per_person": {
+            "count": 456,
+            "trials": 1680,
+            "rate": 0.2714285714285714,
+            "wilson95": [
+              0.2507029219981967,
+              0.2931971693168058
+            ]
+          }
+        }
+      ],
+      "at_manifest_threshold": {
+        "threshold": 0.51,
+        "false_match": {
+          "count": 771,
+          "trials": 87307271,
+          "rate": 8.830879618262263e-06,
+          "wilson95": [
+            8.229143078468134e-06,
+            9.476616296161213e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 3660,
+          "trials": 242257,
+          "rate": 0.015107922578088559,
+          "wilson95": [
+            0.014629802645975179,
+            0.015601420657097834
+          ]
+        },
+        "false_non_match_one_pair_per_person": {
+          "count": 99,
+          "trials": 1680,
+          "rate": 0.05892857142857143,
+          "wilson95": [
+            0.04864181738634756,
+            0.07122789007307143
+          ]
+        }
+      },
+      "ten_fold": {
+        "pairs": 6000,
+        "pairs_without_a_face": 0,
+        "accuracy_mean": 0.9952,
+        "accuracy_std": 0.0037
+      }
+    },
+    "native_size": {
+      "face_seen": {
+        "count": 13231,
+        "trials": 13233,
+        "rate": 0.9998488626917554,
+        "wilson95": [
+          0.9994490402325346,
+          0.9999585525877949
+        ]
+      },
+      "face_compared": {
+        "count": 385,
+        "trials": 13233,
+        "rate": 0.029093931837073983,
+        "wilson95": [
+          0.026364125222342785,
+          0.03209707144257764
+        ]
+      }
+    }
+  },
+  "held_out_pairs": {
+    "calfw": {
+      "what": "Cross-age LFW: the two photos of a same-person pair are years apart.",
+      "source": "huggingface.co/datasets/marcelohaps/calfw at 4f3e4cda32f6bdd163a46c42c6cc313629397700",
+      "pairs": 6000,
+      "photos": 7156,
+      "photo_without_a_compared_face": {
+        "count": 0,
+        "trials": 7156,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.0005365481828536542
+        ]
+      },
+      "same_pairs_without_a_face": 0,
+      "different_pairs_without_a_face": 0,
+      "at_manifest_threshold": {
+        "threshold": 0.51,
+        "false_match": {
+          "count": 0,
+          "trials": 3000,
+          "rate": 0.0,
+          "wilson95": [
+            1.0842021724855044e-19,
+            0.0012788956648046956
+          ]
+        },
+        "false_non_match": {
+          "count": 1116,
+          "trials": 3000,
+          "rate": 0.372,
+          "wilson95": [
+            0.3548779447744818,
+            0.3894494525157082
+          ]
+        }
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.9332,
+        "accuracy_std": 0.011
+      }
+    },
+    "cplfw": {
+      "what": "Cross-pose LFW: one photo of a same-person pair is often turned toward profile.",
+      "source": "huggingface.co/datasets/marcelohaps/cplfw at 89b5236a99194f93382774d70b4bbcb18afa77ec",
+      "pairs": 6000,
+      "photos": 5984,
+      "photo_without_a_compared_face": {
+        "count": 107,
+        "trials": 5984,
+        "rate": 0.017881016042780747,
+        "wilson95": [
+          0.014819510119174045,
+          0.02156114497363936
+        ]
+      },
+      "same_pairs_without_a_face": 107,
+      "different_pairs_without_a_face": 81,
+      "at_manifest_threshold": {
+        "threshold": 0.51,
+        "false_match": {
+          "count": 1,
+          "trials": 3000,
+          "rate": 0.0003333333333333333,
+          "wilson95": [
+            5.884242821930163e-05,
+            0.0018858673061421909
+          ]
+        },
+        "false_non_match": {
+          "count": 1779,
+          "trials": 3000,
+          "rate": 0.593,
+          "wilson95": [
+            0.5753118597139407,
+            0.6104502656924057
+          ]
+        }
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.87,
+        "accuracy_std": 0.0141
+      }
+    }
+  },
+  "scans": {
+    "posters": 100,
+    "stills": {
+      "enrolled_found": {
+        "count": 93,
+        "trials": 100,
+        "rate": 0.93,
+        "wilson95": [
+          0.8625032899347025,
+          0.965681175635936
+        ]
+      },
+      "enrolled_missed": {
+        "count": 7,
+        "trials": 100,
+        "rate": 0.07,
+        "wilson95": [
+          0.034318824364064096,
+          0.13749671006529757
+        ]
+      },
+      "enrolled_wrong_poster": {
+        "count": 0,
+        "trials": 100,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.03699480747600191
+        ]
+      },
+      "stranger_any_candidate": {
+        "count": 0,
+        "trials": 100,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.03699480747600191
+        ]
+      },
+      "not_complete": 0,
+      "largest_cosine_gap_vs_library": 0.0
+    },
+    "video": {
+      "clips": 20,
+      "seconds_on_screen": 1.0,
+      "complete_found": {
+        "count": 20,
+        "trials": 20,
+        "rate": 1.0,
+        "wilson95": [
+          0.8388698745050667,
+          1.0
+        ]
+      },
+      "measured_found": {
+        "count": 20,
+        "trials": 20,
+        "rate": 1.0,
+        "wilson95": [
+          0.8388698745050667,
+          1.0
+        ]
+      },
+      "cards_on_the_shown_second": {
+        "count": 40,
+        "trials": 40,
+        "rate": 1.0,
+        "wilson95": [
+          0.9123754607496077,
+          1.0
+        ]
+      }
+    },
+    "phone_files": {
+      "jpeg_stored_sideways_with_tag": {
+        "what": "A JPEG stored a quarter turn off, with the orientation tag that shows it upright.",
+        "640 px, complete": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0008272362011735157,
+            "median": -0.0016851425170898438,
+            "worst": -0.013990461826324463
+          }
+        }
+      },
+      "photo_12mp_large_face": {
+        "what": "A 4032x3024 JPEG, the face about 560 px.",
+        "640 px, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0024581772665823657,
+            "median": -0.0005713105201721191,
+            "worst": -0.07848316431045532
+          }
+        },
+        "full resolution, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.00253687911136176,
+            "median": -0.0005713105201721191,
+            "worst": -0.07848316431045532
+          }
+        }
+      },
+      "photo_12mp_group_face": {
+        "what": "A 4032x3024 JPEG, the face about 190 px, as in a group photo.",
+        "640 px, complete": {
+          "found": {
+            "count": 0,
+            "trials": 93,
+            "rate": 0.0,
+            "wilson95": [
+              0.0,
+              0.0396689026203615
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0
+        },
+        "full resolution, complete": {
+          "found": {
+            "count": 92,
+            "trials": 93,
+            "rate": 0.989247311827957,
+            "wilson95": [
+              0.9415794088135158,
+              0.9980994069020442
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0013136668230897637,
+            "median": -0.00144881010055542,
+            "worst": -0.10132738947868347
+          }
+        }
+      },
+      "portrait_video_with_rotation": {
+        "what": "A 1080x1920 H.264 clip stored as 1920x1080 with a display rotation, the face on screen for one second.",
+        "640 px, complete": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.0038035024878799273,
+            "median": -0.0035766959190368652,
+            "worst": -0.1394329071044922
+          }
+        },
+        "640 px, measured": {
+          "found": {
+            "count": 93,
+            "trials": 93,
+            "rate": 1.0,
+            "wilson95": [
+              0.9603310973796383,
+              0.9999999999999999
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "missed_without_size_note": 0,
+          "cosine_change_vs_still": {
+            "compared": 93,
+            "mean": -0.004083195681213051,
+            "median": -0.00399702787399292,
+            "worst": -0.1397693157196045
+          }
+        }
+      }
+    }
+  },
+  "wider_face_val": {
+    "images": 3226,
+    "detection_640": {
+      "recall_faces_72px_and_up": {
+        "all": {
+          "count": 1068,
+          "trials": 1163,
+          "rate": 0.9183147033533964,
+          "wilson95": [
+            0.9011621264071126,
+            0.9327128399979248
+          ]
+        },
+        "no_occlusion": {
+          "count": 983,
+          "trials": 1032,
+          "rate": 0.9525193798449613,
+          "wilson95": [
+            0.9377818124777475,
+            0.9639004524554238
+          ]
+        },
+        "frontal": {
+          "count": 1023,
+          "trials": 1071,
+          "rate": 0.9551820728291317,
+          "wilson95": [
+            0.9410791579022391,
+            0.9660312479473301
+          ]
+        }
+      },
+      "detections": 1425,
+      "detections_off_every_labeled_face": 36
+    },
+    "detection_full": {
+      "recall_faces_72px_and_up": {
+        "all": {
+          "count": 2706,
+          "trials": 2934,
+          "rate": 0.9222903885480572,
+          "wilson95": [
+            0.9120416132526209,
+            0.9314347675025566
+          ]
+        },
+        "no_occlusion": {
+          "count": 2458,
+          "trials": 2575,
+          "rate": 0.9545631067961166,
+          "wilson95": [
+            0.9458194461381119,
+            0.9619524775038831
+          ]
+        },
+        "frontal": {
+          "count": 2549,
+          "trials": 2676,
+          "rate": 0.95254110612855,
+          "wilson95": [
+            0.9438161670105452,
+            0.95996859399921
+          ]
+        }
+      },
+      "detections": 3561,
+      "detections_off_every_labeled_face": 223
+    }
+  },
+  "sources": {
+    "lfw": "Labeled Faces in the Wild, all 13,233 images, pairs.txt view 2. Downloaded, not committed.",
+    "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed.",
+    "held_out": "CALFW and CPLFW pairs, read from a mirror at a pinned commit. Downloaded, not committed."
+  },
+  "not": "Not mugshots, not FBI posters, not NIST. LFW is celebrity press photos."
+}
+

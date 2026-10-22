@@ -16,6 +16,8 @@ Pairwise FMR is the rate. A scan compares faces with every enabled poster, so th
 
 **~1 s appearance.** On the same labeled clips, under `complete` (every decoded frame) and under `measured` (5 Hz + tracker). An appearance is an eligible face visible for about one second. A miss is no detector hit for that appearance. `complete` misses are detector or quality misses. `measured` misses add sampling misses. Publish the number of appearances. One clip is an anecdote.
 
+**Poster photos.** The same rates on the real FBI posters: poster against poster, and poster against every LFW face as the public, at the locked cutoff, by the sex and race each poster states. Same-person pairs are one poster's own photos, which include age-progressions and old photos. Posters with no compared face are counted by reason. Real posters turn on only when a full run passes the poster-photo gate ([decisions](decisions.md) §10): the false-match upper bound at or under 2e-6 for poster against the public, and at or under 1e-5 for every group with enough comparisons to show it. Smaller groups are listed, not hidden.
+
 ## Data we can use
 
 Images stay on a local path. The published claim records the protocol name, model and manifest hashes, counts, threshold, and hardware. It does not commit faces, and it does not train on them.

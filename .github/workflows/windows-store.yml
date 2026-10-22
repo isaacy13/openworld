@@ -1,0 +1,134 @@
+name: windows-store
+# Package the GTK desktop app as an MSIX for the Microsoft Store. Builds the app with the
+# same MSYS2 UCRT64 GTK toolchain as ci.yml's desktop-windows job, assembles the runnable
+# folder with desktop/packaging/windows-bundle.sh, lays it out as an MSIX root, packs it
+# with makeappx, and validates it. It does NOT sign: the Store re-signs every package it
+# accepts, so no code-signing certificate is used here. The Identity/Publisher in
+# AppxManifest.xml are placeholders the owner fills from Partner Center before submitting.
+# See desktop/packaging/windows-store.md.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - desktop/packaging/windows-store/**
+      - desktop/packaging/windows-bundle.sh
+      - .github/workflows/windows-store.yml
+      - .gitattributes
+  push:
+    branches: [main]
+    paths:
+      - desktop/packaging/windows-store/**
+      - desktop/packaging/windows-bundle.sh
+      - .github/workflows/windows-store.yml
+      - .gitattributes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-store-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  msix:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      # Overrides rust-toolchain.toml, which would pick the MSVC host; GTK here is MinGW.
+      RUSTUP_TOOLCHAIN: 1.97.0-x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.97.0-x86_64-pc-windows-gnu
+      # Same UCRT64 GTK stack as ci.yml's desktop-windows job, plus ntldd, which
+      # windows-bundle.sh uses to collect the DLLs the program and FFmpeg load.
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: UCRT64
+          update: true
+          # Keep the Windows PATH, so cargo from rustup is found.
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-ntldd
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop
+      - name: pinned ONNX Runtime
+        run: python scripts/fetch_ort.py windows-x86_64
+      - name: build the desktop app
+        shell: msys2 {0}
+        env:
+          # The UCRT64 compiler driver links against the UCRT64 GTK; first on the MSYS2 PATH.
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+        run: cargo build --release --manifest-path desktop/Cargo.toml
+      - name: assemble the runnable bundle folder
+        shell: msys2 {0}
+        run: desktop/packaging/windows-bundle.sh dist
+      - name: placeholder Store logos (only when real icons are absent)
+        shell: pwsh
+        run: ./desktop/packaging/windows-store/make-placeholder-assets.ps1
+      - name: lay out the MSIX root
+        shell: msys2 {0}
+        run: desktop/packaging/windows-store/msix-layout.sh dist msix-root
+      - name: the manifest is well-formed and its referenced files are present
+        shell: pwsh
+        run: |
+          [xml]$doc = Get-Content msix-root/AppxManifest.xml
+          $exe = $doc.Package.Applications.Application.Executable
+          if (-not (Test-Path (Join-Path 'msix-root' $exe))) { throw "manifest Executable missing: $exe" }
+          foreach ($png in 'Assets\StoreLogo.png','Assets\Square150x150Logo.png','Assets\Square44x44Logo.png','Assets\Wide310x150Logo.png') {
+            if (-not (Test-Path (Join-Path 'msix-root' $png))) { throw "manifest asset missing: $png" }
+          }
+          Write-Output "manifest OK, Executable=$exe"
+      - name: find makeappx (Windows SDK)
+        id: sdk
+        shell: pwsh
+        run: |
+          $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName | Select-Object -Last 1
+          if (-not $makeappx) { throw "makeappx.exe not found in the Windows SDK" }
+          "makeappx=$($makeappx.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          Write-Output "using $($makeappx.FullName)"
+      # makeappx pack validates AppxManifest.xml against the package schema and fails on any
+      # referenced file that is missing, so a successful pack is the manifest-schema check.
+      # It is NOT signed here; the Store signs the package it accepts.
+      - name: makeappx pack
+        shell: pwsh
+        run: |
+          & "${{ steps.sdk.outputs.makeappx }}" pack /v /o /d msix-root /p openworld.msix
+          if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed ($LASTEXITCODE)" }
+      - name: the package unpacks cleanly (round-trip check)
+        shell: pwsh
+        run: |
+          & "${{ steps.sdk.outputs.makeappx }}" unpack /v /o /p openworld.msix /d msix-unpacked
+          if ($LASTEXITCODE -ne 0) { throw "makeappx unpack failed ($LASTEXITCODE)" }
+          if (-not (Test-Path 'msix-unpacked/app/openworld-desktop.exe')) { throw "unpacked package is missing the app" }
+      # Best effort: the Windows App Certification Kit runs its static package checks when it
+      # is installed on the runner. It is not always present and some checks need an elevated,
+      # installed package, so this never fails the job; makeappx above is the gating check.
+      - name: Windows App Certification Kit (best effort, non-gating)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $appcert = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $appcert) { Write-Output "::notice::WACK (appcert.exe) is not installed on this runner; skipping. makeappx validated the package."; exit 0 }
+          & $appcert.FullName reset
+          & $appcert.FullName test -appxpackagepath (Resolve-Path openworld.msix) -reportoutputpath (Join-Path $env:RUNNER_TEMP 'wack-report.xml')
+          Write-Output "WACK exit code: $LASTEXITCODE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # Unsigned, with placeholder identity and placeholder logos unless real icons were
+          # committed. Not submittable as-is: see desktop/packaging/windows-store.md.
+          name: openworld-msix-unsigned
+          path: openworld.msix
+          if-no-files-found: error

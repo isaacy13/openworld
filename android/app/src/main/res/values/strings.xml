@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The shell's own words. Sentences from the scan library arrive as Lines and are shown by
+         their text, or by a string named core_<code> when a translation defines one. A Line's
+         {name} placeholders are filled from its args. -->
+    <string name="app_name">OpenWorld</string>
+
+    <!-- First run and About -->
+    <string name="first_run_title">Welcome to OpenWorld</string>
+    <string name="first_run_continue">Continue</string>
+    <string name="about_open">About OpenWorld</string>
+    <string name="about_title">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_contact">Contact</string>
+
+    <!-- Start -->
+    <string name="start_subtitle">Check a photo or video you already have against public FBI missing and wanted posters, on this device.</string>
+    <string name="start_choose">Choose a photo or video</string>
+    <string name="start_files">Files</string>
+    <string name="start_card_hint">Or share one to OpenWorld from your gallery.</string>
+    <string name="start_copying">Copying the file to this app</string>
+    <string name="start_copying_percent">Copying the file to this app · %1$d%%</string>
+    <string name="start_getting_ready">Getting ready</string>
+    <string name="trust_on_device">Stays on this device</string>
+    <string name="trust_nothing_uploaded">Nothing uploaded</string>
+    <string name="trust_no_camera">No camera</string>
+    <string name="posters_demo_badge">Demo posters</string>
+    <string name="posters_none">No posters installed. Real FBI photos stay off.</string>
+    <string name="posters_install_demo">Install demo posters</string>
+    <string name="posters_update">Update posters</string>
+    <string name="posters_update_reading">Reading the FBI list…</string>
+    <string name="posters_update_page">Reading the FBI list · page %1$d</string>
+    <string name="posters_update_page_of">Reading the FBI list · page %1$d of %2$d</string>
+    <string name="posters_update_checking">Checking poster photos · %1$d of %2$d</string>
+    <plurals name="posters_update_kept">
+        <item quantity="one">Kept %d poster.</item>
+        <item quantity="other">Kept %d posters.</item>
+    </plurals>
+    <string name="posters_update_skipped">%1$d left out: %2$s</string>
+    <string name="posters_fetched_today">fetched today</string>
+    <string name="posters_fetched_yesterday">fetched yesterday</string>
+    <plurals name="posters_fetched_days">
+        <item quantity="one">fetched %d day ago</item>
+        <item quantity="other">fetched %d days ago</item>
+    </plurals>
+    <plurals name="posters_count">
+        <item quantity="one">%d poster</item>
+        <item quantity="other">%d posters</item>
+    </plurals>
+    <string name="results_kept">Results are deleted after 7 days, or when the posters expire.</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+
+    <!-- Review -->
+    <string name="review_title">Review</string>
+    <string name="file_photo">Photo</string>
+    <string name="file_video">Video</string>
+    <string name="file_reading">Reading the file</string>
+    <string name="file_recorded">Recorded %1$s</string>
+    <string name="file_thumbnail">Preview of the chosen file</string>
+    <string name="motion_photo_note">This motion photo also holds a short video. Only the still picture is scanned on this phone.</string>
+    <string name="estimate_title">Estimate</string>
+    <string name="estimating">Estimating</string>
+    <plurals name="estimate_frames">
+        <item quantity="one">%s frame</item>
+        <item quantity="other">%s frames</item>
+    </plurals>
+    <string name="compare_title">Compare with</string>
+    <string name="class_missing">Missing</string>
+    <string name="class_wanted">Wanted</string>
+    <string name="class_count">%1$s · %2$d</string>
+    <string name="options_title">Options</string>
+    <string name="options_bundle">Model bundle</string>
+    <string name="options_coverage">Coverage</string>
+    <string name="coverage_every_frame">Every frame</string>
+    <string name="coverage_measured">5 frames a second</string>
+    <string name="coverage_brief">A brief face can be missed.</string>
+    <string name="bundle_unofficial">Unofficial bundle</string>
+    <string name="bundle_no_weights">Its weights are not installed on this phone.</string>
+    <string name="disclosure_title">What happens to this file</string>
+    <string name="disclosure_read_all">Read all</string>
+    <string name="analyze">Analyze on this device</string>
+    <string name="choose_another">Choose another file</string>
+
+    <!-- Scan and result -->
+    <string name="scanning_title">Scanning</string>
+    <string name="result_title">Result</string>
+    <string name="scanning_on_device">Scanning on this device</string>
+    <string name="scan_frame_of">Frame %1$s of %2$s</string>
+    <string name="scan_photo">Looking for faces in the photo</string>
+    <string name="scan_starting">Starting</string>
+    <string name="scan_less_than_minute">less than a minute left</string>
+    <plurals name="scan_minutes_left">
+        <item quantity="one">about %d minute left</item>
+        <item quantity="other">about %d minutes left</item>
+    </plurals>
+    <plurals name="scan_hours_left">
+        <item quantity="one">about %d hour left</item>
+        <item quantity="other">about %d hours left</item>
+    </plurals>
+    <string name="scan_join">%1$s · %2$s</string>
+    <string name="scan_faces_title">Faces</string>
+    <string name="scan_faces_empty">Faces appear here as they are found.</string>
+    <string name="stop">Stop</string>
+    <string name="stopping">Stopping</string>
+    <string name="stop_ask_title">Stop the scan?</string>
+    <string name="stop_ask_text">A stopped scan is Incomplete. It is never a clearance.</string>
+    <string name="stop_ask_keep">Keep scanning</string>
+    <string name="chip_looking">Looking</string>
+    <string name="chip_compared">Compared</string>
+    <string name="chip_not_compared">Not compared</string>
+    <string name="chip_candidate">Possible candidate</string>
+    <string name="chip_too_brief">Too brief</string>
+    <string name="chip_unscored">Not scored</string>
+    <string name="face_description">Face from frame %1$d. %2$s.</string>
+    <string name="poster_description">Poster photo for %1$s.</string>
+    <plurals name="candidates_count">
+        <item quantity="one">%d possible candidate to review.</item>
+        <item quantity="other">%d possible candidates to review.</item>
+    </plurals>
+    <string name="evidence_file">From your file</string>
+    <string name="evidence_poster">Poster</string>
+    <string name="show_frame">Show frame</string>
+    <string name="frame_description">The frame this face came from.</string>
+    <string name="open_fbi_page">Open FBI page</string>
+    <string name="no_fbi_page">This poster has no FBI page.</string>
+    <string name="stay">Stay</string>
+    <string name="details_title">Details</string>
+    <string name="details_bundle">Bundle</string>
+    <string name="details_posters">Poster pack</string>
+    <string name="details_device">Ran on</string>
+    <string name="details_frames">Frames</string>
+    <string name="details_coverage">Coverage</string>
+    <string name="details_detection">Detection size</string>
+    <string name="details_chance">Chance</string>
+    <string name="details_classes">Classes</string>
+    <string name="details_warnings">Warnings</string>
+    <string name="details_expires">Result deleted after %1$s</string>
+    <string name="details_created">Pack made %1$s, expires %2$s</string>
+    <string name="other_faces_title">Other faces</string>
+    <string name="delete_result">Delete result</string>
+    <string name="delete_ask_title">Delete this result?</string>
+    <string name="delete_ask_text">The crops and frames from this scan are removed from this phone.</string>
+    <string name="delete">Delete</string>
+    <string name="scan_another">Scan another file</string>
+
+    <!-- What to do after a refusal, by the refusal's kind. -->
+    <string name="hint_posters">Go back to the start screen, install the demo posters, and scan again.</string>
+    <string name="hint_file">Choose another file.</string>
+    <string name="hint_runtime">Try again, or scan this file on a computer.</string>
+    <string name="hint_default">Go back and try again.</string>
+
+    <!-- Shell refusals and notices, by code. -->
+    <string name="refuse_animated">This picture is animated. OpenWorld on Android cannot read every frame of it yet, so it is refused rather than scanned in part.</string>
+    <string name="refuse_hdr">This video is 10-bit or HDR. OpenWorld on Android cannot read it yet. Refusing.</string>
+    <string name="scan_killed">The system closed OpenWorld before the scan finished.</string>
+    <string name="import_failed">The file could not be read. Refusing.</string>
+    <string name="import_type">Only photos and videos can be scanned.</string>
+    <string name="import_space">There is not enough free space on this phone to copy the file.</string>
+    <string name="share_not_file">That share was not a photo or video file.</string>
+    <string name="scan_busy">Finish or stop this scan first.</string>
+    <string name="open_failed">No app on this phone can open that page.</string>
+
+    <!-- The library's words, for when the library itself did not load. -->
+    <string name="core_missing_program">The scan program is not on this device. Refusing.</string>
+</resources>

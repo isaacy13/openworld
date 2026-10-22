@@ -1,0 +1,278 @@
+{
+  "below_cutoff": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "below_cutoff",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "below_cutoff"
+      }
+    ]
+  },
+  "blank": {
+    "candidates": [],
+    "counts": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": []
+  },
+  "both_classes": {
+    "candidates": [
+      {
+        "band": "band_well",
+        "class": "missing",
+        "frame": 0,
+        "leave_notes": [
+          "not_sending",
+          "not_affiliated",
+          "leave_missing",
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
+        ],
+        "leaving": "leaving",
+        "poster": "fixture-missing-a"
+      },
+      {
+        "band": "band_well",
+        "class": "wanted",
+        "frame": 0,
+        "leave_notes": [
+          "not_sending",
+          "not_affiliated",
+          "leave_wanted",
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
+        ],
+        "leaving": "leaving",
+        "poster": "fixture-wanted-b"
+      }
+    ],
+    "counts": [
+      2,
+      2,
+      0,
+      2
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "possible_candidate",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      },
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      }
+    ]
+  },
+  "demo_scene": {
+    "candidates": [
+      {
+        "band": "band_well",
+        "class": "missing",
+        "frame": 0,
+        "leave_notes": [
+          "not_sending",
+          "not_affiliated",
+          "leave_missing",
+          "unauthenticated",
+          "lookalike",
+          "do_not_share",
+          "network_note"
+        ],
+        "leaving": "leaving",
+        "poster": "fixture-missing-a"
+      }
+    ],
+    "counts": [
+      2,
+      1,
+      1,
+      1
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "possible_candidate",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "possible_candidate",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "candidate"
+      },
+      {
+        "face_px": 64,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "not_compared",
+        "quality_frames": 0,
+        "reason": "why_small",
+        "status": "not_compared"
+      }
+    ]
+  },
+  "measured_one_video_frame": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          12,
+          12
+        ],
+        "label": "too_brief",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "too_brief"
+      }
+    ]
+  },
+  "one_video_frame": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          12,
+          12
+        ],
+        "label": "too_brief",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "too_brief"
+      }
+    ]
+  },
+  "seen_32_px": {
+    "candidates": [],
+    "counts": [
+      1,
+      0,
+      1,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 32,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "not_compared",
+        "quality_frames": 0,
+        "reason": "why_small",
+        "status": "not_compared"
+      }
+    ]
+  },
+  "stranger": {
+    "candidates": [],
+    "counts": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "disclosure_has_no_clearance": true,
+    "headline": "no_clearance",
+    "reason": null,
+    "refusal": null,
+    "status": "complete",
+    "tracks": [
+      {
+        "face_px": 128,
+        "frames": [
+          0,
+          0
+        ],
+        "label": "below_cutoff",
+        "quality_frames": 1,
+        "reason": null,
+        "status": "below_cutoff"
+      }
+    ]
+  }
+}

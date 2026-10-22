@@ -1,0 +1,2002 @@
+{
+  "schema": "openworld.curve.v1",
+  "bundle": "fast",
+  "bundle_version": "0.2.0",
+  "models": {
+    "detector": "YuNet",
+    "detector_version": "2023mar",
+    "embedder": "SFace",
+    "embedder_version": "2021dec"
+  },
+  "weights": {
+    "detector": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    "embedder": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+  },
+  "threshold": 0.63,
+  "picker_line": "LFW curve measured. Real FBI photos stay off.",
+  "real_posters_allowed": false,
+  "cutoff_rule": "Lowest LFW all-pairs score with a false match rate at or under 1e-06, on faces enlarged 2x. The manifest threshold may not be under it.",
+  "measured_cutoff": 0.5923,
+  "sample": null,
+  "chance": {
+    "fmr_at_cutoff": 8.015575965870121e-07,
+    "fmr_upper95": 1.7830842242720393e-06,
+    "source": "LFW all pairs, faces enlarged 2x",
+    "threshold": 0.63,
+    "what": "A scan compares every compared face with every enabled poster. Chance alone gives about FMR x posters x faces false candidates.",
+    "per_scan": [
+      {
+        "posters": 50,
+        "faces_compared": 10,
+        "comparisons": 500,
+        "expected_false_candidates": 0.0004007787982935061,
+        "expected_upper95": 0.0008915421121360197,
+        "chance_of_at_least_one": 0.0004006986577583115,
+        "chance_of_at_least_one_upper95": 0.0008911456006874471
+      },
+      {
+        "posters": 50,
+        "faces_compared": 100,
+        "comparisons": 5000,
+        "expected_false_candidates": 0.004007787982935061,
+        "expected_upper95": 0.008915421121360196,
+        "chance_of_at_least_one": 0.003999769118840257,
+        "chance_of_at_least_one_upper95": 0.008875804476280058
+      },
+      {
+        "posters": 50,
+        "faces_compared": 1000,
+        "comparisons": 50000,
+        "expected_false_candidates": 0.040077879829350606,
+        "expected_upper95": 0.08915421121360197,
+        "chance_of_at_least_one": 0.03928539948294932,
+        "chance_of_at_least_one_upper95": 0.08529556769937775
+      },
+      {
+        "posters": 200,
+        "faces_compared": 10,
+        "comparisons": 2000,
+        "expected_false_candidates": 0.0016031151931740243,
+        "expected_upper95": 0.003566168448544079,
+        "chance_of_at_least_one": 0.0016018315318652582,
+        "chance_of_at_least_one_upper95": 0.003559820390008568
+      },
+      {
+        "posters": 200,
+        "faces_compared": 100,
+        "comparisons": 20000,
+        "expected_false_candidates": 0.016031151931740244,
+        "expected_upper95": 0.035661684485440784,
+        "chance_of_at_least_one": 0.01590334325706934,
+        "chance_of_at_least_one_upper95": 0.03503332920837721
+      },
+      {
+        "posters": 200,
+        "faces_compared": 1000,
+        "comparisons": 200000,
+        "expected_false_candidates": 0.16031151931740242,
+        "expected_upper95": 0.35661684485440787,
+        "chance_of_at_least_one": 0.1481216836744581,
+        "chance_of_at_least_one_upper95": 0.2999595520299382
+      },
+      {
+        "posters": 1000,
+        "faces_compared": 10,
+        "comparisons": 10000,
+        "expected_false_candidates": 0.008015575965870122,
+        "expected_upper95": 0.017830842242720392,
+        "chance_of_at_least_one": 0.007983540084676487,
+        "chance_of_at_least_one_upper95": 0.01767282904745896
+      },
+      {
+        "posters": 1000,
+        "faces_compared": 100,
+        "comparisons": 100000,
+        "expected_false_candidates": 0.08015575965870121,
+        "expected_upper95": 0.17830842242720393,
+        "chance_of_at_least_one": 0.07702745635336372,
+        "chance_of_at_least_one_upper95": 0.16331580152959635
+      },
+      {
+        "posters": 1000,
+        "faces_compared": 1000,
+        "comparisons": 1000000,
+        "expected_false_candidates": 0.8015575965870122,
+        "expected_upper95": 1.7830842242720393,
+        "chance_of_at_least_one": 0.5513705084876248,
+        "chance_of_at_least_one_upper95": 0.8318814366000052
+      }
+    ]
+  },
+  "lfw": {
+    "images": 13233,
+    "identities": 5749,
+    "faces": "enlarged 2x; the center face of each photo",
+    "center_face_compared": {
+      "count": 12753,
+      "trials": 13233,
+      "rate": 0.9637270460213103,
+      "wilson95": [
+        0.9604045164324564,
+        0.966780419504174
+      ]
+    },
+    "photos_compared": 12753,
+    "identities_compared": 5585,
+    "genuine_pairs": 221014,
+    "impostor_pairs": 81092114,
+    "people_with_two_compared_photos": 1623,
+    "operating_points": [
+      {
+        "target_fmr": 0.001,
+        "threshold": 0.3727,
+        "false_match": {
+          "count": 80973,
+          "trials": 81092114,
+          "rate": 0.0009985311272067714,
+          "wilson95": [
+            0.0009916805175411553,
+            0.00100542901381237
+          ],
+          "identity_bootstrap95": [
+            0.0007674781214075269,
+            0.0014592103211239127
+          ]
+        },
+        "false_match_spread": {
+          "false_matches": 80973,
+          "distinct_images": 12323,
+          "distinct_identities": 5411,
+          "distinct_identity_pairs": 33532,
+          "share_from_top_10_identity_pairs": 0.1262025613476097
+        },
+        "false_non_match": {
+          "count": 288,
+          "trials": 221014,
+          "rate": 0.001303084872451519,
+          "wilson95": [
+            0.0011611065752169872,
+            0.001462398635916514
+          ],
+          "identity_bootstrap95": [
+            0.0004646808427254135,
+            0.005407887054170403
+          ]
+        },
+        "false_non_match_one_pair_per_person": {
+          "count": 15,
+          "trials": 1623,
+          "rate": 0.009242144177449169,
+          "wilson95": [
+            0.005608825913897206,
+            0.015193114334924568
+          ],
+          "identity_bootstrap95": [
+            0.004996798973176096,
+            0.014385401074227349
+          ]
+        }
+      },
+      {
+        "target_fmr": 0.0001,
+        "threshold": 0.4346,
+        "false_match": {
+          "count": 8075,
+          "trials": 81092114,
+          "rate": 9.957811680677112e-05,
+          "wilson95": [
+            9.742987240292391e-05,
+            0.00010177372332018529
+          ],
+          "identity_bootstrap95": [
+            5.2591193959022615e-05,
+            0.00024902124814124354
+          ]
+        },
+        "false_match_spread": {
+          "false_matches": 8075,
+          "distinct_images": 5285,
+          "distinct_identities": 2631,
+          "distinct_identity_pairs": 2877,
+          "share_from_top_10_identity_pairs": 0.4198142414860681
+        },
+        "false_non_match": {
+          "count": 801,
+          "trials": 221014,
+          "rate": 0.003624204801505787,
+          "wilson95": [
+            0.0033821579324136712,
+            0.003883506451155512
+          ],
+          "identity_bootstrap95": [
+            0.001458933000233397,
+            0.013406641742259947
+          ]
+        },
+        "false_non_match_one_pair_per_person": {
+          "count": 33,
+          "trials": 1623,
+          "rate": 0.02033271719038817,
+          "wilson95": [
+            0.01451421961962605,
+            0.028416490341086755
+          ],
+          "identity_bootstrap95": [
+            0.013534896182183525,
+            0.02761414761108012
+          ]
+        }
+      },
+      {
+        "target_fmr": 1e-05,
+        "threshold": 0.5022,
+        "false_match": {
+          "count": 809,
+          "trials": 81092114,
+          "rate": 9.976309163675274e-06,
+          "wilson95": [
+            9.312135868388031e-06,
+            1.0687853057681403e-05
+          ],
+          "identity_bootstrap95": [
+            2.077185352750076e-06,
+            4.1366663245334627e-05
+          ]
+        },
+        "false_match_spread": {
+          "false_matches": 809,
+          "distinct_images": 670,
+          "distinct_identities": 293,
+          "distinct_identity_pairs": 159,
+          "share_from_top_10_identity_pairs": 0.7861557478368356
+        },
+        "false_non_match": {
+          "count": 2817,
+          "trials": 221014,
+          "rate": 0.012745798908666419,
+          "wilson95": [
+            0.012286528687680449,
+            0.013222006829671062
+          ],
+          "identity_bootstrap95": [
+            0.0069870303652955715,
+            0.038055251739509764
+          ]
+        },
+        "false_non_match_one_pair_per_person": {
+          "count": 79,
+          "trials": 1623,
+          "rate": 0.04867529266789895,
+          "wilson95": [
+            0.039230150464744346,
+            0.06025185987080109
+          ],
+          "identity_bootstrap95": [
+            0.037827424855628,
+            0.059117199820103127
+          ]
+        }
+      },
+      {
+        "target_fmr": 1e-06,
+        "threshold": 0.5923,
+        "false_match": {
+          "count": 81,
+          "trials": 81092114,
+          "rate": 9.988640819007381e-07,
+          "wilson95": [
+            8.037377867592673e-07,
+            1.2413618263119634e-06
+          ],
+          "identity_bootstrap95": [
+            3.7825309225171043e-07,
+            2.0561752446386017e-06
+          ]
+        },
+        "false_match_spread": {
+          "false_matches": 81,
+          "distinct_images": 116,
+          "distinct_identities": 72,
+          "distinct_identity_pairs": 36,
+          "share_from_top_10_identity_pairs": 0.6296296296296297
+        },
+        "false_non_match": {
+          "count": 15328,
+          "trials": 221014,
+          "rate": 0.06935307265603084,
+          "wilson95": [
+            0.06830137561716272,
+            0.0704197396396485
+          ],
+          "identity_bootstrap95": [
+            0.052008151918259034,
+            0.1504252925010971
+          ]
+        },
+        "false_non_match_one_pair_per_person": {
+          "count": 275,
+          "trials": 1623,
+          "rate": 0.16943930991990142,
+          "wilson95": [
+            0.15197393219399744,
+            0.1884657927821393
+          ],
+          "identity_bootstrap95": [
+            0.15200770436145206,
+            0.1858027306967985
+          ]
+        }
+      }
+    ],
+    "at_manifest_threshold": {
+      "threshold": 0.63,
+      "false_match": {
+        "count": 65,
+        "trials": 81092114,
+        "rate": 8.015575965870121e-07,
+        "wilson95": [
+          6.289476239482778e-07,
+          1.0215390371889268e-06
+        ],
+        "identity_bootstrap95": [
+          2.8998254246941006e-07,
+          1.7830842242720393e-06
+        ]
+      },
+      "false_match_spread": {
+        "false_matches": 65,
+        "distinct_images": 97,
+        "distinct_identities": 64,
+        "distinct_identity_pairs": 32,
+        "share_from_top_10_identity_pairs": 0.6307692307692307
+      },
+      "false_non_match": {
+        "count": 29652,
+        "trials": 221014,
+        "rate": 0.13416344665948762,
+        "wilson95": [
+          0.13274887141250538,
+          0.13559073894366
+        ],
+        "identity_bootstrap95": [
+          0.1077124417009178,
+          0.24554330174195485
+        ]
+      },
+      "false_non_match_one_pair_per_person": {
+        "count": 424,
+        "trials": 1623,
+        "rate": 0.26124460874922983,
+        "wilson95": [
+          0.24045331790810476,
+          0.28316344523868553
+        ],
+        "identity_bootstrap95": [
+          0.23963681010935242,
+          0.2806032616293144
+        ]
+      }
+    },
+    "at_measured_cutoff": {
+      "threshold": 0.5923,
+      "false_match": {
+        "count": 81,
+        "trials": 81092114,
+        "rate": 9.988640819007381e-07,
+        "wilson95": [
+          8.037377867592673e-07,
+          1.2413618263119634e-06
+        ],
+        "identity_bootstrap95": [
+          3.7825309225171043e-07,
+          2.0561752446386017e-06
+        ]
+      },
+      "false_match_spread": {
+        "false_matches": 81,
+        "distinct_images": 116,
+        "distinct_identities": 72,
+        "distinct_identity_pairs": 36,
+        "share_from_top_10_identity_pairs": 0.6296296296296297
+      },
+      "false_non_match": {
+        "count": 15328,
+        "trials": 221014,
+        "rate": 0.06935307265603084,
+        "wilson95": [
+          0.06830137561716272,
+          0.0704197396396485
+        ],
+        "identity_bootstrap95": [
+          0.052008151918259034,
+          0.1504252925010971
+        ]
+      },
+      "false_non_match_one_pair_per_person": {
+        "count": 275,
+        "trials": 1623,
+        "rate": 0.16943930991990142,
+        "wilson95": [
+          0.15197393219399744,
+          0.1884657927821393
+        ],
+        "identity_bootstrap95": [
+          0.15200770436145206,
+          0.1858027306967985
+        ]
+      }
+    },
+    "measured_cutoff_identity_bootstrap95": [
+      0.5218,
+      0.7324
+    ],
+    "at_thresholds": {},
+    "curve": [
+      {
+        "threshold": 0.2,
+        "false_match": {
+          "count": 10375175,
+          "trials": 81092114,
+          "rate": 0.12794308211030236,
+          "wilson95": [
+            0.1278703988661453,
+            0.1280158006042806
+          ]
+        },
+        "false_non_match": {
+          "count": 52,
+          "trials": 221014,
+          "rate": 0.00023527921308152424,
+          "wilson95": [
+            0.00017943782236094332,
+            0.00030849318858772146
+          ]
+        }
+      },
+      {
+        "threshold": 0.22,
+        "false_match": {
+          "count": 6995211,
+          "trials": 81092114,
+          "rate": 0.0862625310273697,
+          "wilson95": [
+            0.08620144508380928,
+            0.08632365616969545
+          ]
+        },
+        "false_non_match": {
+          "count": 55,
+          "trials": 221014,
+          "rate": 0.00024885301383622757,
+          "wilson95": [
+            0.00019120938923074574,
+            0.0003238687513812857
+          ]
+        }
+      },
+      {
+        "threshold": 0.24,
+        "false_match": {
+          "count": 4512178,
+          "trials": 81092114,
+          "rate": 0.055642623893119865,
+          "wilson95": [
+            0.05559275295637095,
+            0.05569253692965867
+          ]
+        },
+        "false_non_match": {
+          "count": 59,
+          "trials": 221014,
+          "rate": 0.00026695141484249865,
+          "wilson95": [
+            0.0002069784144046592,
+            0.0003442958990918609
+          ]
+        }
+      },
+      {
+        "threshold": 0.26,
+        "false_match": {
+          "count": 2785635,
+          "trials": 81092114,
+          "rate": 0.03435149070105633,
+          "wilson95": [
+            0.03431187207293985,
+            0.03439115344615041
+          ]
+        },
+        "false_non_match": {
+          "count": 65,
+          "trials": 221014,
+          "rate": 0.0002940990163519053,
+          "wilson95": [
+            0.00023077320383112508,
+            0.0003747953689921283
+          ]
+        }
+      },
+      {
+        "threshold": 0.28,
+        "false_match": {
+          "count": 1643766,
+          "trials": 81092114,
+          "rate": 0.02027035575863764,
+          "wilson95": [
+            0.020239706441569152,
+            0.02030105052677393
+          ]
+        },
+        "false_non_match": {
+          "count": 82,
+          "trials": 221014,
+          "rate": 0.0003710172206285575,
+          "wilson95": [
+            0.00029894484929946646,
+            0.0004604574582828641
+          ]
+        }
+      },
+      {
+        "threshold": 0.3,
+        "false_match": {
+          "count": 926933,
+          "trials": 81092114,
+          "rate": 0.011430618271956752,
+          "wilson95": [
+            0.011407504928807832,
+            0.011453777903677503
+          ]
+        },
+        "false_non_match": {
+          "count": 102,
+          "trials": 221014,
+          "rate": 0.00046150922565991293,
+          "wilson95": [
+            0.0003802301269194121,
+            0.0005601530450853621
+          ]
+        }
+      },
+      {
+        "threshold": 0.32,
+        "false_match": {
+          "count": 500320,
+          "trials": 81092114,
+          "rate": 0.006169773795760214,
+          "wilson95": [
+            0.006152754037933079,
+            0.006186840340587832
+          ]
+        },
+        "false_non_match": {
+          "count": 123,
+          "trials": 221014,
+          "rate": 0.0005565258309428362,
+          "wilson95": [
+            0.0004665008391739932,
+            0.000663912240474347
+          ]
+        }
+      },
+      {
+        "threshold": 0.34,
+        "false_match": {
+          "count": 258410,
+          "trials": 81092114,
+          "rate": 0.003186623054369997,
+          "wilson95": [
+            0.0031743797733682065,
+            0.0031989134050051846
+          ]
+        },
+        "false_non_match": {
+          "count": 171,
+          "trials": 221014,
+          "rate": 0.0007737066430180894,
+          "wilson95": [
+            0.0006661403114294453,
+            0.00089862684283276
+          ]
+        }
+      },
+      {
+        "threshold": 0.36,
+        "false_match": {
+          "count": 128352,
+          "trials": 81092114,
+          "rate": 0.0015827926251867105,
+          "wilson95": [
+            0.0015741639986342683,
+            0.0015914684733243968
+          ]
+        },
+        "false_non_match": {
+          "count": 228,
+          "trials": 221014,
+          "rate": 0.0010316088573574524,
+          "wilson95": [
+            0.0009061661940569247,
+            0.0011743964238092452
+          ]
+        }
+      },
+      {
+        "threshold": 0.38,
+        "false_match": {
+          "count": 61828,
+          "trials": 81092114,
+          "rate": 0.0007624415858735659,
+          "wilson95": [
+            0.0007564576522800721,
+            0.0007684728187748948
+          ]
+        },
+        "false_non_match": {
+          "count": 319,
+          "trials": 221014,
+          "rate": 0.0014433474802501198,
+          "wilson95": [
+            0.0012935029651883862,
+            0.0016105225857999028
+          ]
+        }
+      },
+      {
+        "threshold": 0.4,
+        "false_match": {
+          "count": 29219,
+          "trials": 81092114,
+          "rate": 0.00036031863714886014,
+          "wilson95": [
+            0.0003562115359331395,
+            0.0003644730757707856
+          ]
+        },
+        "false_non_match": {
+          "count": 453,
+          "trials": 221014,
+          "rate": 0.0020496439139602017,
+          "wilson95": [
+            0.0018695494631913254,
+            0.002247047879427337
+          ]
+        }
+      },
+      {
+        "threshold": 0.42,
+        "false_match": {
+          "count": 13912,
+          "trials": 81092114,
+          "rate": 0.00017155798898028482,
+          "wilson95": [
+            0.0001687310292944161,
+            0.0001744323039561251
+          ]
+        },
+        "false_non_match": {
+          "count": 637,
+          "trials": 221014,
+          "rate": 0.002882170360248672,
+          "wilson95": [
+            0.0026671488595584407,
+            0.003114472435746704
+          ]
+        }
+      },
+      {
+        "threshold": 0.44,
+        "false_match": {
+          "count": 6574,
+          "trials": 81092114,
+          "rate": 8.10683021532772e-05,
+          "wilson95": [
+            7.913224427064401e-05,
+            8.305172389915435e-05
+          ]
+        },
+        "false_non_match": {
+          "count": 878,
+          "trials": 221014,
+          "rate": 0.003972599020876506,
+          "wilson95": [
+            0.003718833549698119,
+            0.004243607161897472
+          ]
+        }
+      },
+      {
+        "threshold": 0.46,
+        "false_match": {
+          "count": 3302,
+          "trials": 81092114,
+          "rate": 4.071912590662022e-05,
+          "wilson95": [
+            3.935377762588694e-05,
+            4.213184187340299e-05
+          ]
+        },
+        "false_non_match": {
+          "count": 1259,
+          "trials": 221014,
+          "rate": 0.005696471716723828,
+          "wilson95": [
+            0.005391185984537741,
+            0.006018940194305404
+          ]
+        }
+      },
+      {
+        "threshold": 0.48,
+        "false_match": {
+          "count": 1673,
+          "trials": 81092114,
+          "rate": 2.063085937061648e-05,
+          "wilson95": [
+            1.9665677911853774e-05,
+            2.1643410418653082e-05
+          ]
+        },
+        "false_non_match": {
+          "count": 1839,
+          "trials": 221014,
+          "rate": 0.008320739862633136,
+          "wilson95": [
+            0.007950484238697134,
+            0.008708087008396878
+          ]
+        }
+      },
+      {
+        "threshold": 0.5,
+        "false_match": {
+          "count": 863,
+          "trials": 81092114,
+          "rate": 1.06422185516091e-05,
+          "wilson95": [
+            9.955485667819883e-06,
+            1.137632197102689e-05
+          ]
+        },
+        "false_non_match": {
+          "count": 2712,
+          "trials": 221014,
+          "rate": 0.012270715882251803,
+          "wilson95": [
+            0.011820140441624513,
+            0.01273824553750917
+          ]
+        }
+      },
+      {
+        "threshold": 0.52,
+        "false_match": {
+          "count": 456,
+          "trials": 81092114,
+          "rate": 5.623234831441193e-06,
+          "wilson95": [
+            5.130257176958989e-06,
+            6.163583497065986e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 3948,
+          "trials": 221014,
+          "rate": 0.017863121793189572,
+          "wilson95": [
+            0.017319234672475526,
+            0.018423768727965185
+          ]
+        }
+      },
+      {
+        "threshold": 0.54,
+        "false_match": {
+          "count": 249,
+          "trials": 81092114,
+          "rate": 3.070582177694862e-06,
+          "wilson95": [
+            2.7121437658112904e-06,
+            3.4763918425672187e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 5734,
+          "trials": 221014,
+          "rate": 0.025944057842489616,
+          "wilson95": [
+            0.025289502810490787,
+            0.02661509178287415
+          ]
+        }
+      },
+      {
+        "threshold": 0.56,
+        "false_match": {
+          "count": 131,
+          "trials": 81092114,
+          "rate": 1.6154468485061322e-06,
+          "wilson95": [
+            1.3614869067358228e-06,
+            1.9167781811292407e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 8417,
+          "trials": 221014,
+          "rate": 0.038083560317445954,
+          "wilson95": [
+            0.0372936053897588,
+            0.03888957216587696
+          ]
+        }
+      },
+      {
+        "threshold": 0.58,
+        "false_match": {
+          "count": 92,
+          "trials": 81092114,
+          "rate": 1.1345122905539248e-06,
+          "wilson95": [
+            9.251646397848163e-07,
+            1.3912313777410576e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 12252,
+          "trials": 221014,
+          "rate": 0.05543540228220837,
+          "wilson95": [
+            0.05448910778383234,
+            0.05639715052480701
+          ]
+        }
+      },
+      {
+        "threshold": 0.6,
+        "false_match": {
+          "count": 75,
+          "trials": 81092114,
+          "rate": 9.24874149908091e-07,
+          "wilson95": [
+            7.37909244069722e-07,
+            1.1592105120262494e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 17588,
+          "trials": 221014,
+          "rate": 0.079578669224574,
+          "wilson95": [
+            0.0784576488838056,
+            0.08071430405274171
+          ]
+        }
+      },
+      {
+        "threshold": 0.62,
+        "false_match": {
+          "count": 70,
+          "trials": 81092114,
+          "rate": 8.632158732475516e-07,
+          "wilson95": [
+            6.833018813305775e-07,
+            1.0905013272860104e-06
+          ]
+        },
+        "false_non_match": {
+          "count": 25014,
+          "trials": 221014,
+          "rate": 0.1131783506927163,
+          "wilson95": [
+            0.11186426538874321,
+            0.1145058825078575
+          ]
+        }
+      },
+      {
+        "threshold": 0.64,
+        "false_match": {
+          "count": 61,
+          "trials": 81092114,
+          "rate": 7.522309752585806e-07,
+          "wilson95": [
+            5.85666008631992e-07,
+            9.661674145217061e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 35167,
+          "trials": 221014,
+          "rate": 0.1591166170468839,
+          "wilson95": [
+            0.1575975646421068,
+            0.16064751907854743
+          ]
+        }
+      },
+      {
+        "threshold": 0.66,
+        "false_match": {
+          "count": 55,
+          "trials": 81092114,
+          "rate": 6.782410432659333e-07,
+          "wilson95": [
+            5.211221431074279e-07,
+            8.827314230710104e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 48670,
+          "trials": 221014,
+          "rate": 0.22021229424380356,
+          "wilson95": [
+            0.21848954952102956,
+            0.22194476481443765
+          ]
+        }
+      },
+      {
+        "threshold": 0.68,
+        "false_match": {
+          "count": 44,
+          "trials": 81092114,
+          "rate": 5.425928346127467e-07,
+          "wilson95": [
+            4.042154421893958e-07,
+            7.283417195343992e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 65774,
+          "trials": 221014,
+          "rate": 0.29760105694661876,
+          "wilson95": [
+            0.2956984807545705,
+            0.2995106688349706
+          ]
+        }
+      },
+      {
+        "threshold": 0.7,
+        "false_match": {
+          "count": 39,
+          "trials": 81092114,
+          "rate": 4.809345579522072e-07,
+          "wilson95": [
+            3.5183412880633184e-07,
+            6.574064854380799e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 86549,
+          "trials": 221014,
+          "rate": 0.3915996271729393,
+          "wilson95": [
+            0.3895665765368704,
+            0.3936364459714841
+          ]
+        }
+      },
+      {
+        "threshold": 0.72,
+        "false_match": {
+          "count": 34,
+          "trials": 81092114,
+          "rate": 4.192762812916679e-07,
+          "wilson95": [
+            3.0005377157736615e-07,
+            5.858702951876623e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 110101,
+          "trials": 221014,
+          "rate": 0.4981630122978635,
+          "wilson95": [
+            0.496078546154202,
+            0.5002475422980223
+          ]
+        }
+      },
+      {
+        "threshold": 0.74,
+        "false_match": {
+          "count": 25,
+          "trials": 81092114,
+          "rate": 3.0829138330269697e-07,
+          "wilson95": [
+            2.088298735334819e-07,
+            4.5512440776865663e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 135238,
+          "trials": 221014,
+          "rate": 0.6118978888215226,
+          "wilson95": [
+            0.6098643023200628,
+            0.61392758558151
+          ]
+        }
+      },
+      {
+        "threshold": 0.76,
+        "false_match": {
+          "count": 20,
+          "trials": 81092114,
+          "rate": 2.4663310664215756e-07,
+          "wilson95": [
+            1.596644345654464e-07,
+            3.809732992573088e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 160399,
+          "trials": 221014,
+          "rate": 0.7257413557512193,
+          "wilson95": [
+            0.7238774598404032,
+            0.7275974045478248
+          ]
+        }
+      },
+      {
+        "threshold": 0.78,
+        "false_match": {
+          "count": 15,
+          "trials": 81092114,
+          "rate": 1.8497482998161819e-07,
+          "wilson95": [
+            1.1210202526142096e-07,
+            3.052191610819511e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 182068,
+          "trials": 221014,
+          "rate": 0.8237849186024415,
+          "wilson95": [
+            0.8221908700248995,
+            0.8253677119218253
+          ]
+        }
+      },
+      {
+        "threshold": 0.8,
+        "false_match": {
+          "count": 12,
+          "trials": 81092114,
+          "rate": 1.4797986398529454e-07,
+          "wilson95": [
+            8.46538535900513e-08,
+            2.586774042656908e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 199274,
+          "trials": 221014,
+          "rate": 0.9016351905309166,
+          "wilson95": [
+            0.9003866244150659,
+            0.9028697951942873
+          ]
+        }
+      },
+      {
+        "threshold": 0.82,
+        "false_match": {
+          "count": 8,
+          "trials": 81092114,
+          "rate": 9.865324265686303e-08,
+          "wilson95": [
+            4.999005329901492e-08,
+            1.9468796657322053e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 210540,
+          "trials": 221014,
+          "rate": 0.9526093369650791,
+          "wilson95": [
+            0.9517156301212938,
+            0.953487310417222
+          ]
+        }
+      },
+      {
+        "threshold": 0.84,
+        "false_match": {
+          "count": 7,
+          "trials": 81092114,
+          "rate": 8.632158732475515e-08,
+          "wilson95": [
+            4.181496477533323e-08,
+            1.7819974560102562e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 216633,
+          "trials": 221014,
+          "rate": 0.9801777262978816,
+          "wilson95": [
+            0.9795882035244745,
+            0.9807505573603388
+          ]
+        }
+      },
+      {
+        "threshold": 0.86,
+        "false_match": {
+          "count": 6,
+          "trials": 81092114,
+          "rate": 7.398993199264727e-08,
+          "wilson95": [
+            3.3910249923906316e-08,
+            1.6144115095657586e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 219461,
+          "trials": 221014,
+          "rate": 0.9929732958093153,
+          "wilson95": [
+            0.9926163818515344,
+            0.9933130732626124
+          ]
+        }
+      },
+      {
+        "threshold": 0.88,
+        "false_match": {
+          "count": 6,
+          "trials": 81092114,
+          "rate": 7.398993199264727e-08,
+          "wilson95": [
+            3.3910249923906316e-08,
+            1.6144115095657586e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 220489,
+          "trials": 221014,
+          "rate": 0.9976245848679269,
+          "wilson95": [
+            0.9974128021647034,
+            0.997819069380757
+          ]
+        }
+      },
+      {
+        "threshold": 0.9,
+        "false_match": {
+          "count": 5,
+          "trials": 81092114,
+          "rate": 6.165827666053939e-08,
+          "wilson95": [
+            2.633673059936971e-08,
+            1.4435136078523583e-07
+          ]
+        },
+        "false_non_match": {
+          "count": 220845,
+          "trials": 221014,
+          "rate": 0.999235342557485,
+          "wilson95": [
+            0.9991110996428804,
+            0.9993422312892996
+          ]
+        }
+      }
+    ],
+    "curve_note": "False matches in the table are counted in 0.0001 score bins; the operating points are exact.",
+    "intervals": "wilson95 treats pairs as independent. identity_bootstrap95 resamples the 5585 people 1000 times (seed 20261019), so a person's pairs move together.",
+    "miss_rate_headline": {
+      "what": "One poster against one photo: each person's first two compared photos, at the manifest threshold.",
+      "count": 424,
+      "trials": 1623,
+      "rate": 0.26124460874922983,
+      "wilson95": [
+        0.24045331790810476,
+        0.28316344523868553
+      ],
+      "identity_bootstrap95": [
+        0.23963681010935242,
+        0.2806032616293144
+      ]
+    },
+    "ten_fold": {
+      "pairs": 6000,
+      "pairs_without_a_compared_face": 426,
+      "accuracy_mean": 0.964,
+      "accuracy_std": 0.0081
+    }
+  },
+  "held_out_pairs": {
+    "calfw": {
+      "what": "Cross-age LFW: the two photos of a same-person pair are years apart.",
+      "source": "huggingface.co/datasets/marcelohaps/calfw at 4f3e4cda32f6bdd163a46c42c6cc313629397700",
+      "set_digest_verified": true,
+      "pairs": 6000,
+      "photos": 7156,
+      "at_manifest_threshold": {
+        "same_person_pairs": 3000,
+        "same_person_pairs_not_compared": 144,
+        "different_person_pairs": 3000,
+        "different_person_pairs_not_compared": {
+          "count": 119,
+          "trials": 3000,
+          "rate": 0.03966666666666667,
+          "wilson95": [
+            0.03325093387303913,
+            0.04725979285341098
+          ]
+        },
+        "threshold": 0.63,
+        "false_match": {
+          "count": 0,
+          "trials": 2881,
+          "rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.001331601363724331
+          ],
+          "identity_bootstrap95": [
+            0.0,
+            0.0
+          ]
+        },
+        "false_non_match": {
+          "count": 2190,
+          "trials": 3000,
+          "rate": 0.73,
+          "wilson95": [
+            0.7138267086669308,
+            0.7455850209194193
+          ],
+          "identity_bootstrap95": [
+            0.7140932748559419,
+            0.7451423876592891
+          ]
+        },
+        "notes": "A same-person pair with no compared face counts as a miss. A different-person pair with no compared face is not compared, never a true negative."
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.9122,
+        "accuracy_std": 0.0116
+      }
+    },
+    "cplfw": {
+      "what": "Cross-pose LFW: one photo of a same-person pair is often turned toward profile.",
+      "source": "huggingface.co/datasets/marcelohaps/cplfw at 89b5236a99194f93382774d70b4bbcb18afa77ec",
+      "set_digest_verified": true,
+      "pairs": 6000,
+      "photos": 5984,
+      "at_manifest_threshold": {
+        "same_person_pairs": 3000,
+        "same_person_pairs_not_compared": 2684,
+        "different_person_pairs": 3000,
+        "different_person_pairs_not_compared": {
+          "count": 2469,
+          "trials": 3000,
+          "rate": 0.823,
+          "wilson95": [
+            0.8089318303258899,
+            0.8362420333975495
+          ]
+        },
+        "threshold": 0.63,
+        "false_match": {
+          "count": 0,
+          "trials": 531,
+          "rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.007182425291345966
+          ],
+          "identity_bootstrap95": [
+            0.0,
+            0.0
+          ]
+        },
+        "false_non_match": {
+          "count": 2936,
+          "trials": 3000,
+          "rate": 0.9786666666666667,
+          "wilson95": [
+            0.9728511787539165,
+            0.9832578700663714
+          ],
+          "identity_bootstrap95": [
+            0.972791400738999,
+            0.9834741402191959
+          ]
+        },
+        "notes": "A same-person pair with no compared face counts as a miss. A different-person pair with no compared face is not compared, never a true negative."
+      },
+      "ten_fold": {
+        "accuracy_mean": 0.5417,
+        "accuracy_std": 0.0115
+      }
+    }
+  },
+  "scans": {
+    "posters": 98,
+    "posters_left_out": [
+      {
+        "id": "Jim_Harrick",
+        "reason": "why_pose"
+      },
+      {
+        "id": "Bill_Belichick",
+        "reason": "why_pose"
+      }
+    ],
+    "stills": {
+      "enrolled_found": {
+        "count": 67,
+        "trials": 98,
+        "rate": 0.6836734693877551,
+        "wilson95": [
+          0.5861612171628963,
+          0.7673293987107721
+        ]
+      },
+      "enrolled_missed": {
+        "count": 31,
+        "trials": 98,
+        "rate": 0.3163265306122449,
+        "wilson95": [
+          0.23267060128922795,
+          0.4138387828371038
+        ]
+      },
+      "enrolled_without_a_compared_face": 3,
+      "enrolled_wrong_poster": {
+        "count": 0,
+        "trials": 98,
+        "rate": 0.0,
+        "wilson95": [
+          3.469446951953614e-18,
+          0.037719990121680605
+        ]
+      },
+      "stranger_any_candidate": {
+        "count": 0,
+        "trials": 100,
+        "rate": 0.0,
+        "wilson95": [
+          3.469446951953614e-18,
+          0.03699349820698568
+        ]
+      },
+      "comparisons_with_other_posters": {
+        "count": 0,
+        "trials": 19694,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.00019501927806277067
+        ]
+      },
+      "not_complete": 0,
+      "face_count_differs_from_library": 0,
+      "largest_cosine_gap_vs_library": 5e-07,
+      "largest_card_score_gap_vs_track": 0.0
+    },
+    "video": {
+      "clips": 20,
+      "seconds_on_screen": 1.0,
+      "frames_per_second": 30,
+      "complete": {
+        "found": {
+          "count": 19,
+          "trials": 20,
+          "rate": 0.95,
+          "wilson95": [
+            0.763868806553258,
+            0.9911185511992047
+          ]
+        },
+        "wrong_poster": 0,
+        "not_complete": 0,
+        "card_on_the_shown_second": {
+          "count": 19,
+          "trials": 19,
+          "rate": 1.0,
+          "wilson95": [
+            0.8318207759473837,
+            1.0
+          ]
+        }
+      },
+      "measured": {
+        "found": {
+          "count": 19,
+          "trials": 20,
+          "rate": 0.95,
+          "wilson95": [
+            0.763868806553258,
+            0.9911185511992047
+          ]
+        },
+        "wrong_poster": 0,
+        "not_complete": 0,
+        "card_on_the_shown_second": {
+          "count": 19,
+          "trials": 19,
+          "rate": 1.0,
+          "wilson95": [
+            0.8318207759473837,
+            1.0
+          ]
+        }
+      },
+      "stranger_clips": {
+        "what": "A face that is on no poster, on screen for one second; every poster is a stranger to it.",
+        "clips": 20,
+        "any_candidate": {
+          "count": 0,
+          "trials": 20,
+          "rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.16112515805281938
+          ]
+        },
+        "template_comparisons": {
+          "count": 0,
+          "trials": 2450,
+          "rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.0015654877811626486
+          ]
+        },
+        "not_complete": 0
+      },
+      "two_frame_appearance": {
+        "what": "The enrolled face on screen for 2 frames (0.067 s), complete coverage.",
+        "clips": 20,
+        "outcomes": {
+          "below_cutoff": 2,
+          "too_brief": 18
+        },
+        "too_brief": {
+          "count": 18,
+          "trials": 20,
+          "rate": 0.9,
+          "wilson95": [
+            0.6989663547715128,
+            0.9721335187862319
+          ]
+        },
+        "candidate": {
+          "count": 0,
+          "trials": 20,
+          "rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.16112515805281938
+          ]
+        },
+        "held_back_when_over_the_cutoff": {
+          "count": 18,
+          "trials": 18,
+          "rate": 1.0,
+          "wilson95": [
+            0.8241207763533425,
+            1.0
+          ]
+        },
+        "not_complete": 0
+      }
+    },
+    "phone_files": {
+      "jpeg_stored_sideways_with_tag": {
+        "what": "A JPEG stored a quarter turn off, with the orientation tag that shows it upright.",
+        "complete": {
+          "found": {
+            "count": 64,
+            "trials": 67,
+            "rate": 0.9552238805970149,
+            "wilson95": [
+              0.8764216691090624,
+              0.9846560248779613
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "detection_long_side": [
+            500
+          ],
+          "score_change_vs_plain_still": {
+            "compared": 67,
+            "mean": -0.0009011910922491728,
+            "median": -0.0021343231201171875,
+            "worst": -0.013990342617034912
+          }
+        }
+      },
+      "photo_12mp_large_face": {
+        "what": "A 4032x3024 JPEG, the face about 560 px.",
+        "complete": {
+          "found": {
+            "count": 64,
+            "trials": 67,
+            "rate": 0.9552238805970149,
+            "wilson95": [
+              0.8764216691090624,
+              0.9846560248779613
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "detection_long_side": [
+            1024
+          ],
+          "score_change_vs_plain_still": {
+            "compared": 66,
+            "mean": -0.002927435166908033,
+            "median": -0.0018561482429504395,
+            "worst": -0.05906867980957031
+          }
+        }
+      },
+      "photo_12mp_group_face": {
+        "what": "A 4032x3024 JPEG, the face about 190 px, as in a group photo.",
+        "complete": {
+          "found": {
+            "count": 65,
+            "trials": 67,
+            "rate": 0.9701492537313433,
+            "wilson95": [
+              0.8975344443664799,
+              0.991775305161102
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "detection_long_side": [
+            1024
+          ],
+          "score_change_vs_plain_still": {
+            "compared": 67,
+            "mean": -0.001895147473064821,
+            "median": -0.0018706321716308594,
+            "worst": -0.04289078712463379
+          }
+        }
+      },
+      "portrait_video_with_rotation": {
+        "what": "A 1080x1920 H.264 clip stored as 1920x1080 with a display rotation, the face moving on screen for one second.",
+        "complete": {
+          "found": {
+            "count": 65,
+            "trials": 67,
+            "rate": 0.9701492537313433,
+            "wilson95": [
+              0.8975344443664799,
+              0.991775305161102
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "detection_long_side": [
+            640
+          ],
+          "score_change_vs_plain_still": {
+            "compared": 67,
+            "mean": 0.000413343977572313,
+            "median": -0.001001894474029541,
+            "worst": -0.039879679679870605
+          }
+        },
+        "measured": {
+          "found": {
+            "count": 64,
+            "trials": 67,
+            "rate": 0.9552238805970149,
+            "wilson95": [
+              0.8764216691090624,
+              0.9846560248779613
+            ]
+          },
+          "wrong_poster": 0,
+          "not_complete": 0,
+          "detection_long_side": [
+            640
+          ],
+          "score_change_vs_plain_still": {
+            "compared": 67,
+            "mean": -0.0010092854499816895,
+            "median": -0.0013467073440551758,
+            "worst": -0.04313099384307861
+          }
+        }
+      }
+    }
+  },
+  "wider_face_val": {
+    "images": 3226,
+    "match_rule": "IoU at least 0.5 with a detection.",
+    "faces_112px_and_up": {
+      "what": "Labeled short side at least 112 px on the original image: the size a face is compared at.",
+      "all": {
+        "count": 1370,
+        "trials": 1477,
+        "rate": 0.9275558564658091,
+        "wilson95": [
+          0.913197443324026,
+          0.9396960196978847
+        ]
+      },
+      "not_occluded": {
+        "count": 1259,
+        "trials": 1315,
+        "rate": 0.9574144486692016,
+        "wilson95": [
+          0.9451033190869309,
+          0.9670609080489985
+        ]
+      },
+      "occluded": {
+        "count": 111,
+        "trials": 162,
+        "rate": 0.6851851851851852,
+        "wilson95": [
+          0.6100796752938661,
+          0.7517116429124656
+        ]
+      },
+      "typical_pose": {
+        "count": 1305,
+        "trials": 1353,
+        "rate": 0.9645232815964523,
+        "wilson95": [
+          0.9532780188523469,
+          0.973138248743521
+        ]
+      }
+    },
+    "faces_64_to_112px": {
+      "what": "Labeled short side 64 to 111 px on the original image: seen, but under the compare size.",
+      "all": {
+        "count": 1836,
+        "trials": 2063,
+        "rate": 0.8899660688317984,
+        "wilson95": [
+          0.8757308045741117,
+          0.9027517409221788
+        ]
+      },
+      "not_occluded": {
+        "count": 1637,
+        "trials": 1753,
+        "rate": 0.9338277239018825,
+        "wilson95": [
+          0.9212165505680292,
+          0.944541706879398
+        ]
+      },
+      "occluded": {
+        "count": 199,
+        "trials": 310,
+        "rate": 0.6419354838709678,
+        "wilson95": [
+          0.5871278080505046,
+          0.6932685434407008
+        ]
+      },
+      "typical_pose": {
+        "count": 1748,
+        "trials": 1883,
+        "rate": 0.9283058948486458,
+        "wilson95": [
+          0.915760889121534,
+          0.9391069072476165
+        ]
+      }
+    },
+    "faces_64px_and_up_on_the_detection_image": {
+      "what": "Labeled short side at least 64 px after the scan's resize for the detector.",
+      "all": {
+        "count": 1320,
+        "trials": 1428,
+        "rate": 0.9243697478991597,
+        "wilson95": [
+          0.9094886804698776,
+          0.9369737491054178
+        ]
+      },
+      "not_occluded": {
+        "count": 1214,
+        "trials": 1271,
+        "rate": 0.955153422501967,
+        "wilson95": [
+          0.9423383100083516,
+          0.9652255223369626
+        ]
+      },
+      "occluded": {
+        "count": 106,
+        "trials": 157,
+        "rate": 0.6751592356687898,
+        "wilson95": [
+          0.5984802001896725,
+          0.7434714359324166
+        ]
+      },
+      "typical_pose": {
+        "count": 1256,
+        "trials": 1305,
+        "rate": 0.9624521072796934,
+        "wilson95": [
+          0.9507069445666817,
+          0.9714826696647804
+        ]
+      }
+    },
+    "detections": 18099,
+    "detections_off_every_labeled_face": 1088,
+    "compared_detections_off_every_labeled_face": 9
+  },
+  "quality": {
+    "lfw_enlarged_2x": {
+      "photos": 13233,
+      "not_decoded": 0,
+      "face_seen": {
+        "count": 13233,
+        "trials": 13233,
+        "rate": 1.0,
+        "wilson95": [
+          0.9997097903731308,
+          1.0
+        ]
+      },
+      "center_face_compared": {
+        "count": 12753,
+        "trials": 13233,
+        "rate": 0.9637270460213103,
+        "wilson95": [
+          0.9604045164324564,
+          0.966780419504174
+        ]
+      },
+      "center_face": {
+        "compared": 12753,
+        "why_blur": 123,
+        "why_pose": 357
+      },
+      "every_face": {
+        "compared": 13450,
+        "why_blur": 437,
+        "why_confidence": 106,
+        "why_exposure": 7,
+        "why_pose": 575,
+        "why_small": 2103,
+        "why_unaligned": 3
+      }
+    },
+    "lfw_native_size": {
+      "photos": 13233,
+      "not_decoded": 0,
+      "face_seen": {
+        "count": 13233,
+        "trials": 13233,
+        "rate": 1.0,
+        "wilson95": [
+          0.9997097903731308,
+          1.0
+        ]
+      },
+      "center_face_compared": {
+        "count": 352,
+        "trials": 13233,
+        "rate": 0.02660016625103907,
+        "wilson95": [
+          0.023992891949031356,
+          0.029482210931271458
+        ]
+      },
+      "center_face": {
+        "compared": 352,
+        "why_blur": 3,
+        "why_pose": 26,
+        "why_small": 12852
+      },
+      "every_face": {
+        "compared": 357,
+        "why_blur": 3,
+        "why_pose": 26,
+        "why_small": 15893
+      }
+    },
+    "wider_face_val": {
+      "found_faces_112px_and_up": 1370,
+      "outcome": {
+        "compared": 1044,
+        "why_blur": 14,
+        "why_confidence": 35,
+        "why_exposure": 9,
+        "why_pose": 178,
+        "why_small": 86,
+        "why_unaligned": 4
+      }
+    },
+    "calfw": {
+      "photos": 7156,
+      "not_decoded": 0,
+      "face_seen": {
+        "count": 7156,
+        "trials": 7156,
+        "rate": 1.0,
+        "wilson95": [
+          0.9994634715247834,
+          1.0
+        ]
+      },
+      "center_face_compared": {
+        "count": 6984,
+        "trials": 7156,
+        "rate": 0.975964225824483,
+        "wilson95": [
+          0.9721520150618618,
+          0.9792656998664256
+        ]
+      },
+      "center_face": {
+        "compared": 6984,
+        "why_blur": 7,
+        "why_confidence": 1,
+        "why_exposure": 3,
+        "why_pose": 161
+      },
+      "every_face": {
+        "compared": 7002,
+        "why_blur": 14,
+        "why_confidence": 16,
+        "why_exposure": 3,
+        "why_pose": 174,
+        "why_small": 184
+      }
+    },
+    "cplfw": {
+      "photos": 5984,
+      "not_decoded": 0,
+      "face_seen": {
+        "count": 5934,
+        "trials": 5984,
+        "rate": 0.991644385026738,
+        "wilson95": [
+          0.9890019196197821,
+          0.9936560282342437
+        ]
+      },
+      "center_face_compared": {
+        "count": 2487,
+        "trials": 5984,
+        "rate": 0.41560828877005346,
+        "wilson95": [
+          0.40317965438167164,
+          0.428145205011162
+        ]
+      },
+      "center_face": {
+        "compared": 2487,
+        "no_face": 50,
+        "why_blur": 61,
+        "why_confidence": 26,
+        "why_exposure": 2,
+        "why_pose": 3266,
+        "why_small": 61,
+        "why_unaligned": 31
+      },
+      "every_face": {
+        "compared": 2562,
+        "why_blur": 71,
+        "why_confidence": 58,
+        "why_exposure": 2,
+        "why_pose": 3292,
+        "why_small": 495,
+        "why_unaligned": 31
+      }
+    }
+  },
+  "hardware": {
+    "measured_on": "CPU. The library's vectors and every scan ran with ONNX Runtime's CPU provider.",
+    "vectors_provider": [
+      "CPUExecutionProvider"
+    ],
+    "scan_provider": [
+      "CPUExecutionProvider"
+    ],
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "cpus": 4,
+    "python": "3.12.15",
+    "numpy": "2.1.3",
+    "onnxruntime_library_sha256": null,
+    "bench": {
+      "arch": "x86_64",
+      "bundle": "fast 0.2.0",
+      "os": "linux",
+      "runs": [
+        {
+          "embed_ms": 8.148909,
+          "execution": "cpu",
+          "min_cosine_vs_cpu": null,
+          "provider": "CPUExecutionProvider",
+          "sizes": [
+            {
+              "detect_ms": 3.426724,
+              "detection_long_side": 640,
+              "frames_per_second": 291.82391111744045,
+              "height": 1080,
+              "width": 1920
+            },
+            {
+              "detect_ms": 14.551095,
+              "detection_long_side": 960,
+              "frames_per_second": 68.72335037328806,
+              "height": 2160,
+              "width": 3840
+            },
+            {
+              "detect_ms": 14.982287000000001,
+              "detection_long_side": 1024,
+              "frames_per_second": 66.74548418409017,
+              "height": 3024,
+              "width": 4032
+            }
+          ]
+        }
+      ],
+      "schema": "openworld.bench.v1"
+    },
+    "bench_note": "openworld bench: per-provider timings, and the lowest cosine between an accelerated provider and the CPU. A provider whose scores drift is not described by this curve."
+  },
+  "sources": {
+    "lfw": "Labeled Faces in the Wild, all 13,233 images, pairs.txt view 2. Downloaded, not committed.",
+    "wider_face": "WIDER FACE validation, 3,226 images. Downloaded, not committed.",
+    "held_out": "CALFW and CPLFW pairs, read from a mirror at a pinned commit. Downloaded, not committed.",
+    "pins": {
+      "lfw.tgz": "055f7d9c632d7370e6fb4afc7468d40f970c34a80d4c6f50ffec63f5a8d536c0",
+      "pairs.txt": "ea42330c62c92989f9d7c03237ed5d591365e89b3e649747777b70e692dc1592",
+      "WIDER_val.zip": "f9efbd09f28c5d2d884be8c0eaef3967158c866a593fc36ab0413e4b2a58a17a",
+      "wider_face_split.zip": "c7561e4f5e7a118c249e0a5c5c902b0de90bbf120d7da9fa28d99041f68a8a5c",
+      "calfw set": "659b22911774ca45f2e7a4f0ebc4a76e3deac603172ea7b9f6dfb7e6825db56d",
+      "cplfw set": "93681bda53ca934cca461ac2120835c40672dfea46c176d86c1894d61434fe57"
+    },
+    "urls": {
+      "lfw.tgz": [
+        "https://ndownloader.figshare.com/files/5976018",
+        "https://figshare.com/ndownloader/files/5976018",
+        "https://api.figshare.com/v2/file/download/5976018"
+      ],
+      "pairs.txt": [
+        "https://ndownloader.figshare.com/files/5976006",
+        "https://figshare.com/ndownloader/files/5976006",
+        "https://api.figshare.com/v2/file/download/5976006",
+        "https://raw.githubusercontent.com/davidsandberg/facenet/096ed770f163957c1e56efa7feeb194773920f6e/data/pairs.txt"
+      ],
+      "WIDER_val.zip": [
+        "https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/WIDER_val.zip"
+      ],
+      "wider_face_split.zip": [
+        "https://huggingface.co/datasets/CUHK-CSE/wider_face/resolve/main/data/wider_face_split.zip"
+      ]
+    }
+  },
+  "not": [
+    "LFW, CALFW, and CPLFW are celebrity press photos. They are not mugshots, not FBI posters, not CCTV, and not the phone photos a scan reads. NIST FRTE numbers are not this curve.",
+    "LFW has no demographic labels, so there is no subgroup analysis here: false match and miss rates by age, sex, or skin tone are not measured. Face recognition error rates are known to differ across groups.",
+    "LFW faces are about 94 px and are enlarged 2x. This measures faces near the 112 px compare size, not larger or sharper ones, and not tiny or blurred ones (the gates refuse those).",
+    "Identities overlap across LFW, CALFW, and CPLFW, and the embedder may have been trained on similar celebrity photos. The held-out sets test other photos and conditions, not other people.",
+    "The clips are built from stills: a face drifting and growing on a gray screen, H.264 at CRF 23. They are not real footage with motion blur, lighting changes, or crowds.",
+    "A video template averages up to five frames. Its false match rate is checked only on the stranger clips here; the per-comparison rate is the single-photo LFW rate.",
+    "Wilson intervals treat pairs as independent. The identity bootstrap resamples people. Neither covers a different population or a different camera.",
+    "This curve does not allow real FBI posters. real_posters_allowed is false."
+  ]
+}

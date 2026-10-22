@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="desktop-application">
+  <id>app.openworld.OpenWorld</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>OpenWorld</name>
+  <summary>Check your own photo or video against public FBI posters, on this device</summary>
+  <description>
+    <p>
+      Choose a photo or video you already have. OpenWorld looks for faces in it on this
+      computer and compares them to a small, frozen pack of public FBI missing-person and
+      wanted-person posters, with a locked cutoff. Nothing is uploaded, nobody is enrolled,
+      and OpenWorld does not contact an agency or send a report.
+    </p>
+    <p>
+      A face past the cutoff is shown beside the poster with the frame it came from:
+      “Possible candidate. Not an identification.” No candidate is not a clearance, and a
+      stopped scan is Incomplete. Opening a poster’s FBI page goes through one confirmation.
+    </p>
+    <p>
+      This build carries demo posters made of synthetic markers. Real FBI photos stay off
+      until the Fast bundle has a measured false-match curve.
+    </p>
+  </description>
+  <launchable type="desktop-id">app.openworld.OpenWorld.desktop</launchable>
+  <url type="homepage">https://github.com/isaacy13/openworld</url>
+  <url type="bugtracker">https://github.com/isaacy13/openworld/issues</url>
+  <developer id="app.openworld">
+    <name>OpenWorld contributors</name>
+  </developer>
+  <provides>
+    <binary>openworld-desktop</binary>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#2F5D8C</color>
+    <color type="primary" scheme_preference="dark">#8DB4E2</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <!-- There is no release yet. -->
+  <releases/>
+</component>

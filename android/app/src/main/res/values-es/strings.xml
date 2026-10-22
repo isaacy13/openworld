@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DRAFT machine translation (es), UNREVIEWED. See docs/localization.md.
+  English in res/values/strings.xml is authoritative; this file is additive and
+  falls back to English for anything not translated here. Pending professional
+  legal/safety review before release. FBI, NCMEC, OpenWorld, 911, phone numbers
+  and URLs are kept verbatim.
+
+  The core_<code> strings below are translations only; English has no default entry
+  for them (English comes from the core's own text via Words.of). tools:ignore silences
+  MissingDefaultResource and ExtraTranslation for that intentional, documented pattern:
+  lintVitalRelease treats a translation with no default-locale entry as a fatal error.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingDefaultResource,ExtraTranslation">
+
+    <!-- Shell UI strings (draft es). -->
+    <string name="app_name">OpenWorld</string>
+    <string name="first_run_title">Te damos la bienvenida a OpenWorld</string>
+    <string name="first_run_continue">Continuar</string>
+    <string name="about_open">Acerca de OpenWorld</string>
+    <string name="about_title">Acerca de</string>
+    <string name="about_version">Versión</string>
+    <string name="about_contact">Contacto</string>
+    <string name="start_subtitle">Compara una foto o un video que ya tienes con carteles públicos del FBI de personas desaparecidas y buscadas, en este dispositivo.</string>
+    <string name="start_choose">Elegir una foto o un video</string>
+    <string name="start_files">Archivos</string>
+    <string name="start_card_hint">O comparte uno a OpenWorld desde tu galería.</string>
+    <string name="start_copying">Copiando el archivo a esta aplicación</string>
+    <string name="start_copying_percent">Copiando el archivo a esta aplicación · %1$d%%</string>
+    <string name="start_getting_ready">Preparando</string>
+    <string name="trust_on_device">Permanece en este dispositivo</string>
+    <string name="trust_nothing_uploaded">No se sube nada</string>
+    <string name="trust_no_camera">Sin cámara</string>
+    <string name="posters_demo_badge">Carteles de demostración</string>
+    <string name="posters_none">No hay carteles instalados. Las fotos reales del FBI permanecen desactivadas.</string>
+    <string name="posters_install_demo">Instalar carteles de demostración</string>
+    <string name="posters_update">Actualizar carteles</string>
+    <string name="posters_update_reading">Leyendo la lista del FBI…</string>
+    <string name="posters_update_page">Leyendo la lista del FBI · página %1$d</string>
+    <string name="posters_update_page_of">Leyendo la lista del FBI · página %1$d de %2$d</string>
+    <string name="posters_update_checking">Comprobando fotos de carteles · %1$d de %2$d</string>
+    <string name="posters_update_skipped">%1$d descartados: %2$s</string>
+    <string name="posters_fetched_today">obtenido hoy</string>
+    <string name="posters_fetched_yesterday">obtenido ayer</string>
+    <string name="results_kept">Los resultados se eliminan después de 7 días, o cuando los carteles caducan.</string>
+    <string name="cancel">Cancelar</string>
+    <string name="close">Cerrar</string>
+    <string name="back">Atrás</string>
+    <string name="review_title">Revisar</string>
+    <string name="file_photo">Foto</string>
+    <string name="file_video">Video</string>
+    <string name="file_reading">Leyendo el archivo</string>
+    <string name="file_recorded">Grabado %1$s</string>
+    <string name="file_thumbnail">Vista previa del archivo elegido</string>
+    <string name="motion_photo_note">Esta foto en movimiento también contiene un video corto. En este teléfono solo se analiza la imagen fija.</string>
+    <string name="estimate_title">Estimación</string>
+    <string name="estimating">Estimando</string>
+    <string name="compare_title">Comparar con</string>
+    <string name="class_missing">Desaparecidos</string>
+    <string name="class_wanted">Buscados</string>
+    <string name="class_count">%1$s · %2$d</string>
+    <string name="options_title">Opciones</string>
+    <string name="options_bundle">Paquete de modelos</string>
+    <string name="options_coverage">Cobertura</string>
+    <string name="coverage_every_frame">Cada fotograma</string>
+    <string name="coverage_measured">5 fotogramas por segundo</string>
+    <string name="coverage_brief">Un rostro que aparece brevemente puede pasar desapercibido.</string>
+    <string name="bundle_unofficial">Paquete de modelos no oficial</string>
+    <string name="bundle_no_weights">Sus pesos no están instalados en este teléfono.</string>
+    <string name="disclosure_title">Qué le pasa a este archivo</string>
+    <string name="disclosure_read_all">Leer todo</string>
+    <string name="analyze">Analizar en este dispositivo</string>
+    <string name="choose_another">Elegir otro archivo</string>
+    <string name="scanning_title">Analizando</string>
+    <string name="result_title">Resultado</string>
+    <string name="scanning_on_device">Analizando en este dispositivo</string>
+    <string name="scan_frame_of">Fotograma %1$s de %2$s</string>
+    <string name="scan_photo">Buscando rostros en la foto</string>
+    <string name="scan_starting">Empezando</string>
+    <string name="scan_less_than_minute">queda menos de un minuto</string>
+    <string name="scan_join">%1$s · %2$s</string>
+    <string name="scan_faces_title">Rostros</string>
+    <string name="scan_faces_empty">Los rostros aparecen aquí a medida que se encuentran.</string>
+    <string name="stop">Detener</string>
+    <string name="stopping">Deteniendo</string>
+    <string name="stop_ask_title">¿Detener el análisis?</string>
+    <string name="stop_ask_text">Un análisis detenido queda Incompleto. Nunca es una exoneración.</string>
+    <string name="stop_ask_keep">Seguir analizando</string>
+    <string name="chip_looking">Buscando</string>
+    <string name="chip_compared">Comparado</string>
+    <string name="chip_not_compared">No comparado</string>
+    <string name="chip_candidate">Posible candidato</string>
+    <string name="chip_too_brief">Demasiado breve</string>
+    <string name="chip_unscored">Sin puntuar</string>
+    <string name="face_description">Rostro del fotograma %1$d. %2$s.</string>
+    <string name="poster_description">Foto del cartel de %1$s.</string>
+    <string name="evidence_file">De tu archivo</string>
+    <string name="evidence_poster">Cartel</string>
+    <string name="show_frame">Mostrar fotograma</string>
+    <string name="frame_description">El fotograma del que proviene este rostro.</string>
+    <string name="open_fbi_page">Abrir página del FBI</string>
+    <string name="no_fbi_page">Este cartel no tiene página del FBI.</string>
+    <string name="stay">Quedarse</string>
+    <string name="details_title">Detalles</string>
+    <string name="details_bundle">Paquete de modelos</string>
+    <string name="details_posters">Paquete de carteles</string>
+    <string name="details_device">Se ejecutó en</string>
+    <string name="details_frames">Fotogramas</string>
+    <string name="details_coverage">Cobertura</string>
+    <string name="details_detection">Tamaño de detección</string>
+    <string name="details_chance">Probabilidad</string>
+    <string name="details_classes">Clases</string>
+    <string name="details_warnings">Advertencias</string>
+    <string name="details_expires">Resultado eliminado después de %1$s</string>
+    <string name="details_created">Paquete creado %1$s, caduca %2$s</string>
+    <string name="other_faces_title">Otros rostros</string>
+    <string name="delete_result">Eliminar resultado</string>
+    <string name="delete_ask_title">¿Eliminar este resultado?</string>
+    <string name="delete_ask_text">Los recortes y fotogramas de este análisis se eliminan de este teléfono.</string>
+    <string name="delete">Eliminar</string>
+    <string name="scan_another">Analizar otro archivo</string>
+    <string name="hint_posters">Vuelve a la pantalla de inicio, instala los carteles de demostración y analiza de nuevo.</string>
+    <string name="hint_file">Elige otro archivo.</string>
+    <string name="hint_runtime">Inténtalo de nuevo o analiza este archivo en una computadora.</string>
+    <string name="hint_default">Vuelve atrás e inténtalo de nuevo.</string>
+    <string name="refuse_animated">Esta imagen está animada. OpenWorld en Android aún no puede leer todos sus fotogramas, así que se rechaza en lugar de analizarla en parte.</string>
+    <string name="refuse_hdr">Este video es de 10 bits o HDR. OpenWorld en Android aún no puede leerlo. Se rechaza.</string>
+    <string name="scan_killed">El sistema cerró OpenWorld antes de que terminara el análisis.</string>
+    <string name="import_failed">No se pudo leer el archivo. Se rechaza.</string>
+    <string name="import_type">Solo se pueden analizar fotos y videos.</string>
+    <string name="import_space">No hay suficiente espacio libre en este teléfono para copiar el archivo.</string>
+    <string name="share_not_file">Eso que se compartió no era un archivo de foto o video.</string>
+    <string name="scan_busy">Primero termina o detén este análisis.</string>
+    <string name="open_failed">Ninguna aplicación de este teléfono puede abrir esa página.</string>
+    <string name="core_missing_program">El programa de análisis no está en este dispositivo. Se rechaza.</string>
+    <plurals name="posters_update_kept">
+        <item quantity="one">Se conservó %d cartel.</item>
+        <item quantity="other">Se conservaron %d carteles.</item>
+    </plurals>
+    <plurals name="posters_fetched_days">
+        <item quantity="one">obtenido hace %d día</item>
+        <item quantity="other">obtenido hace %d días</item>
+    </plurals>
+    <plurals name="posters_count">
+        <item quantity="one">%d cartel</item>
+        <item quantity="other">%d carteles</item>
+    </plurals>
+    <plurals name="estimate_frames">
+        <item quantity="one">%s fotograma</item>
+        <item quantity="other">%s fotogramas</item>
+    </plurals>
+    <plurals name="scan_minutes_left">
+        <item quantity="one">queda alrededor de %d minuto</item>
+        <item quantity="other">quedan alrededor de %d minutos</item>
+    </plurals>
+    <plurals name="scan_hours_left">
+        <item quantity="one">queda alrededor de %d hora</item>
+        <item quantity="other">quedan alrededor de %d horas</item>
+    </plurals>
+    <plurals name="candidates_count">
+        <item quantity="one">%d posible candidato para revisar.</item>
+        <item quantity="other">%d posibles candidatos para revisar.</item>
+    </plurals>
+
+    <!-- Core sentences shown by code (core_<code>), draft es. No English default
+         lives here: Words.of falls back to the core English on non-es locales.
+         Arg-bearing core lines (faces_some, chance, frames_*, detect_*) are built
+         in English by the core and are NOT translated; that gap is documented. -->
+    <string name="core_accept_terms">Al continuar, aceptas los Términos de uso, incluido el arbitraje individual vinculante y la renuncia a demandas colectivas, y la Política de privacidad y la Política de datos biométricos.</string>
+    <string name="core_adults_us">Para adultos en los Estados Unidos.</string>
+    <string name="core_already_warm">Este teléfono ya está caliente. El análisis podría detenerse antes de tiempo.</string>
+    <string name="core_bad_codec">Códec incorrecto o archivo ilegible. Se rechaza.</string>
+    <string name="core_bad_hash">El hash del paquete de carteles no coincide. Se rechaza.</string>
+    <string name="core_bad_request">No se entendió la solicitud de análisis. Se rechaza.</string>
+    <string name="core_bad_vectors">Los vectores del paquete de carteles no son válidos para este paquete de modelos. Se rechaza.</string>
+    <string name="core_band_above">Claramente por encima del umbral fijado.</string>
+    <string name="core_band_near">Apenas por encima del umbral fijado.</string>
+    <string name="core_band_well">Muy por encima del umbral fijado.</string>
+    <string name="core_battery_note">Un análisis largo consume mucha batería.</string>
+    <string name="core_below_cutoff">Por debajo del umbral fijado. No es un candidato.</string>
+    <string name="core_brief_face">Un rostro que aparece brevemente puede pasar desapercibido.</string>
+    <string name="core_bundle_not_found">Ese paquete de modelos no está en el catálogo. Se rechaza.</string>
+    <string name="core_bundle_note">Las puntuaciones no son comparables entre paquetes de modelos. Los resultados indican el paquete que elijas.</string>
+    <string name="core_cancelled">Detuviste el análisis antes de que se analizaran todos los fotogramas.</string>
+    <string name="core_catalog">No se pudo leer el catálogo de paquetes de modelos. Se rechaza.</string>
+    <string name="core_chance_unknown">Aún no se ha medido con qué frecuencia una persona desconocida supera este umbral.</string>
+    <string name="core_choose_class">Elige desaparecidos, buscados o ambos.</string>
+    <string name="core_classes_both">Desaparecidos y buscados.</string>
+    <string name="core_classes_missing">Desaparecidos.</string>
+    <string name="core_classes_wanted">Buscados.</string>
+    <string name="core_coverage_complete">Todos los fotogramas decodificados.</string>
+    <string name="core_coverage_measured">5 fotogramas por segundo, más el seguimiento.</string>
+    <string name="core_cpu_note">Este análisis se ejecuta en la CPU. Será más lento, generará más calor y consumirá más batería.</string>
+    <string name="core_delete_failed">No se pudo eliminar el resultado.</string>
+    <string name="core_delete_foreign">Se rechaza eliminar un directorio que no es un resultado de OpenWorld.</string>
+    <string name="core_deleted">Eliminado.</string>
+    <string name="core_do_not_approach">No te acerques, no sigas, no te enfrentes ni intentes retener a nadie. Si alguien corre peligro inmediato, llama al 911.</string>
+    <string name="core_do_not_share">No publiques ni compartas este resultado. Un posible candidato puede ser una persona desconocida que se parece.</string>
+    <string name="core_doc_biometric">Política de datos biométricos</string>
+    <string name="core_doc_health_data">Política de privacidad de datos de salud del consumidor</string>
+    <string name="core_doc_licenses">Licencias</string>
+    <string name="core_doc_privacy">Política de privacidad</string>
+    <string name="core_doc_terms">Términos de uso</string>
+    <string name="core_embedder_mismatch">El paquete de carteles se creó con otro codificador. Se rechaza.</string>
+    <string name="core_estimate_caveat">Esta es una estimación de planificación, no una medición térmica.</string>
+    <string name="core_estimate_rough">No se pudo cronometrar el modelo en este dispositivo, así que esta estimación es aproximada.</string>
+    <string name="core_expired_pack">El paquete de carteles ha caducado. Se rechaza.</string>
+    <string name="core_face_unscored">No se pudo puntuar este rostro.</string>
+    <string name="core_fixture_markers">Carteles de demostración. Son marcadores sintéticos, no rostros.</string>
+    <string name="core_fixture_off">Esta versión no lee carteles de demostración. Se rechaza.</string>
+    <string name="core_future_pack">El paquete de carteles tiene una fecha futura. Revisa el reloj de este dispositivo. Se rechaza.</string>
+    <string name="core_gpu_note">Este análisis se ejecuta en la GPU y puede calentar el dispositivo.</string>
+    <string name="core_groups_unmeasured">Aún no se ha medido con qué frecuencia esto identifica erróneamente a personas de distintas edades, sexos y tonos de piel.</string>
+    <string name="core_heat_note">Este teléfono puede calentarse. Si el calor o el sistema detienen el análisis, el resultado queda Incompleto.</string>
+    <string name="core_incomplete">Incompleto.</string>
+    <string name="core_internal">La biblioteca de análisis falló. Se rechaza.</string>
+    <string name="core_lawful_use">Analiza solo archivos que tengas derecho a usar. Algunos lugares restringen el análisis de los rostros de otras personas.</string>
+    <string name="core_leave_missing">Esto abre un cartel de persona desaparecida del FBI. No es una acusación penal. No te acerques, no sigas ni intentes retener a nadie, en especial a un menor. Los carteles de menores desaparecidos suelen indicar NCMEC en el 1-800-THE-LOST (1-800-843-5678).</string>
+    <string name="core_leave_wanted">Esto abre un cartel de persona buscada del FBI. No te acerques, no sigas ni te enfrentes a nadie. Si alguien corre peligro inmediato, llama al 911. Los carteles de personas buscadas suelen indicar el 1-800-CALL-FBI (1-800-225-5324) o tips.fbi.gov.</string>
+    <string name="core_leaving">Estás saliendo de OpenWorld.</string>
+    <string name="core_lookalike">Personas parecidas, familiares y fotos antiguas pueden superar el umbral.</string>
+    <string name="core_missing_pack">Falta el paquete de carteles. Se rechaza.</string>
+    <string name="core_missing_weights">Los pesos del paquete de modelos no están instalados, o su SHA-256 no está fijado. Se rechaza.</string>
+    <string name="core_motion_clip_unread">No se analizó el video de esta foto en movimiento.</string>
+    <string name="core_network_note">Abrir un cartel visita fbi.gov, y actualizar los carteles los descarga de api.fbi.gov. Esos sitios ven la dirección de internet de tu dispositivo, como cualquier sitio web.</string>
+    <string name="core_network_off">Esta versión no tiene código de red. Los carteles no se cambiaron.</string>
+    <string name="core_no_agency">OpenWorld no informa nada a ninguna agencia.</string>
+    <string name="core_no_camera">Importa un archivo que ya tengas. No hay cámara.</string>
+    <string name="core_no_class">No había ninguna clase activada.</string>
+    <string name="core_no_clearance">La ausencia de candidatos no es una exoneración.</string>
+    <string name="core_no_document">Ese documento no está en esta versión. Se rechaza.</string>
+    <string name="core_no_fps">El decodificador no informó una velocidad de fotogramas. Se rechaza.</string>
+    <string name="core_no_posters_in_class">El paquete de carteles no tiene carteles de las clases que elegiste. Se rechaza.</string>
+    <string name="core_no_training">OpenWorld no se entrena con este archivo.</string>
+    <string name="core_nobody_enrolled">No hay nadie inscrito.</string>
+    <string name="core_not_affiliated">OpenWorld no forma parte del FBI ni de ninguna agencia gubernamental, ni cuenta con su respaldo.</string>
+    <string name="core_not_compared">No comparado.</string>
+    <string name="core_not_fully_decoded">El archivo no se decodificó por completo.</string>
+    <string name="core_not_identification">Un candidato no es una identificación.</string>
+    <string name="core_not_measured">Aún no medido.</string>
+    <string name="core_not_real_proof">Que sea en el dispositivo no significa que el archivo sea real.</string>
+    <string name="core_not_sending">OpenWorld no está enviando ningún informe.</string>
+    <string name="core_nothing_uploaded">No se sube nada.</string>
+    <string name="core_old_file">Este archivo tiene más de unos 30 días.</string>
+    <string name="core_old_pack">Los carteles tienen más de 7 días. Actualiza los carteles. Se rechaza.</string>
+    <string name="core_on_device">Este archivo permanece en este dispositivo.</string>
+    <string name="core_only_fbi">OpenWorld solo abre una página del FBI.</string>
+    <string name="core_out_create">No se pudo crear el directorio de salida. Se rechaza.</string>
+    <string name="core_out_foreign">Esa carpeta no está vacía y no es un resultado de OpenWorld. Elige una carpeta vacía. Se rechaza.</string>
+    <string name="core_out_overlap">La carpeta de resultados no puede contener el archivo, los carteles ni los paquetes de modelos. Se rechaza.</string>
+    <string name="core_out_replace">No se pudo reemplazar el directorio de salida. Se rechaza.</string>
+    <string name="core_possible_candidate">Posible candidato. No es una identificación.</string>
+    <string name="core_posters_bad_list">La lista de carteles del FBI no tenía el formato esperado. Los carteles no se cambiaron.</string>
+    <string name="core_posters_fetch_failed">No se pudo obtener la lista de carteles del FBI. Los carteles no se cambiaron.</string>
+    <string name="core_posters_foreign">Esa carpeta no está vacía y no es un paquete de carteles. Elige una carpeta vacía. Se rechaza.</string>
+    <string name="core_posters_none">Ninguna foto de cartel superó las comprobaciones. Los carteles no se cambiaron.</string>
+    <string name="core_posters_runtime">Los modelos de rostros se detuvieron al comprobar las fotos de los carteles. Los carteles no se cambiaron.</string>
+    <string name="core_posters_stale">Los carteles se obtuvieron hace más de un día.</string>
+    <string name="core_posters_unwritten">No se pudieron escribir los nuevos carteles. Los carteles no se cambiaron.</string>
+    <string name="core_real_posters_off">Las fotos reales del FBI permanecen desactivadas. Ningún paquete de modelos tiene una curva que las permita.</string>
+    <string name="core_result_unwritten">No se pudo escribir el resultado.</string>
+    <string name="core_runtime">ONNX Runtime no se cargó. Se rechaza.</string>
+    <string name="core_scan_killed">El sistema cerró OpenWorld antes de que terminara el análisis.</string>
+    <string name="core_skip_no_face">No se encontró ningún rostro en la foto del cartel.</string>
+    <string name="core_skip_no_photo">El cartel no tiene foto en una dirección del FBI.</string>
+    <string name="core_skip_not_open">No es un cartel de persona desaparecida o buscada que esté abierto y con nombre.</string>
+    <string name="core_skip_not_picture">La foto del cartel no es una imagen que OpenWorld pueda leer.</string>
+    <string name="core_skip_photo_too_large">La foto del cartel es demasiado grande para comprobarla de forma segura.</string>
+    <string name="core_skip_photo_unavailable">No se pudo descargar la foto del cartel.</string>
+    <string name="core_skip_several_faces">La foto del cartel muestra más de un rostro.</string>
+    <string name="core_stopped_background">La aplicación salió de la pantalla, así que el análisis se detuvo.</string>
+    <string name="core_stopped_battery">La batería se agotó, así que el análisis se detuvo.</string>
+    <string name="core_stopped_heat">El dispositivo se calentó demasiado, así que el análisis se detuvo.</string>
+    <string name="core_suggest_computer">Una computadora lo terminará antes. Aún puedes ejecutar un análisis completo en este teléfono.</string>
+    <string name="core_terms_changed">Los términos han cambiado. Léelos y luego continúa para seguir usando OpenWorld.</string>
+    <string name="core_timestamps_disagree">Las marcas de tiempo del archivo no coinciden.</string>
+    <string name="core_too_brief">Aparece en pantalla muy poco tiempo para ser un candidato. No es una exoneración.</string>
+    <string name="core_too_large">Esta imagen es demasiado grande para analizarla de forma segura. Se rechaza.</string>
+    <string name="core_unauthenticated">Este archivo no está autenticado.</string>
+    <string name="core_unknown_perception">No se reconoce la percepción del paquete de carteles. Se rechaza.</string>
+    <string name="core_unreadable">No se pudo leer el archivo. Se rechaza.</string>
+    <string name="core_unreadable_pack">No se pudo leer el paquete de carteles. Se rechaza.</string>
+    <string name="core_welcome">OpenWorld compara los rostros de una foto o un video que ya tienes con carteles públicos del FBI de personas desaparecidas y buscadas, en este dispositivo.</string>
+    <string name="core_why_blur">El rostro está demasiado borroso.</string>
+    <string name="core_why_confidence">El detector no estaba seguro de que esto sea un rostro.</string>
+    <string name="core_why_exposure">El rostro está demasiado oscuro o demasiado claro.</string>
+    <string name="core_why_pose">El rostro está girado demasiado respecto a la cámara.</string>
+    <string name="core_why_small">El rostro mide menos de 112 píxeles de ancho en el archivo original.</string>
+    <string name="core_why_unaligned">No se pudieron encontrar los ojos, la nariz y la boca.</string>
+</resources>

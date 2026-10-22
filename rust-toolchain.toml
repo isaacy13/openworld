@@ -1,0 +1,4 @@
+[toolchain]
+# Pinned so a release can be rebuilt from its tag.
+channel = "1.97.0"
+components = ["clippy", "llvm-tools-preview"]
