@@ -13,12 +13,14 @@ on:
       - desktop/packaging/windows-store/**
       - desktop/packaging/windows-bundle.sh
       - .github/workflows/windows-store.yml
+      - .gitattributes
   push:
     branches: [main]
     paths:
       - desktop/packaging/windows-store/**
       - desktop/packaging/windows-bundle.sh
       - .github/workflows/windows-store.yml
+      - .gitattributes
 
 permissions:
   contents: read
