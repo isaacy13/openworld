@@ -63,7 +63,9 @@ pub fn bench(bundle: &Bundle) -> Result<Bench, String> {
     let mut runs = Vec::new();
     let mut cpu_vectors: Option<Vec<Vec<f32>>> = None;
     for accelerate in [false, true] {
-        let mut models = onnx_exec::load(bundle, accelerate)?;
+        // The embedder follows the detector's provider here only: the drift this reports is
+        // exactly the embedding drift the scan path avoids by keeping the embedder on the CPU.
+        let mut models = onnx_exec::load(bundle, accelerate, accelerate)?;
         if accelerate && models.provider() == "CPUExecutionProvider" {
             break;
         }

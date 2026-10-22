@@ -61,16 +61,19 @@ pub struct FaceModels {
 }
 
 /// Load the bundle's detector and embedder from the bytes the catalog verified.
-pub fn load(bundle: &Bundle, accelerate: bool) -> Result<FaceModels, String> {
+///
+/// The scan path always runs the embedder on the CPU (`accelerate_embedder` false): the
+/// cutoff was measured on CPU embeddings, and a provider that drifts would move scores
+/// near it, while five embeddings a face cost little on the CPU. Only the bench sets it,
+/// to measure how far an accelerated provider's embeddings drift from the CPU's.
+pub fn load(bundle: &Bundle, accelerate: bool, accelerate_embedder: bool) -> Result<FaceModels, String> {
     let detector_bytes = bundle.verified_bytes("detector").map_err(|err| err.text)?;
     let embedder_bytes = bundle.verified_bytes("embedder").map_err(|err| err.text)?;
     inline_only(&detector_bytes, "detector")?;
     inline_only(&embedder_bytes, "embedder")?;
     let (mut detector, provider) = crate::runtime::session(&detector_bytes, accelerate)
         .map_err(|err| format!("The detector did not load. Refusing. {err}"))?;
-    // The cutoff was measured on CPU embeddings, and a provider that drifts would
-    // move scores near it. Five embeddings a face cost little on the CPU.
-    let (mut embedder, _) = crate::runtime::session(&embedder_bytes, false)
+    let (mut embedder, _) = crate::runtime::session(&embedder_bytes, accelerate_embedder)
         .map_err(|err| format!("The embedder did not load. Refusing. {err}"))?;
     let side = square_side(&detector);
     let detector_kind = check_detector(&mut detector, side.unwrap_or(640))?;
@@ -637,7 +640,7 @@ mod session_tests {
         let dir = dev_bundle(root.path(), "dev", 0.5, &[("detector", "det.onnx", &det), ("embedder", "emb.onnx", &emb)]);
         let bundle = load_bundle(&dir).unwrap();
         assert!(crate::runtime::linked(), "candidates: {:?}", crate::runtime::library_candidates());
-        let result = load(&bundle, false);
+        let result = load(&bundle, false, false);
         match result {
             Ok(mut face) => {
                 assert_eq!(face.provider(), "CPUExecutionProvider");
@@ -723,6 +726,6 @@ mod session_tests {
         std::fs::write(dir.join("weights/w.bin"), [0u8; 16]).unwrap();
         let bundle = load_bundle(&dir).unwrap();
         assert!(bundle.weights_ready);
-        assert_eq!(load(&bundle, false).err().unwrap(), "The embedder keeps weights outside its file. Refusing.");
+        assert_eq!(load(&bundle, false, false).err().unwrap(), "The embedder keeps weights outside its file. Refusing.");
     }
 }

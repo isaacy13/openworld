@@ -152,7 +152,7 @@ fn perception_for(bundle: &Bundle, pack: &PosterPack, accelerate: bool) -> Resul
             return Ok(cache.swap_remove(index).1);
         }
     }
-    crate::onnx_exec::load(bundle, accelerate)
+    crate::onnx_exec::load(bundle, accelerate, false)
         .map(|models| Box::new(models) as Box<dyn Perception + Send>)
         .map_err(|message| Line::with(copy::R_RUNTIME.0, message, &[]))
 }
@@ -427,7 +427,7 @@ fn timing_for(bundle: &Bundle, pack: Option<&PosterPack>, accelerate: bool, long
         }
         return (28, None, "CPUExecutionProvider".into());
     }
-    let mut perception = match crate::onnx_exec::load(bundle, accelerate) {
+    let mut perception = match crate::onnx_exec::load(bundle, accelerate, false) {
         Ok(models) => models,
         Err(_) => return (28, None, "CPUExecutionProvider".into()),
     };

@@ -118,7 +118,7 @@ pub fn update_from_catalog(bundles: &Path, id: &str, dest: &Path, events: &mut d
     }
     let embedder = bundle.weight("embedder").map(|w| w.sha256.clone()).unwrap_or_default();
     // The embedder runs on the CPU, as it does in a scan; the cutoff was measured there.
-    let mut models = crate::onnx_exec::load(&bundle, false).map_err(|message| Line::with(copy::R_RUNTIME.0, message, &[]))?;
+    let mut models = crate::onnx_exec::load(&bundle, false, false).map_err(|message| Line::with(copy::R_RUNTIME.0, message, &[]))?;
     update_posters(dest, &embedder, transport.as_mut(), &mut models, SystemTime::now(), events)
 }
 
