@@ -401,6 +401,32 @@ mod tests {
     }
 
     #[test]
+    fn a_pushed_scan_whose_named_file_cannot_be_opened_is_incomplete() {
+        // The shell promised a file but the core cannot open it, so it cannot rule
+        // out a cut JPEG or an unread motion clip: the scan fails closed to incomplete
+        // even when the shell reports a clean decode of every declared frame.
+        let (root, posters, bundles) = setup();
+        let out = root.path().join("unreadable");
+        let gone = root.path().join("gone.jpg"); // named in the request, but never created
+        let request = serde_json::json!({
+            "v": 1, "input": gone, "bundles": bundles, "posters": posters, "out": out,
+            "media": {"width": 640, "height": 480, "frames": 1}
+        });
+        let request = CString::new(request.to_string()).unwrap();
+        let mut refusal = std::ptr::null_mut();
+        let job = ow_job_start(request.as_ptr(), None, std::ptr::null_mut(), &mut refusal);
+        assert!(!job.is_null(), "{}", answer(refusal));
+        let scene = crate::fixture::demo_scene().image;
+        let rgba: Vec<u8> = scene.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+        assert_eq!(ow_job_wants(job, 0), 1);
+        assert_eq!(ow_job_push_pixels(job, 0, rgba.as_ptr(), 640, 480, 640 * 4, OW_RGBA, 0), 1);
+        let end = CString::new(r#"{"clean":true}"#).unwrap();
+        let report = answer(ow_job_finish(job, end.as_ptr()));
+        assert_eq!(report["status"], "incomplete", "{report}");
+        assert_eq!(report["reason"]["code"], "not_fully_decoded");
+    }
+
+    #[test]
     fn fewer_frames_than_promised_is_incomplete_and_a_stop_says_why() {
         let (root, posters, bundles) = setup();
         // A shell may push again and see the stop, skip, or stop delivering at once.

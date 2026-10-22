@@ -23,7 +23,12 @@ fn facts(width: u32, height: u32, frames: u64, fps: f64) -> MediaFacts {
 }
 
 fn pushed_request(lab: &Lab, media: MediaFacts) -> ScanRequest {
-    let mut req = lab.request(lab.path("original.mov"));
+    // The phone decodes the file and pushes the frames; the core never decodes it, but
+    // it does open the named original for the age and damage checks, so name a real,
+    // readable, undamaged file, as every shell does by copying the pick in first.
+    let original = lab.path("original.jpg");
+    openworld_core::fixture::demo_scene().image.save(&original).unwrap();
+    let mut req = lab.request(original);
     req.media = Some(media);
     req
 }

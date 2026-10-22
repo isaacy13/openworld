@@ -274,8 +274,11 @@ pub fn open_pushed_job(req: &ScanRequest, now: SystemTime) -> Result<Job, ScanRe
     let mut job = open_job(req, media.fps, media.video, warnings, now)?;
     job.declared_frames = Some(media.frames);
     // Phone decoders paint a cut JPEG's missing rows gray too, and a shell that
-    // pushes only a motion photo's still has not scanned its clip.
-    job.damaged = if decode::jpeg_cut_short(&req.input) {
+    // pushes only a motion photo's still has not scanned its clip. Both checks read
+    // the named file; if the core cannot open it, it cannot rule either out, so it
+    // fails closed to Incomplete rather than silently reporting a damaged file whole.
+    let named = !req.input.as_os_str().is_empty();
+    job.damaged = if (named && !input_readable(&req.input)) || decode::jpeg_cut_short(&req.input) {
         Some(Line::of(copy::NOT_FULLY_DECODED))
     } else if media.frames == 1 && decode::has_motion_clip(&req.input) {
         Some(Line::of(copy::MOTION_CLIP_UNREAD))
