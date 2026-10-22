@@ -8,9 +8,10 @@
 
   The core_<code> strings below are translations only; English has no default entry
   for them (English comes from the core's own text via Words.of). tools:ignore silences
-  MissingDefaultResource for that intentional, documented pattern.
+  MissingDefaultResource and ExtraTranslation for that intentional, documented pattern:
+  lintVitalRelease treats a translation with no default-locale entry as a fatal error.
 -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingDefaultResource">
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingDefaultResource,ExtraTranslation">
 
     <!-- Shell UI strings (draft es). -->
     <string name="app_name">OpenWorld</string>
