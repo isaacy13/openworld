@@ -74,6 +74,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     @Volatile private var session: Session? = null
     /** The copy on disk for the file under review. */
     private var current: Imported? = null
+    /** A file shared or opened-with before the terms were accepted, opened once they are. */
+    @Volatile private var pending: Uri? = null
 
     init {
         viewModelScope.launch { setup() }
@@ -118,6 +120,8 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
                 else -> s.copy(ready = true)
             }
         }
+        // A returning user's terms are already accepted; open anything shared during startup.
+        openPending()
     }
 
     /** Equal versions open the app; anything else shows First run (docs/api.md#first-run). */
@@ -158,7 +162,15 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
         viewModelScope.launch {
             withContext(env.io) { runCatching { env.terms.accept(version) } }
             _state.update { it.copy(terms = Terms.Accepted) }
+            openPending()
         }
+    }
+
+    /** Open a file shared or opened-with before the terms were accepted, once they are. */
+    private fun openPending() {
+        val uri = pending ?: return
+        pending = null
+        choose(uri)
     }
 
     fun openAbout() = _state.update { it.copy(about = true) }
@@ -193,6 +205,12 @@ class ScanViewModel(private val env: AppEnv) : ViewModel() {
     fun choose(uri: Uri) {
         if (_state.value.screen is ScanState.Scanning) {
             message(copy.line(Shell.SCAN_BUSY))
+            return
+        }
+        // Nothing is copied, decoded, or estimated until the terms are accepted: a file
+        // shared or opened-with on first run waits behind the gate, as on Apple.
+        if (_state.value.terms !is Terms.Accepted) {
+            pending = uri
             return
         }
         importJob?.cancel()
