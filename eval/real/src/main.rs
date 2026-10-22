@@ -49,7 +49,7 @@ fn bundle(args: &[String]) -> Result<Bundle, String> {
 /// The bundle's networks on the CPU. The curve is measured there; `openworld bench`
 /// reports how far an accelerated provider moves the scores.
 fn models(bundle: &Bundle) -> Result<FaceModels, String> {
-    onnx_exec::load(bundle, false)
+    onnx_exec::load(bundle, false, false)
 }
 
 fn enlarge_factor(args: &[String]) -> Result<f32, String> {
